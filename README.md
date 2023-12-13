@@ -113,7 +113,7 @@ General structure of the agents:
 ## Creating your agent and invoking calls
 1. At this point, the docker containers should be up and running
 2. Your agent prompt should be defined in the `agent_data/` directory with `conversation_details.json` with the user list in `users.json`
-3. Create your agent using the API: . An agent will get created with an `agent_id`
+3. Create your agent using the [Bolna Create Agent API](https://docs.bolna.dev/api-reference/endpoint/create). An agent will get created with an `agent_id`
 4. Instruct the agent to initiate call to users via `scripts/initiate_agent_call.py <agent_name> <agent_id>`
 
 
