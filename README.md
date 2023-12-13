@@ -82,7 +82,7 @@ General structure of the agents:
 | Prompt        | Required (defined in `conversation_details.json`)                              | Required (defined in `conversation_details.json`)                                                                                                                                                        |
 | Preprocessing | Not required                                                                   | Required (using `scripts/preprocessed.py`)                                                                                                                                                               |
 
-> Currently, the `users.json` has the following user attributes which gets substituted in the prompt to make it customized for the call. More to be added soon!
+> [!note] Currently, the `users.json` has the following user attributes which gets substituted in the prompt to make it customized for the call. More to be added soon!
 > 
 > - first_name
 > - last_name
