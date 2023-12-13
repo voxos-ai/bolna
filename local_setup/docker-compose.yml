@@ -1,0 +1,43 @@
+version: '3'
+services:
+  twilio-app:
+    build:
+      context: .
+      dockerfile: dockerfiles/twilio_server.Dockerfile
+    ports:
+      - "8001:8001"
+    depends_on:
+      - redis
+    env_file:
+      - ../.env
+
+  bolna-app:
+    build:
+      context: ../
+      dockerfile: local_setup/dockerfiles/bolna_server.Dockerfile
+    ports:
+      - "5001:5001"
+    depends_on:
+      - redis
+    env_file:
+        - ../.env
+    volumes:
+      - ../agent_data:/app/agent_data
+
+  redis:
+    image: "redis:latest"
+    ports:
+      - "6379:6379"
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    restart: unless-stopped
+    command:
+      - "start"
+      - "--all"
+      - "--config"
+      - "/etc/ngrok.yml"
+    volumes:
+      - ./ngrok-config.yml:/etc/ngrok.yml
+    ports:
+      - 4040:4040
