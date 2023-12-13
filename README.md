@@ -118,6 +118,7 @@ General structure of the agents:
 
 ## Open-source v/s Paid
 Though the repository is completely open source, you can connect with us if interested in managed offerings or more customized solutions.
+
 <a href="https://calendly.com/bolna/30min"><img alt="Schedule a meeting" src="https://cdn.cookielaw.org/logos/122ecfc3-4694-42f1-863f-2db42d1b1e68/0bcbbcf4-9b83-4684-ba59-bc913c0d5905/c21bea90-f4f1-43d1-8118-8938bbb27a9d/logo.png" /></a>
 
 
