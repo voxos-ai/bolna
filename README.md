@@ -36,18 +36,35 @@ Bolna helps you create AI Voice Agents which can be instructed to do tasks begin
 Refer to the [docs](https://docs.bolna.dev) for a deepdive into all supported providers.
 
 ## Agents
-This repo contains the following types of agents in the `agents` directory which can be used to create conversational applications:
+This repo contains the following types of agents in the `agents/agent_types` directory which can be used to create conversational applications:
 
 1. `contextual_conversational_agent`: Free flow agent
 2. `graph_based_conversational_agent`:
 3. `extraction_agent`: Currently WIP. [Feel free to contribute and open a PR](https://github.com/bolna-ai/bolna/compare)
 
+## Local setup
+A basic local setup uses Twilio for telephony. We have dockerized the setup in `local_setup/` containing. One will need to populate an environment `.env` file from `.env.sample`.
+
+The setup consists of four containers:
+
+1. Twilio web server: for initiating the calls one will need to set up a [Twilio account](https://www.twilio.com/docs/usage/tutorials/how-to-use-your-free-trial-account)
+2. Bolna server: for creating and handling agents 
+3. `ngrok`: for tunneling. One will need to add the `authtoken` to `ngrok-config.yml`
+4. `redis`: for persisting agents & users contextual data
+
+Running `docker-compose up --build` will use the `.env` as the environment file and the `agents_data` to start all containers.
+
+Once the docker containers are up, you can now start to create your agents and instruct them to initiate calls.
+
 ## Agent Examples
 
-The repo contains examples for as a reference for creating for application agents in the `agents_data` directory:
+The repo contains examples as a reference for creating for application agents in the `agents_data` directory:
 
-1. agent_eg_1
-2. agent_eg_2
+1. `airbnb_job`: A `streaming` `conversation` agent where the agent screens potential candidates for a job at AirBnB
+2. `sorting_hat`: A `preprocessed` `conversation` agent which acts as a Sorting Hat for Hogwarts
+3. `yc_screening`: A `streaming` `conversation` agent which acts as a Y Combinator partner asking questions around the idea/startup
+4. `indian_elections_vernacular`: A `streaming` `conversation` agent which asks people for their outlook towards Indian elections in Hindi language
+5. `sample_agent`: A boilerplate sample agent to start building your own agent!
 
 ## Anatomy of an agent
 
@@ -77,28 +94,18 @@ General structure of the agents:
 > 
 > Even the prompt could be customized to fill in user contextual details from users.json
 
-## Creating your agent
+## Setting up your agent
 
 1. Create a directory under `agents_data` directory with the name for your agent
 2. Create your prompt and save in a file called `conversation_details.json` using the example provided
 3. Optional: In case if you are creating a `preprocessed` agent, generate the audio data used by using the script `scripts/preprocess.py`
-4. Instruct the agent to initiate call to all users via `scripts/initiate_agent_call.py`
 
-## Local setup
-A basic local setup uses Twilio for telephony. We have dockerized the setup in `local_setup/` containing. One will need to populate an environment `.env` file from `.env.sample`.
 
-The setup consists of four containers:
-
-1. Twilio web server: for initiating the calls one will need to set up a [Twilio account](https://www.twilio.com/docs/usage/tutorials/how-to-use-your-free-trial-account)
-2. Bolna server: for creating and handling agents 
-3. `ngrok`: for tunneling. One will need to add the `authtoken` to `ngrok-config.yml`
-4. `redis`: for persisting agents & users contextual data
-
-Running `docker-compose up --build` will use the `.env` as the environment file and the `agents_data` to start all containers.
-
-Once the docker containers are up, you can now start to create your agents and instruct them to initiate calls.
-
-## 
+## Creating your agent and invoking calls
+1. At this point, the docker containers should be up and running
+2. Your agent prompt should be defined in the `agents_data/` directory with `conversation_details.json` with the user list in `users.json`
+3. Create your agent using the API: . An agent will get created with an `agent_id`
+4. Instruct the agent to initiate call to users via `scripts/initiate_agent_call.py <agent_name> <agent_id>`
 
 
 ## Open-source v/s Paid
