@@ -25,6 +25,8 @@
 **[Bolna](https://bolna.dev)** is the end--to-end open source production ready framework for quickly building LLM based voice driven conversational applications.
 
 ## Demo
+https://github.com/bolna-ai/bolna/assets/1313096/2237f64f-1c5b-4723-b7e7-d11466e9b226
+
 
 
 ## Components
