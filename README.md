@@ -55,13 +55,13 @@ The setup consists of four containers:
 3. `ngrok`: for tunneling. One will need to add the `authtoken` to `ngrok-config.yml`
 4. `redis`: for persisting agents & users contextual data
 
-Running `docker-compose up --build` will use the `.env` as the environment file and the `agents_data` to start all containers.
+Running `docker-compose up --build` will use the `.env` as the environment file and the `agent_data` to start all containers.
 
 Once the docker containers are up, you can now start to create your agents and instruct them to initiate calls.
 
 ## Agent Examples
 
-The repo contains examples as a reference for creating for application agents in the `agents_data` directory:
+The repo contains examples as a reference for creating for application agents in the `agent_data` directory:
 
 1. `airbnb_job`: A `streaming` `conversation` agent where the agent screens potential candidates for a job at AirBnB
 2. `sorting_hat`: A `preprocessed` `conversation` agent which acts as a Sorting Hat for Hogwarts
@@ -71,7 +71,7 @@ The repo contains examples as a reference for creating for application agents in
 
 ## Anatomy of an agent
 
-All agents are read from the `agents_data` directory. We have provided some samples for getting started. There's a dashboard coming up [still in WIP] which will easily facilitate towards creating agents. 
+All agents are read from the `agent_data` directory. We have provided some samples for getting started. There's a dashboard coming up [still in WIP] which will easily facilitate towards creating agents.
 
 General structure of the agents:
 
@@ -96,18 +96,18 @@ General structure of the agents:
 > 
 > For instance, in the case of a preprocessed agent, the initial intro could be customized to have the user's name.
 > 
-> Even the prompt could be customized to fill in user contextual details from users.json
+> Even the prompt could be customized to fill in user contextual details from users.json For example [{first_name} defined in prompt]() and [prompt intro]()
 
 ## Setting up your agent
 
-1. Create a directory under `agents_data` directory with the name for your agent
+1. Create a directory under `agent_data` directory with the name for your agent
 2. Create your prompt and save in a file called `conversation_details.json` using the example provided
 3. Optional: In case if you are creating a `preprocessed` agent, generate the audio data used by using the script `scripts/preprocess.py`
 
 
 ## Creating your agent and invoking calls
 1. At this point, the docker containers should be up and running
-2. Your agent prompt should be defined in the `agents_data/` directory with `conversation_details.json` with the user list in `users.json`
+2. Your agent prompt should be defined in the `agent_data/` directory with `conversation_details.json` with the user list in `users.json`
 3. Create your agent using the API: . An agent will get created with an `agent_id`
 4. Instruct the agent to initiate call to users via `scripts/initiate_agent_call.py <agent_name> <agent_id>`
 
