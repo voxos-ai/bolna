@@ -1,0 +1,105 @@
+{
+    "task_1": {
+        "1": {
+            "label": "INTRO",
+            "children": [
+                "2"
+            ],
+            "content": [
+                {
+                    "text": "Am I speaking with {}"
+                }
+            ],
+            "prompt": null,
+            "classification_labels": null,
+            "is_root": true
+        },
+        "2": {
+            "label": "DETAILED_INTRO",
+            "children": [
+                "3",
+                "4"
+            ],
+            "content": [
+                {
+                    "text": "हेलो, मे दीपिका  बोल  रही  हू . 3rd डिसेंबर  को  मध्य प्रदेश  मे  इलेक्शंस हो  रहे  है . क्या आप एक्साइटेड हो?"
+                }
+            ],
+            "prompt": "You're a smart assistant helping with intent classification. For the given input, we want to classify user intent based on the user's last message, to determine if the user is interested in continuing the conversation forward. \n\n**Examples:**\n1. **Input**: 'बिलकुल, उत्साहित हूँ।' **Label**: interested\n2. **Input**: 'हाँ बिलकुल।' **Label**: interested\n3. **Input**: 'हाँ, सवाल।' **Label**: interested\n4. **Input**: 'बिल्कुल भी एक्साइटेड नहीं हूँ।' **Label**: not_interested\n5. **Input**: 'मुझे परेशान मत करिए।' **Label**: not_interested\n6. **Input**: 'नहीं, इंटरेस्ट नहीं हूँ।' **Label**: not_interested\n\nClassification should be either as **interested** or **not_interested** \n\nNote: The user's message will be in Hindi, and your response should be in English. Simply reply in the following JSON format - {\"classification_label\": \"interested\" or \"not_interested\"}",
+            "classification_labels": [
+                "interested",
+                "not_interested"
+            ],
+            "is_root": false
+        },
+        "3": {
+            "label": "not_interested",
+            "content": [
+                {
+                    "text": "कोई बात नहीं, अगर आपको पैसे जीतने का मन है, आओ ऐप पे अपने ओपिनियन पे पैसे कमाओ।"
+                }
+            ],
+            "children": null,
+            "is_root": false,
+            "classification_labels": null
+        },
+        "4": {
+            "label": "interested",
+            "content": [
+                {
+                    "text": "आपको क्या लगता है इस साल कोन इलेक्शंस जीतेगा - भाजपा या कांग्रेस?"
+                }
+            ],
+            "children": [
+                "7",
+                "5"
+            ],
+            "prompt": "You're a smart assistant helping with intent classification. For the given input, we want to classify user intent based on the user's last message, is the user interested the election or not. \n\n Classification should be either as **interested** or **not_interested** \n\n Note: The user's message will be in Hindi and your response should be in English. Kindly use the context that these are Indian elections in the state of Madhya Pradesh. If user says anything vague or diplomatic response as not_opinionated else user is interested.  Simply reply in a following JSON format - {\"classification_label\": \"opinionated\" or \"not_opinionated\"}",
+            "classification_labels": [
+                "opinionated",
+                "not_opinionated"
+            ],
+            "is_root": false
+        },
+        "5": {
+            "label": "opinionated",
+            "content": [
+                {
+                    "text": "आपके प्रोबो अकाउंट में हमने 20 रुपये डाल दिए हैं। जल्दी से आपका ओपिनियन दे दो और पैसे जीतो! तोह फिर, कब आओगे प्रोबो पे?"
+                }
+            ],
+            "children": [
+                "6"
+            ],
+            "prompt": null,
+            "classification_labels": null,
+            "is_root": false
+        },
+        "6": {
+            "label": "interested",
+            "content": [
+                {
+                    "text": "चलो, हम आपको एक लिंक भेजेंगे प्रोबो के एक ट्रेड का। तो आप उसपे ट्रेड कर सकते हो।"
+                }
+            ],
+            "children": null,
+            "prompt": null,
+            "classification_labels": null,
+            "is_root": false
+        },
+        "7": {
+            "label": "not_opinionated",
+            "content": [
+                {
+                    "text": "कोई बात नहीं, अगर आपको पैसे जीतने का मन है, आओ प्रोबो पे अपने ओपिनियन पे पैसे कमाओ।"
+                }
+            ],
+            "children": null,
+            "is_root": false,
+            "classification_labels": null
+        }
+    },
+    "task_2": {
+        "system_prompt": "Given this transcript from the communication between user and an agent, want to get following information \n\n 1. Is user interested in using the app? Answer should be in cold, luke warm, warm, hot. \n\n 2. User's opinion - BJP vs Congress? If user mentions any other party Kindly write that party. \n\n ###JSON Structure \n\n {'user_interest': \"Answer should be in cold, luke warm, warm, hot\", \"user_opinion\": \"User's opinion - Answer should be either BJP, Congress or Indifferent?\"}. \n\n Make sure your response is in ENGLISH. Also Remember the conversation is regarding user's opinion on who will win the elections in an Indian state of Madhya Pradesh. Kindly take that into context."
+    }
+}
