@@ -24,6 +24,7 @@
 
 **[Bolna](https://bolna.dev)** is the end--to-end open source production ready framework for quickly building LLM based voice driven conversational applications.
 
+
 ## Demo
 https://github.com/bolna-ai/bolna/assets/1313096/2237f64f-1c5b-4723-b7e7-d11466e9b226
 
@@ -40,6 +41,7 @@ Bolna helps you create AI Voice Agents which can be instructed to do tasks begin
 
 Refer to the [docs](https://docs.bolna.dev) for a deepdive into all supported providers.
 
+
 ## Agents
 This repo contains the following types of agents in the `agents/agent_types` directory which can be used to create conversational applications:
 
@@ -47,8 +49,9 @@ This repo contains the following types of agents in the `agents/agent_types` dir
 2. `graph_based_conversational_agent`:
 3. `extraction_agent`: Currently WIP. [Feel free to contribute and open a PR](https://github.com/bolna-ai/bolna/compare)
 
+
 ## Local setup
-A basic local setup uses Twilio for telephony. We have dockerized the setup in `local_setup/` containing. One will need to populate an environment `.env` file from `.env.sample`.
+A basic local setup uses Twilio for telephony. We have dockerized the setup in `local_setup/`. One will need to populate an environment `.env` file from `.env.sample`.
 
 The setup consists of four containers:
 
@@ -61,8 +64,8 @@ Running `docker-compose up --build` will use the `.env` as the environment file 
 
 Once the docker containers are up, you can now start to create your agents and instruct them to initiate calls.
 
-## Agent Examples
 
+## Agent Examples
 The repo contains examples as a reference for creating for application agents in the `agent_data` directory:
 
 1. `airbnb_job`: A `streaming` `conversation` agent where the agent screens potential candidates for a job at AirBnB
@@ -71,8 +74,8 @@ The repo contains examples as a reference for creating for application agents in
 4. `indian_elections_vernacular`: A `streaming` `conversation` agent which asks people for their outlook towards Indian elections in Hindi language
 5. `sample_agent`: A boilerplate sample agent to start building your own agent!
 
-## Anatomy of an agent
 
+## Anatomy of an agent
 All agents are read from the `agent_data` directory. We have provided some samples for getting started. There's a dashboard coming up [still in WIP] which will easily facilitate towards creating agents.
 
 General structure of the agents:
@@ -98,10 +101,10 @@ General structure of the agents:
 > 
 > For instance, in the case of a preprocessed agent, the initial intro could be customized to have the user's name.
 > 
-> Even the prompt could be customized to fill in user contextual details from users.json For example [{first_name} defined in prompt](https://github.com/bolna-ai/bolna/blob/update_readme/agent_data/airbnb_job/conversation_details.json#L3) and [prompt intro](https://github.com/bolna-ai/bolna/blob/update_readme/agent_data/sorting_hat/conversation_details.json#L10)
+> Even the prompt could be customized to fill in user contextual details from users.json. For example, [{first_name} defined in prompt](https://github.com/bolna-ai/bolna/blob/master/agent_data/airbnb_job/conversation_details.json#L3) and [prompt intro](https://github.com/bolna-ai/bolna/blob/master/agent_data/sorting_hat/conversation_details.json#L10)
+
 
 ## Setting up your agent
-
 1. Create a directory under `agent_data` directory with the name for your agent
 2. Create your prompt and save in a file called `conversation_details.json` using the example provided
 3. Optional: In case if you are creating a `preprocessed` agent, generate the audio data used by using the script `scripts/preprocess.py`
@@ -124,4 +127,4 @@ We love all types of contributions: whether big or small helping in improving th
 
 1. There are a number of [open issues present](https://github.com/bolna-ai/bolna/issues) which can be good ones to start with
 2. If you have suggestions for enhancements, wish to contribute a simple fix such as correcting a typo, or want to address an apparent bug, please feel free to initiate a new issue or submit a pull request
-2. If you're contemplating a larger change or addition to this repository, be it in terms of its structure or the features, kindly begin by creating a new issue [open a new issue :octocat:](https://github.com/bolna-ai/examples/issues/new) and outline your proposed changes. This will allow us to engage in a discussion before you dedicate a significant amount of time or effort. Your cooperation and understanding are appreciated
+2. If you're contemplating a larger change or addition to this repository, be it in terms of its structure or the features, kindly begin by creating a new issue [open a new issue :octocat:](https://github.com/bolna-ai/bolna/issues/new) and outline your proposed changes. This will allow us to engage in a discussion before you dedicate a significant amount of time or effort. Your cooperation and understanding are appreciated
