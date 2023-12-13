@@ -5,6 +5,7 @@
 </p>
 
 <h4 align="center">
+  <a href="https://discord.gg/6fTq2F9s">Discord</a> |
   <a href="https://docs.bolna.dev">Docs</a> |
   <a href="https://bolna.dev">Website</a>
 </h4>
