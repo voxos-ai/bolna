@@ -96,7 +96,7 @@ General structure of the agents:
 > 
 > For instance, in the case of a preprocessed agent, the initial intro could be customized to have the user's name.
 > 
-> Even the prompt could be customized to fill in user contextual details from users.json For example [{first_name} defined in prompt]() and [prompt intro]()
+> Even the prompt could be customized to fill in user contextual details from users.json For example [{first_name} defined in prompt](https://github.com/bolna-ai/bolna/blob/update_readme/agent_data/airbnb_job/conversation_details.json#L3) and [prompt intro](https://github.com/bolna-ai/bolna/blob/update_readme/agent_data/sorting_hat/conversation_details.json#L10)
 
 ## Setting up your agent
 
