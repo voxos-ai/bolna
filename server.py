@@ -10,8 +10,8 @@ from agents.agent_manager import AssistantManager
 import traceback
 import json
 from agents.helpers.logger_config import configure_logger
-# from database.dynamodb import DynamoDB
 import asyncio
+from agents.models import *
 
 
 logger = configure_logger(__name__)
@@ -21,7 +21,6 @@ redis_pool = redis.ConnectionPool.from_url(os.getenv('REDIS_URL'), decode_respon
 redis_client = redis.Redis.from_pool(redis_pool)
 active_websockets: List[WebSocket] = []
 app = FastAPI()
-# dynamodb = DynamoDB(os.getenv('TABLE_NAME'))
 
 
 try:
@@ -56,15 +55,13 @@ class SynthesizerModel(BaseModel):
     language: Optional[str] = None
     voice: str
     stream: bool = False
-    buffer_size: Optional[int] = 40  # 40 characters in a buffer
+    buffer_size: Optional[int] = 40
     audio_format: Optional[str] = "mp3"
     sampling_rate: Optional[str] = "24000"
 
-    # vocoder: Optional[str]
-    # model_path: Optional[str]
     @validator("model")
     def validate_model(cls, value):
-        return validate_attribute(value, ["polly", "xtts"])
+        return validate_attribute(value, list(SUPPORTED_SYNTHESIZER_MODELS.keys()))
 
     @validator("language")
     def validate_language(cls, value):
@@ -77,7 +74,7 @@ class IOModel(BaseModel):
 
     @validator("provider")
     def validate_provider(cls, value):
-        return validate_attribute(value, ["twilio", "plivo", "default", "database"])
+        return validate_attribute(value, list(SUPPORTED_INPUT_HANDLERS.keys()))
 
 
 class LLM_Model(BaseModel):
