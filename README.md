@@ -24,6 +24,9 @@
 
 **[Bolna](https://bolna.dev)** is the end--to-end open source production ready framework for quickly building LLM based voice driven conversational applications.
 
+## Demo
+
+
 ## Components
 Bolna helps you create AI Voice Agents which can be instructed to do tasks beginning with:
 
@@ -82,8 +85,9 @@ General structure of the agents:
 | Prompt        | Required (defined in `conversation_details.json`)                              | Required (defined in `conversation_details.json`)                                                                                                                                                        |
 | Preprocessing | Not required                                                                   | Required (using `scripts/preprocessed.py`)                                                                                                                                                               |
 
-> [!note] Currently, the `users.json` has the following user attributes which gets substituted in the prompt to make it customized for the call. More to be added soon!
-> 
+
+> [!note]
+> Currently, the `users.json` has the following user attributes which gets substituted in the prompt to make it customized for the call. More to be added soon! 
 > - first_name
 > - last_name
 > - honorific
@@ -114,7 +118,7 @@ Though the repository is completely open source, you can connect with us if inte
 
 
 ## Contributing
-We love all types of contributions: whwether big or small helping in improving this community resource.
+We love all types of contributions: whether big or small helping in improving this community resource.
 
 1. There are a number of [open issues present](https://github.com/bolna-ai/bolna/issues) which can be good ones to start with
 2. If you have suggestions for enhancements, wish to contribute a simple fix such as correcting a typo, or want to address an apparent bug, please feel free to initiate a new issue or submit a pull request
