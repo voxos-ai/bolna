@@ -1,5 +1,4 @@
 <h1 align="center">
-  <img width="300" src="/img/logoname-white.svg#gh-dark-mode-only" alt="bolna">
 </h1>
 <p align="center">
   <p align="center"><b>End-to-end open-source voice agents platform</b>: Quickly build LLM based voice driven conversational applications</p>
@@ -45,8 +44,8 @@ Refer to the [docs](https://docs.bolna.dev) for a deepdive into all supported pr
 ## Agents
 This repo contains the following types of agents in the `agents/agent_types` directory which can be used to create conversational applications:
 
-1. `contextual_conversational_agent`: Free flow agent
-2. `graph_based_conversational_agent`:
+1. `contextual_conversational_agent`: LLM-based free flow agent
+2. `graph_based_conversational_agent`: LLM-based agent with classification
 3. `extraction_agent`: Currently WIP. [Feel free to contribute and open a PR](https://github.com/bolna-ai/bolna/compare)
 
 
@@ -119,7 +118,7 @@ General structure of the agents:
 
 ## Open-source v/s Paid
 Though the repository is completely open source, you can connect with us if interested in managed offerings or more customized solutions.
-<cal link>
+<a href="https://calendly.com/bolna/30min"><img alt="Schedule a meeting" src="https://cdn.cookielaw.org/logos/122ecfc3-4694-42f1-863f-2db42d1b1e68/0bcbbcf4-9b83-4684-ba59-bc913c0d5905/c21bea90-f4f1-43d1-8118-8938bbb27a9d/logo.png" /></a>
 
 
 ## Contributing
