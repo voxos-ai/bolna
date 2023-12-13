@@ -2,11 +2,10 @@
   <img width="300" src="/img/logoname-white.svg#gh-dark-mode-only" alt="bolna">
 </h1>
 <p align="center">
-  <p align="center"><b>The open-source voice agents platform</b>: Quickly build LLM based voice driven conversational applications</p>
+  <p align="center"><b>End-to-end open-source voice agents platform</b>: Quickly build LLM based voice driven conversational applications</p>
 </p>
 
 <h4 align="center">
-  <a href="https://bolna.dev/slack">Slack</a> |
   <a href="https://docs.bolna.dev">Docs</a> |
   <a href="https://bolna.dev">Website</a>
 </h4>
@@ -18,15 +17,12 @@
   <a href="https://github.com/bolna-ai/bolna/blob/main/CONTRIBUTING.md">
     <img src="https://img.shields.io/badge/PRs-Welcome-brightgreen" alt="PRs welcome!" />
   </a>
-  <a href="https://bolna.dev/slack">
-    <img src="https://img.shields.io/badge/chat-on%20Slack-blueviolet" alt="Slack community channel" />
-  </a>
 </h4>
 
 
 ## Introduction
 
-**[Bolna](https://bolna.dev)** is the open source production ready framework for quickly building LLM based voice driven conversational applications.
+**[Bolna](https://bolna.dev)** is the end--to-end open source production ready framework for quickly building LLM based voice driven conversational applications.
 
 ## Components
 Bolna helps you create AI Voice Agents which can be instructed to do tasks beginning with:
@@ -37,7 +33,7 @@ Bolna helps you create AI Voice Agents which can be instructed to do tasks begin
 4. Synthesizing LLM responses back to telephony using `AWS Polly`, `XTTS`, etc.
 5. Instructing the Agent to perform tasks like sending emails, text messages, booking calendar after the conversation has ended
 
-Refer to the [docs](https://docs.bolna.dev) for a deepdive into all supported providers
+Refer to the [docs](https://docs.bolna.dev) for a deepdive into all supported providers.
 
 ## Agents
 This repo contains the following types of agents in the `agents` directory which can be used to create conversational applications:
@@ -53,14 +49,56 @@ The repo contains examples for as a reference for creating for application agent
 1. agent_eg_1
 2. agent_eg_2
 
-## Creating your own agent
+## Anatomy of an agent
 
-All agents are defined (just like the examples) in the `agents_data` directory. Steps to create an agent:
+All agents are read from the `agents_data` directory. We have provided some samples for getting started. There's a dashboard coming up [still in WIP] which will easily facilitate towards creating agents. 
 
-1. Create a directory under `agents_data` directory with the name for your agent.
-2. Create your prompt and save in a file called `conversation_details.json`. Refer to the examples provided in the repo.
-3. Optional: In case if you are creating a pre-processed agent, generate the audio data used by using the script `preprocess.py`.
-4. 
+General structure of the agents:
+
+    your-awesome-agent-name
+    ├── conversation_details.json         # Compiled prompt
+    └── users.json                        # List of users that the call would be made to
+
+| Agent type    | `streaming` agent                                                              | `preprocessed` agent                                                                                                                                                                                     |
+|---------------|--------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Introduction  | A streaming agent will work like a free-flow conversation following the prompt | Apart from following the prompt, a preprocessed agent will have all responses <br/>from the agent preprocessed in the form of audio which will be streamed <br/>as per the classification of human's response |
+| Prompt        | Required (defined in `conversation_details.json`)                              | Required (defined in `conversation_details.json`)                                                                                                                                                        |
+| Preprocessing | Not required                                                                   | Required (using `scripts/preprocessed.py`)                                                                                                                                                               |
+
+> Currently, the `users.json` has the following user attributes which gets substituted in the prompt to make it customized for the call. More to be added soon!
+> 
+> - first_name
+> - last_name
+> - honorific
+> 
+> 
+> 
+> For instance, in the case of a preprocessed agent, the initial intro could be customized to have the user's name.
+> 
+> Even the prompt could be customized to fill in user contextual details from users.json
+
+## Creating your agent
+
+1. Create a directory under `agents_data` directory with the name for your agent
+2. Create your prompt and save in a file called `conversation_details.json` using the example provided
+3. Optional: In case if you are creating a `preprocessed` agent, generate the audio data used by using the script `scripts/preprocess.py`
+4. Instruct the agent to initiate call to all users via `scripts/initiate_agent_call.py`
+
+## Local setup
+A basic local setup uses Twilio for telephony. We have dockerized the setup in `local_setup/` containing. One will need to populate an environment `.env` file from `.env.sample`.
+
+The setup consists of four containers:
+
+1. Twilio web server: for initiating the calls one will need to set up a [Twilio account](https://www.twilio.com/docs/usage/tutorials/how-to-use-your-free-trial-account)
+2. Bolna server: for creating and handling agents 
+3. `ngrok`: for tunneling. One will need to add the `authtoken` to `ngrok-config.yml`
+4. `redis`: for persisting agents & users contextual data
+
+Running `docker-compose up --build` will use the `.env` as the environment file and the `agents_data` to start all containers.
+
+Once the docker containers are up, you can now start to create your agents and instruct them to initiate calls.
+
+## 
 
 
 ## Open-source v/s Paid
@@ -71,8 +109,6 @@ Though the repository is completely open source, you can connect with us if inte
 ## Contributing
 We love all types of contributions: whwether big or small helping in improving this community resource.
 
-1. If you have suggestions for enhancements, wish to contribute a simple fix such as correcting a typo, or want to address an apparent bug, please feel free to initiate a new issue or submit a pull request. 
-2. If you're contemplating a larger change or addition to this repository, be it in terms of its structure or the features, kindly begin by creating a new issue [open a new issue :octocat:](https://github.com/bolna-ai/examples/issues/new) and outline your proposed changes. This will allow us to engage in a discussion before you dedicate a significant amount of time or effort. Your cooperation and understanding are appreciated.
-
-
-
+1. There are a number of [open issues present](https://github.com/bolna-ai/bolna/issues) which can be good ones to start with
+2. If you have suggestions for enhancements, wish to contribute a simple fix such as correcting a typo, or want to address an apparent bug, please feel free to initiate a new issue or submit a pull request
+2. If you're contemplating a larger change or addition to this repository, be it in terms of its structure or the features, kindly begin by creating a new issue [open a new issue :octocat:](https://github.com/bolna-ai/examples/issues/new) and outline your proposed changes. This will allow us to engage in a discussion before you dedicate a significant amount of time or effort. Your cooperation and understanding are appreciated
