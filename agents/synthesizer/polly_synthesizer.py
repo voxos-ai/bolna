@@ -26,15 +26,8 @@ class PollySynthesizer(BaseSynthesizer):
     # @TODO: remove AWS client passed as params
     @staticmethod
     async def create_client(service: str, session: AioSession, exit_stack: AsyncExitStack):
-        if os.getenv('AWS_ACCESS_KEY_ID'):
-            return await exit_stack.enter_async_context(session.create_client(
-                service,
-                aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-                aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
-                region_name=os.getenv('AWS_REGION')
-            ))
-        else:
-            return await exit_stack.enter_async_context(session.create_client(service))
+        # assumes AWS configuration
+        return await exit_stack.enter_async_context(session.create_client(service))
 
     async def generate_tts_response(self, text):
         session = AioSession()
