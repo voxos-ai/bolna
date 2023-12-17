@@ -25,7 +25,7 @@ class DeepgramTranscriber(BaseTranscriber):
                          f"&filler_words=true&endpointing={self.endpointing}")
 
         if self.provider == 'twilio':
-            websocket_url = (f"wss://api.deepgram.com/v1/listen?encoding=mulaw&sample_rate=8000&channels"
+            websocket_url = (f"wss://api.deepgram.com/v1/listen?model=nova-2&encoding=mulaw&sample_rate=8000&channels"
                              f"=1&filler_words=true&endpointing={self.endpointing}")
 
         if "en" not in self.language:
