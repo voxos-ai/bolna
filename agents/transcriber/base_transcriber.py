@@ -28,10 +28,10 @@ class BaseTranscriber:
         self.last_vocal_frame_time = None
         self.previous_request_id = None
         self.current_request_id = None
-        self.vad_model, self.vad_utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad',
-                                                        force_reload=False)
-        (self.get_speech_timestamps, self.save_audio, self.read_audio, self.VADIterator,
-         self.collect_chunks) = self.vad_utils
+        # self.vad_model, self.vad_utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad',
+        #                                                 force_reload=False)
+        # (self.get_speech_timestamps, self.save_audio, self.read_audio, self.VADIterator,
+        #  self.collect_chunks) = self.vad_utils
 
     async def get_audio_confidence(self, audio_data):
         t1 = time.time()
@@ -120,7 +120,6 @@ class BaseTranscriber:
                 if msg["speech_final"] and self.callee_speaking:
                     yield create_ws_data_packet(curr_message, self.meta_info)
                     curr_message = ""
-                    await self.log_latency_info()
                     yield create_ws_data_packet("TRANSCRIBER_END", self.meta_info)
                     self.callee_speaking = False
                     self.last_vocal_frame_time = None
