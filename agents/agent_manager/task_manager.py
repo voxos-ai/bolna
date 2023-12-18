@@ -136,7 +136,7 @@ class TaskManager:
         # Setup IO SERVICE, TRANSCRIBER, LLM, SYNTHESIZER
         self.llm_task = None
         self.synthesizer_tasks = []
-        self.vad_state = get_vad_model().get_initial_state(batch_size=1)
+        #self.vad_state = get_vad_model().get_initial_state(batch_size=1)
 
         # state of conversation
         self.was_long_pause = False
