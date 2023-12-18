@@ -134,9 +134,8 @@ class BaseTranscriber:
         self.connection_on = False
 
     @staticmethod
-    async def _close(ws):
+    async def _close(ws, data):
         try:
-            data = {"type": "CloseStream"}
             await ws.send(json.dumps(data))
         except Exception as e:
             logger.error(f"Error while closing transcriber stream {e}")

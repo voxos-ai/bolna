@@ -61,9 +61,6 @@ class TwilioInputHandler(DefaultInputHandler):
                 packet = json.loads(message)
                 if packet['event'] == 'start':
                     await self.call_start(packet)
-                elif packet['event'] == 'connected':
-                    logger.info(f'>>> CALL CONNECTED >>>\n{packet}\n<<< CALL CONNECTED <<<')
-                    continue
                 elif packet['event'] == 'media':
                     media_data = packet['media']
                     media_audio = base64.b64decode(media_data['payload'])
