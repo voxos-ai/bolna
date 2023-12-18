@@ -6,9 +6,22 @@ import copy
 import hashlib
 from .logger_config import configure_logger
 from agents.constants import PREPROCESS_DIR
+import boto3
+import os
+import traceback
+from dotenv import load_dotenv
 
 logger = configure_logger(__name__)
 
+load_dotenv()
+
+session = boto3.session.Session()
+s3 = session.client('s3')
+BUCKET_NAME  = os.getenv('BUCKET_NAME')
+
+
+
+logger.info("BUCKET_NAME: {}".format(BUCKET_NAME))
 
 def load_file(file_path, is_json=False):
     data = None
@@ -93,7 +106,7 @@ def split_payload(payload, max_size=500 * 1024):
 
 def get_required_input_types(task):
     input_types = dict()
-    for i, chain in enumerate(task['toolchain']['sequences']):
+    for i, chain in enumerate(task['toolchain']['pipelines']):
         first_model = chain[0]
         if chain[0] == "transcriber":
             input_types["audio"] = i
@@ -120,9 +133,30 @@ def update_prompt_with_context(prompt, context_data):
     return prompt.format(**context_data.get('recipient_data', {}))
 
 
-def get_prompt_responses(agent_name):
+def get_prompt_responses(agent_name, local= False, user_id=None, assistant_id = None):
     filepath = f"{PREPROCESS_DIR}/{agent_name}/conversation_details.json"
-    data = load_file(filepath, True)
+    data = ""
+    if local:
+        logger.info("Loading up the conversation details from the local file")
+        try:
+            with open(filepath, "r") as json_file:
+                data = json.load(json_file)
+        except Exception as e:
+            logger.error("Could not load up the dataset")
+    else:
+        key = f"{user_id}/{assistant_id}/conversation_details.json"
+        logger.info(f"Loading up the conversation details from the s3 file BUCKET_NAME {BUCKET_NAME} {key}")
+        try:
+            response = s3.get_object(Bucket=BUCKET_NAME, Key= key)
+            file_content = response['Body'].read().decode('utf-8')
+            json_content = json.loads(file_content)
+            return json_content
+
+        except Exception as e:
+            traceback.print_exc()
+            print(f"An error occurred: {e}")
+            return None
+
     return data
 
 

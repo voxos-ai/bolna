@@ -14,20 +14,24 @@ logger = configure_logger(__name__, True)
 
 class TaskManager:
     def __init__(self, assistant_name, task_id, task, ws, input_parameters=None, context_data=None, user_id=None,
-                 assistant_id=None, run_id=None):
+                 assistant_id=None, run_id=None, connected_through_dashboard = False):
+        
         self.task_id = task_id
         self.assistant_name = assistant_name
         self.tools = {}
         self.websocket = ws
         self.task_config = task
         self.context_data = context_data
+        self.connected_through_dashboard = connected_through_dashboard
 
         # Set up communication queues between processes
         self.audio_queue = asyncio.Queue()
         self.llm_queue = asyncio.Queue()
         self.synthesizer_queue = asyncio.Queue()
 
-        self.pipelines = task['toolchain']['sequences']
+        self.pipelines = task['toolchain']['pipelines']
+        self.textual_chat_agent = True if (task['toolchain']['pipelines'][0] == "llm" and task["tools_config"]["llm_agent"]["agent_task"] == "conversation") else False
+
         self.start_time = time.time()
 
         # Assistant persistance stuff
@@ -59,13 +63,14 @@ class TaskManager:
         self.conversation_ended = False
 
         # Prompts
-        self.prompts = get_prompt_responses(assistant_name)["task_{}".format(task_id + 1)]
+        self.prompts = get_prompt_responses(assistant_name, assistant_id = self.assistant_id, user_id = self.user_id)["task_{}".format(task_id + 1)]
 
         if "system_prompt" in self.prompts:
             # This isn't a graph based agent
+            enriched_prompt  = update_prompt_with_context(self.prompts["system_prompt"], self.context_data) if self.context_data is not None else self.prompts["system_prompt"]
             self.system_prompt = {
                 'role': "system",
-                'content': update_prompt_with_context(self.prompts["system_prompt"], self.context_data)
+                'content': enriched_prompt
             }
         else:
             self.system_prompt = {
@@ -84,7 +89,7 @@ class TaskManager:
         else:
             raise Exception(f'LLM {self.task_config["tools_config"]["llm_agent"]["family"]} not supported')
 
-        if self.task_config["tools_config"]["llm_agent"]["agent_task"] == "conversation":
+        if self.task_config["task_type"] == "conversation":
             if self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "streaming":
                 self.tools["llm_agent"] = StreamingContextualAgent(llm)
             elif self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] in ("preprocessed", "formulaic"):
@@ -93,7 +98,7 @@ class TaskManager:
                 self.tools["llm_agent"] = GraphBasedConversationAgent(llm, context_data=self.context_data,
                                                                       prompts=self.prompts,
                                                                       preprocessed=preprocessed)
-        # elif self.task_config["tools_config"]["llm_agent"]["agent_task"] == "extraction":
+        # elif self.task_config["task_type"] == "extraction":
         #     logger.info("Setting up extraction agent")
         #     self.tools["llm_agent"] = ExtractionContextualAgent(llm, prompt=self.system_prompt)
         #     self.extracted_data = None
@@ -106,10 +111,12 @@ class TaskManager:
 
         if task_id == 0:
             if self.task_config["tools_config"]["input"]["provider"] in SUPPORTED_INPUT_HANDLERS.keys():
-                input_handler_class = SUPPORTED_INPUT_HANDLERS.get(
-                    self.task_config["tools_config"]["input"]["provider"])
-                self.tools["input"] = input_handler_class(self.queues, self.websocket, get_required_input_types(task),
-                                                          self.mark_set)
+                logger.info(f"Connected through dashboard {connected_through_dashboard}")
+                if connected_through_dashboard:
+                    input_handler_class = SUPPORTED_INPUT_HANDLERS.get("default") #If connected through dashboard get basic dashboard class
+                else:
+                    input_handler_class = SUPPORTED_INPUT_HANDLERS.get(self.task_config["tools_config"]["input"]["provider"])
+                self.tools["input"] = input_handler_class(self.queues, self.websocket, get_required_input_types(task), self.mark_set, self.connected_through_dashboard)
             else:
                 raise "Other input handlers not supported yet"
 
@@ -168,116 +175,176 @@ class TaskManager:
         if "stream_sid" in message:
             self.stream_sid = message['meta_info']["stream_sid"]
 
-    async def _process_extraction_database_task(self, json_data):
-        self.extracted_data = json.loads(json_data)
-        self.input_parameters = {**self.input_parameters, **self.extracted_data}
-        await self.tools["output"].handle(self.input_parameters)
+    async def _process_extraction_database_task(self, message, sequence, meta_info):
+        message = format_messages(self.input_parameters["messages"]) #Remove the initial system prompt
+        self.history.append({
+            'role': 'user',
+            'content': message
+        })
+
+        json_data = await self.tools["llm_agent"].generate(self.history)
+        if self.task_config["tools_config"]["output"]["provider"] == "database":
+            self.extracted_data = json.loads(json_data)
+            self.input_parameters = {**self.input_parameters, **self.extracted_data}
+            await self.tools["output"].handle(self.input_parameters)
+        else:
+            await self.tools["output"].handle(self.input_parameters)
 
     async def _process_conversation_preprocessed_task(self, message, meta_info, sequence):
-        self.history.append({'role': 'user', 'content': message['data']})
+        if self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "preprocessed":
+            llm_response = ""
+            self.history.append({
+                'role': 'user',
+                'content': message['data']
+            })
+            start_time = time.time()
+            
+            async for text_chunk in self.tools['llm_agent'].generate(self.history, stream=True, synthesize=True, label_flow = self.label_flow):
+                if text_chunk == "<end_of_conversation>":
+                    logger.info("Got end of conversation. I'm stopping now")
+                    self.conversation_ended = True
+                    await self.tools["input"].stop_handler()
+                    logger.info("Stopped input handler")
+                    if "transcriber" in self.tools:
+                        logger.info("Stopping transcriber")
+                        await self.tools["transcriber"].toggle_connection()
+                    return
 
-        async for text_chunk in self.tools['llm_agent'].generate(self.history, stream=True, synthesize=True,
-                                                                 label_flow=self.label_flow):
-            if text_chunk == "<end_of_conversation>":
-                self.conversation_ended = True
-                await self.tools["input"].stop_handler()
-                if "transcriber" in self.tools:
-                    await self.tools["transcriber"].toggle_connection()
-                return
-
-            if is_valid_md5(text_chunk):
-                self.synthesizer_tasks.append(asyncio.create_task(
-                    self._synthesize(create_ws_data_packet(text_chunk, meta_info, is_md5_hash=True))))
-            else:
-                self.synthesizer_tasks.append(asyncio.create_task(
-                    self._synthesize(create_ws_data_packet(text_chunk, meta_info, is_md5_hash=False))))
+                if is_valid_md5(text_chunk):
+                    self.synthesizer_tasks.append(asyncio.create_task(self._synthesize(create_ws_data_packet(text_chunk,meta_info, is_md5_hash = True))))
+                else:
+                    self.synthesizer_tasks.append(asyncio.create_task(self._synthesize(create_ws_data_packet(text_chunk,meta_info, is_md5_hash = False))))
 
     async def _process_conversation_formulaic_task(self, message, meta_info, sequence):
+        self.history.append({
+            'role': 'user',
+            'content': message['data']
+        })
+        start_time = time.time()
         llm_response = ""
-        self.history.append({'role': 'user', 'content': message['data']})
+        logger.info("Agent flow is formulaic and hence moving smoothly")
         async for text_chunk in self.tools['llm_agent'].generate(self.history, stream=True, synthesize=True):
             if is_valid_md5(text_chunk):
-                self.synthesizer_tasks.append(asyncio.create_task(
-                    self._synthesize(create_ws_data_packet(text_chunk, meta_info, is_md5_hash=True))))
+                self.synthesizer_tasks.append(asyncio.create_task(self._synthesize(create_ws_data_packet(text_chunk,meta_info, is_md5_hash = True))))
             else:
-                # TODO Make it more modular
+                #TODO Make it more modular
                 llm_response += text_chunk
                 next_step = self._get_next_step(sequence, "llm")
                 if next_step == "synthesizer":
                     task = asyncio.gather(self._synthesize(create_ws_data_packet(text_chunk, meta_info)))
                     self.synthesizer_tasks.append(asyncio.ensure_future(task))
                 else:
-                    await self.tools["output"].handle(create_ws_data_packet(text_chunk, meta_info))
-                    self.synthesizer_tasks.append(asyncio.create_task(
-                        self._synthesize(create_ws_data_packet(text_chunk, meta_info, is_md5_hash=False))))
+                    logger.info(f"Sending output text {sequence}")
+                    await self.tools["output"].handle(create_ws_data_packet(text_chunk,meta_info))
+                    self.synthesizer_tasks.append(asyncio.create_task(self._synthesize(create_ws_data_packet(text_chunk,meta_info, is_md5_hash = False))))
 
-    async def _process_conversation_task(self, message, meta_info, sequence):
+    async def _process_conversation_task(self, message, sequence, meta_info):
+        logger.info("Agent flow is not preprocesessed and hence moving smoothly")
         llm_response = ""
         self.history.append({
             'role': 'user',
             'content': message['data']
         })
         start_time = time.time()
-
+        should_bypass_synth = 'bypass_synth' in meta_info and meta_info['bypass_synth'] == True
+        
         async for text_chunk in self.tools['llm_agent'].generate(self.history, synthesize=True):
+            logger.info(f"###### time to get the first chunk {time.time() - start_time} {text_chunk}")
             llm_response += text_chunk
             next_step = self._get_next_step(sequence, "llm")
-            if next_step == "synthesizer":
+            if next_step == "synthesizer" and not should_bypass_synth:
                 task = asyncio.gather(self._synthesize(create_ws_data_packet(text_chunk, meta_info)))
                 self.synthesizer_tasks.append(asyncio.ensure_future(task))
             else:
-                await self.tools["output"].handle(create_ws_data_packet(text_chunk, meta_info))
+                logger.info(f"Sending output text {text_chunk}")       
+                await self.tools["output"].handle(create_ws_data_packet(text_chunk,meta_info))
 
         if self.current_request_id in self.llm_rejected_request_ids:
             logger.info("While I was generating response, user spoke something else, so not appending")
         else:
+            logger.info(f"Since we do not have to discard this response adding it {self.current_request_id}")
             self.history.append({"role": "assistant", "content": llm_response})
 
             answer = await self.tools["llm_agent"].check_for_completion(self.history)
             if answer:
+                logger.info("Got end of conversation. I'm stopping now")
                 self.conversation_ended = True
                 await self.tools["input"].stop_handler()
-
-                if "transcriber" in self.tools:
+                logger.info("Stopped input handler")
+                if "transcriber" in self.tools and not  self.connected_through_dashboard:
+                    logger.info("Stopping transcriber")
                     await self.tools["transcriber"].toggle_connection()
                 return
 
             self.llm_processed_request_ids.add(self.current_request_id)
             llm_response = ""
+        
+        logger.info(f"time to get all the chunks {time.time() - start_time}")
 
-    async def _listen_llm_input(self, message):
+    
+    def _extract_sequence_and_meta(self, message):
         sequence, meta_info = None, None
         if isinstance(message, dict) and "meta_info" in message:
             self._set_call_details(message)
             sequence = message["meta_info"]["sequence"]
             meta_info = message["meta_info"]
+        return sequence, meta_info
+
+
+    def _is_extraction_task(self):
+        return self.task_config["task_type"] == "extraction"
+
+    def _is_conversation_task(self):
+        return self.task_config["task_type"] == "conversation"
+
+    def _is_preprocessed_flow(self):
+        return self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "preprocessed"
+
+    def _is_formulaic_flow(self):
+        return self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "formulaic"
+
+     # This is used only in the case it's a text based chatbot
+    async def _listen_llm_input_queue(self):
+        logger.info(f"Starting listening to LLM queue as either Connected to dashboard = {self.connected_through_dashboard} or  it's a textual chat agent {self.textual_chat_agent}")
+        while True:
+            try:
+                ws_data_packet = await self.queues["llm"].get()
+                logger.info(f"ws_data_packet {ws_data_packet}")
+                bos_packet = create_ws_data_packet("<beginning_of_stream>", ws_data_packet['meta_info'])
+                await self.tools["output"].handle(bos_packet)
+                await self._run_llm_task(ws_data_packet)
+                eos_packet = create_ws_data_packet("<end_of_stream>",ws_data_packet['meta_info'])
+                await self.tools["output"].handle(eos_packet)
+
+            except Exception as e:
+                traceback.print_exc()
+                logger.error(f"Something went wrong with LLM queue {e}")
+                break
+
+    async def _run_llm_task(self, message):
+        sequence, meta_info = self._extract_sequence_and_meta(message)
+        
+        logger.info("Running llm based agent")
 
         try:
-            if self.task_config["tools_config"]["llm_agent"]["agent_task"] == "extraction":
-                message = format_messages(self.input_parameters["messages"])  # Remove the initial system prompt
-                self.history.append({'role': 'user', 'content': message})
+            if self._is_extraction_task():
+                await self._process_extraction_database_task(message, sequence, meta_info)
 
-                json_data = await self.tools["llm_agent"].generate(self.history)
+            elif self._is_conversation_task():
+                if self._is_preprocessed_flow():
+                    await self._process_conversation_preprocessed_task(message, sequence, meta_info)
 
-                # Make it more modular
-                if self.task_config["tools_config"]["output"]["provider"] == "database":
-                    await self._process_extraction_database_task(json_data)
-                    # self.extracted_data = json.loads(json_data)
-                    # self.input_parameters = {**self.input_parameters, **self.extracted_data}
-                    # await self.tools["output"].handle(self.input_parameters)
-
-            if self.task_config["tools_config"]["llm_agent"]["agent_task"] == "conversation":
-                if self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "preprocessed":
-                    await self._process_conversation_preprocessed_task(message, meta_info, sequence)
-                elif self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "formulaic":
-                    await self._process_conversation_formulaic_task(message, meta_info, sequence)
+                elif self._is_formulaic_flow(): 
+                    await self._process_conversation_formulaic_task(message, sequence, meta_info)
                 else:
-                    await self._process_conversation_task(message, meta_info, sequence)
-
-                self.llm_task = None
+                    await self._process_conversation_task(message, sequence, meta_info)
+            else:
+                logger.error("Unknown task type")
+            self.llm_task = None
         except Exception as e:
             traceback.print_exc()
             logger.error(f"Something went wrong in llm: {e}")
+    
 
     async def _listen_transcriber(self):
         transcriber_message = ""
@@ -400,6 +467,9 @@ class TaskManager:
                 if "synthesizer" in self.tools and self.task_config["tools_config"]["synthesizer"]["model"] == "xtts":
                     tasks.append(asyncio.create_task(self._receive_from_synthesizer()))
 
+                if self.connected_through_dashboard:
+                    logger.info("Since it's connected through dashboard, I'll run listen_llm_tas too in case user wants to simply text")
+                    self.llm_queue_task = asyncio.create_task(self._listen_llm_input_queue())
                 try:
                     await asyncio.gather(*tasks)
                 except Exception as e:
@@ -414,7 +484,9 @@ class TaskManager:
             else:
                 # Run agent task
                 try:
-                    await self._listen_llm_input(self.input_parameters)
+                    if self.connected_through_dashboard or self.textual_chat_agent:
+                        await self._listen_llm_input_queue()
+                    await self._run_llm_task(self.input_parameters)
                 except Exception as e:
                     logger.error(f"Could not do llm call: {e}")
                     raise Exception(e)
@@ -437,7 +509,7 @@ class TaskManager:
                           "synthesizer_characters": self.synthesizer_characters}
             else:
                 output = self.input_parameters
-                if self.task_config["tools_config"]["llm_agent"]["agent_task"] == "extraction":
+                if self.task_config["task_type"] == "extraction":
                     output["extracted_data"] = self.extracted_data
                 elif self.task_config["tools_config"]["llm_agent"]["agent_task"] == "summarization":
                     output["summarization"] = self.summary

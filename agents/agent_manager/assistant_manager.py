@@ -26,7 +26,7 @@ logger = configure_logger(__name__)
 
 
 class AssistantManager:
-    def __init__(self, agent_config, ws, context_data = None, user_id = None, assistant_id = None):
+    def __init__(self, agent_config, ws, context_data = None, user_id = None, assistant_id = None, connected_through_dashboard = True):
         # Set up communication queues between processes
         self.tools = {}
         self.websocket = ws
@@ -37,6 +37,7 @@ class AssistantManager:
         self.user_id = user_id    
         self.assistant_id = assistant_id
         self.run_id = f"{self.assistant_id}#{str(int(time.time() * 1000))}" #multiply by 1000 to get timestamp in nano seconds to reduce probability of collisions in simultaneously triggered runs.
+        self.connected_through_dashboard = connected_through_dashboard
 
     @staticmethod
     def find_llm_output_price(outputs):
@@ -105,7 +106,7 @@ class AssistantManager:
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
         input_parameters = None
         for task_id, task in enumerate(self.tasks):
-            task_manager = TaskManager(self.agent_config["assistant_name"], task_id, task, self.websocket, context_data=self.context_data, input_parameters=input_parameters, user_id=self.user_id, assistant_id=self.assistant_id, run_id=self.run_id)
+            task_manager = TaskManager(self.agent_config["assistant_name"], task_id, task, self.websocket, context_data=self.context_data, input_parameters=input_parameters, user_id=self.user_id, assistant_id=self.assistant_id, run_id=self.run_id, connected_through_dashboard = self.connected_through_dashboard)
             input_parameters = await task_manager.run()
             logger.info(f"Got parameters {input_parameters}")
             self.task_states[task_id] = True

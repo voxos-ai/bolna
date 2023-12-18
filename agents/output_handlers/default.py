@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from agents.helpers.logger_config import configure_logger
 
 logger = configure_logger(__name__)
-load_dotenv()
+load_dotenv() 
 
 
 class DefaultOutputHandler:
@@ -20,8 +20,13 @@ class DefaultOutputHandler:
         try:
             if packet["meta_info"]['type'] == 'audio':
                 base64_audio = base64.b64encode(packet['data']).decode("utf-8")
-                response = {"data": base64_audio, "message": "audio"}
+                response = {"data": base64_audio, "type": "audio"}
                 await self.websocket.send_json(response)
+            if packet["meta_info"]['type'] == 'text':
+                logger.info(f"Sending text response {packet['data']}")
+                response = {"data": packet['data'], "type": "text"}
+                await self.websocket.send_json(response)
+
             else:
                 logger.error("Other modalities are not implemented yet")
         except Exception as e:

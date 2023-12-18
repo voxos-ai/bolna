@@ -1,6 +1,6 @@
 import boto3
 from botocore.exceptions import ClientError
-from agents.database.base_database import BaseDatabase
+from .base_database import BaseDatabase
 from agents.helpers.logger_config import configure_logger
 import uuid
 
@@ -8,7 +8,11 @@ from aiohttp import ClientSession
 
 from aiodynamo.client import Client
 from aiodynamo.credentials import Credentials
-from aiodynamo.expressions import F
+from aiodynamo.expressions import F, UpdateExpression
+from aiodynamo.expressions import Condition
+from aiodynamo.expressions import HashKey, RangeKey
+
+
 from aiodynamo.http.aiohttp import AIOHTTP
 from aiodynamo.models import Throughput, KeySchema, KeySpec, KeyType
 
@@ -64,70 +68,41 @@ class DynamoDB(BaseDatabase):
         except ClientError as e:
             print(f"An error occurred: {e}")
             return None
+
     
-#     def update_agent_run(self, user_id, agent_id, run_id, updated_parameters):
-#         try:
-#             update_expression = "SET "
-#             expression_attribute_values = {}
-#             for key, value in updated_parameters.items():
-#                 update_expression += f"{key} = :{key}, "
-#                 expression_attribute_values[f":{key}"] = value
+    async def update_agent_status(self, user_id, sort_key, new_status):
+        table = await self.get_table()
+        try:
+            key = {
+                'user_id': user_id,
+                'range': sort_key
+            }
+            # Define the update expression
+            response = await table.update_item(
+                key,
+                F("assistant_status").set("processed")
+            )
+            return response
+        except ClientError as e:
+            print(f"An error occurred: {e}")
+            return None
 
-#             update_expression = update_expression.rstrip(", ")
+    async def get_all_agents_for_user(self, user_id):
+        table = await self.get_table()
+        try:
+            agents = []
+            async for item in table.query(key_condition=HashKey('user_id', user_id) & RangeKey('range').begins_with("agent#")):
+                agents.append(item)
+            return agents
+        except ClientError as e:
+            print(f"An error occurred: {e}")
+            return None
 
-#             response = self.table.update_item(
-#                 Key={
-#                     'user_id': user_id,
-#                     'range': f"{agent_id}#{run_id}"
-#                 },
-#                 UpdateExpression=update_expression,
-#                 ExpressionAttributeValues=expression_attribute_values
-#             )
-#             return response
-#         except ClientError as e:
-#             print(f"An error occurred: {e}")
-#             return None
-
-# def update_agent(self, user_id, sort_key, updated_parameters):
-#         try:
-#             update_expression = "SET "
-#             expression_attribute_values = {}
-#             for key, value in updated_parameters.items():
-#                 update_expression += f"{key} = :{key}, "
-#                 expression_attribute_values[f":{key}"] = value
-
-#             update_expression = update_expression.rstrip(", ")
-
-#             response = self.table.update_item(
-#                 Key={
-#                     'user_id': user_id,
-#                     'range': sort_key
-#                 },
-#                 UpdateExpression=update_expression,
-#                 ExpressionAttributeValues=expression_attribute_values
-#             )
-#             return response
-#         except ClientError as e:
-#             print(f"An error occurred: {e}")
-#             return None
-
-# def get_all_agent_runs(self, user_id):
-#         try:
-#             response = self.table.query(
-#                 KeyConditionExpression=boto3.dynamodb.conditions.Key('user_id').eq(user_id) & Key('range').begins_with(agent_id)
-#             )
-#             return response.get('Items', [])
-#         except ClientError as e:
-#             print(f"An error occurred: {e}")
-#             return []
-
-# def get_all_agents(self, user_id):
-#         try:
-#             response = self.table.query(
-#                 KeyConditionExpression=boto3.dynamodb.conditions.Key('user_id').eq(user_id) & Key('range').begins_with("agent")
-
-#             )
-#             return response.get('Items', [])
-#         except ClientError as e:
-#             print(f"An error occurred: {e}")
-#             return []
+    async def get_agent_data(self, user_id, agent_id):
+        table = await self.get_table()
+        try:
+            agent = await table.get_item(key = {'user_id': user_id, 'range': agent_id})
+            return agent
+        except ClientError as e:
+            print(f"An error occurred: {e}")
+            return None
