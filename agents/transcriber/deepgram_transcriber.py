@@ -6,7 +6,6 @@ import torch
 from .base_transcriber import BaseTranscriber
 from agents.helpers.logger_config import configure_logger
 
-
 logger = configure_logger(__name__)
 load_dotenv()
 torch.set_num_threads(1)
@@ -52,4 +51,4 @@ class DeepgramTranscriber(BaseTranscriber):
                     yield message
                 else:
                     logger.info("Closing the connection")
-                    await self._close(deepgram_ws)
+                    await self._close(deepgram_ws, data={"type": "CloseStream"})
