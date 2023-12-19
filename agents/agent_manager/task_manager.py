@@ -190,7 +190,7 @@ class TaskManager:
         else:
             await self.tools["output"].handle(self.input_parameters)
 
-    async def _process_conversation_preprocessed_task(self, message, meta_info, sequence):
+    async def _process_conversation_preprocessed_task(self, message, sequence, meta_info):
         if self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "preprocessed":
             llm_response = ""
             self.history.append({
@@ -205,17 +205,17 @@ class TaskManager:
                     self.conversation_ended = True
                     await self.tools["input"].stop_handler()
                     logger.info("Stopped input handler")
-                    if "transcriber" in self.tools:
+                    if "transcriber" in self.tools and not self.connected_through_dashboard:
                         logger.info("Stopping transcriber")
                         await self.tools["transcriber"].toggle_connection()
                     return
-
+                logger.info(f"Text chunk {text_chunk}")
                 if is_valid_md5(text_chunk):
                     self.synthesizer_tasks.append(asyncio.create_task(self._synthesize(create_ws_data_packet(text_chunk,meta_info, is_md5_hash = True))))
                 else:
                     self.synthesizer_tasks.append(asyncio.create_task(self._synthesize(create_ws_data_packet(text_chunk,meta_info, is_md5_hash = False))))
 
-    async def _process_conversation_formulaic_task(self, message, meta_info, sequence):
+    async def _process_conversation_formulaic_task(self, message, sequence, meta_info):
         self.history.append({
             'role': 'user',
             'content': message['data']
@@ -431,7 +431,7 @@ class TaskManager:
         try:
             if meta_info["is_md5_hash"]:
                 audio_chunk = get_raw_audio_bytes_from_base64(self.assistant_name, text,
-                                                              self.task_config["tools_config"]["output"]["format"])
+                                                              self.task_config["tools_config"]["output"]["format"], local = False, user_id=self.user_id, assistant_id = self.assistant_id)
                 await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
             elif self.task_config["tools_config"]["synthesizer"]["model"] == "polly":
                 self.synthesizer_characters += len(text)

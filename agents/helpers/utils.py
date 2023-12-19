@@ -40,6 +40,7 @@ def write_json_file(file_path, data):
 
 
 def create_ws_data_packet(data, meta_info=None, is_md5_hash=False, llm_generated=False):
+    logger.info(f"Metadata {meta_info}")
     metadata = copy.deepcopy(meta_info)
     metadata["is_md5_hash"] = is_md5_hash
     metadata["llm_generated"] = llm_generated
@@ -79,14 +80,22 @@ def raw_to_mulaw(raw_bytes):
     return mulaw_encoded
 
 
-def get_raw_audio_bytes_from_base64(agent_name, b64_string, audio_format='mp3'):
+def get_raw_audio_bytes_from_base64(agent_name, b64_string, audio_format='mp3', user_id = None, assistant_id=None, local = False):
     # we are already storing pcm formatted audio in the filler config. No need to encode/decode them further
     audio_data = None
     logger.info(f"getting audio from base64 string {b64_string}")
-    file_name = f"{PREPROCESS_DIR}/{agent_name}/{audio_format}/{b64_string}.{audio_format}"
-    with open(file_name, 'rb') as file:
-        # Read the entire file content into a variable
-        audio_data = file.read()
+
+    if local:
+        file_name = f"{PREPROCESS_DIR}/{agent_name}/{audio_format}/{b64_string}.{audio_format}"
+        with open(file_name, 'rb') as file:
+            # Read the entire file content into a variable
+            audio_data = file.read()
+    else:
+        object_key  = f"{user_id}/{assistant_id}/audio/{b64_string}.{audio_format}"
+        logger.info(f"Reading {object_key}")
+        obj = s3.get_object(Bucket=BUCKET_NAME, Key=object_key)
+        audio_data = obj['Body'].read()
+
     return audio_data
 
 

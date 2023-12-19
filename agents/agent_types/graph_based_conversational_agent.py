@@ -87,6 +87,7 @@ class GraphBasedConversationAgent:
             return audio_pair
 
     async def _get_next_preprocessed_step(self, history):
+        logger.info(f"current node {self.current_node}")
         if self.current_node.prompt is None:
             return self._handle_intro_message(history)
 
@@ -109,9 +110,15 @@ class GraphBasedConversationAgent:
     async def generate(self, history, stream=False, synthesize=False, label_flow=None):
         try:
             if self.preprocessed:
-                next_state = await self._get_next_preprocessed_step(history)
-                history.append({'role': 'assistant', 'content': next_state['text']})
-                yield next_state["audio"]
+                if len(self.current_node.children) == 0:
+                    ind = random.randint(0, len(self.current_node.content) - 1)
+                    audio_pair = self.current_node.content[ind]
+                    yield audio_pair["audio"]
+                else:
+                    next_state = await self._get_next_preprocessed_step(history)
+                    history.append({'role': 'assistant', 'content': next_state['text']})
+                    yield next_state["audio"]
+                
                 if len(self.current_node.children) == 0:
                     await asyncio.sleep(1)
                     yield "<end_of_conversation>"
