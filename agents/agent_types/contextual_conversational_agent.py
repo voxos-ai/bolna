@@ -22,10 +22,12 @@ class StreamingContextualAgent:
 
         prompt.append({'role': 'user', 'content': format_messages(messages)})
         answer = None
-        async for response in self.conversation_completion_llm.generate(messages, True, False, request_json=True):
+
+        # add check for model for request_json open ai
+        async for response in self.conversation_completion_llm.generate(messages, True, False, request_json=False):
             answer = response
-        answer = json.loads(answer)
-        return answer['answer'].lower() == "yes"
+
+        return answer.lower() == "yes"
 
     async def generate(self, history, synthesize=False):
         async for token in self.brain.generate_stream(history, synthesize=synthesize):

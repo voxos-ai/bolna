@@ -277,48 +277,56 @@ class TaskManager:
             traceback.print_exc()
             logger.error(f"Something went wrong in llm: {e}")
 
+    async def process_transcriber_request(self, meta_info):
+        if not self.current_request_id or self.current_request_id != meta_info[
+            "request_id"]:
+            self.previous_request_id, self.current_request_id = self.current_request_id, meta_info[
+                "request_id"]
+
+        sequence = meta_info["sequence"]
+
+        # check if previous request id is not in transmitted request id
+        if self.previous_request_id is None:
+            logger.info("Previous request id is none and hence this must be the first message")
+        elif self.previous_request_id not in self.llm_processed_request_ids:
+            self.llm_rejected_request_ids.add(self.previous_request_id)
+            logger.info("Rejection request_id: {}".format(self.previous_request_id))
+        else:
+            logger.info("No need to append data")
+
+        return sequence
+
+    async def process_interruption(self):
+        await self.tools["output"].handle_interruption()
+        if self.llm_task is not None:
+            logger.info("Cancelling LLM Task as it's on")
+            self.llm_task.cancel()
+            self.llm_task = None
+            self.was_long_pause = True
+
+        if len(self.synthesizer_tasks) > 0:
+            logger.info("Cancelling Synthesizer tasks")
+            for synth_task in self.synthesizer_tasks:
+                synth_task.cancel()
+            self.synthesizer_tasks = []
+
     async def _listen_transcriber(self):
         transcriber_message = ""
-        start_time = None
         try:
             async for message in self.tools["transcriber"].transcribe():
                 self._set_call_details(message)
                 meta_info = message["meta_info"]
-                self.previous_request_id, self.current_request_id = self.current_request_id, message["meta_info"][
-                    "request_id"]
-                sequence = message["meta_info"]["sequence"]
 
-                # check if previous request id is not in transmitted request id
-                if self.previous_request_id is None:
-                    logger.info("Previous request id is none and hence this must be the first message")
-                elif self.previous_request_id not in self.llm_processed_request_ids:
-                    logger.info(
-                        f"request id {meta_info['previous_request_id']} not in self.llm_processed_request_ids. Hence it must be transmitting")
-                    self.llm_rejected_request_ids.add(self.previous_request_id)
-                    logger.info(
-                        f"processessed request ids {self.llm_processed_request_ids} rejected request ids {self.llm_rejected_request_ids}")
-                else:
-                    logger.info(f"No need to append data")
+                sequence = await self.process_transcriber_request(meta_info)
 
                 if message['data'] == "TRANSCRIBER_BEGIN":
                     logger.info("Starting transcriber stream")
                     start_time = time.time()
-                    asyncio.create_task(self.tools["output"].handle_interruption())
-                    if self.llm_task is not None:
-                        logger.info("Cancelling LLM Task as it's on")
-                        self.llm_task.cancel()
-                        self.llm_task = None
-                        self.was_long_pause = True
-
-                    if len(self.synthesizer_tasks) > 0:
-                        logger.info("Cancelling Synthesizer tasks")
-                        for synth_task in self.synthesizer_tasks:
-                            synth_task.cancel()
-                        self.synthesizer_tasks = []
+                    await self.process_interruption()
                     continue
                 elif message['data'] == "TRANSCRIBER_END":
                     self.transcription_characters += len(transcriber_message)
-                    logger.info("END and gerring the next step")
+                    logger.info("END and invoking the next step")
                     next_task = self._get_next_step(sequence, "transcriber")
                     logger.info(f'got the next task {next_task}')
                     if self.was_long_pause:
@@ -364,10 +372,11 @@ class TaskManager:
                 audio_chunk = get_raw_audio_bytes_from_base64(self.assistant_name, text,
                                                               self.task_config["tools_config"]["output"]["format"])
                 await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
+
+            # convert to yield for both polly and xtts
             elif self.task_config["tools_config"]["synthesizer"]["model"] == "polly":
                 self.synthesizer_characters += len(text)
                 audio_chunk = await self.tools["synthesizer"].generate(text)
-
                 if not self.conversation_ended:
                     await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
             elif self.task_config["tools_config"]["synthesizer"]["model"] == "xtts":
