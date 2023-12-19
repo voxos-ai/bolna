@@ -12,12 +12,26 @@ load_dotenv()
 
 
 class DeepgramTranscriber(BaseTranscriber):
-    def __init__(self, provider, input_queue=None, model="deepgram", stream=True, language="en", endpointing="400"):
-        super().__init__(input_queue, model, stream)
+    def __init__(self, provider, input_queue=None, model='deepgram', stream=True, language="en", endpointing="400"):
+        super().__init__(input_queue)
         self.endpointing = endpointing
         self.language = language
         self.stream = stream
         self.provider = provider
+        self.model = 'deepgram'
+
+    def get_deepgram_ws_url(self):
+        websocket_url = (f"wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=16000&channels=1"
+                         f"&filler_words=true&endpointing={self.endpointing}")
+
+        if self.provider == 'twilio':
+            websocket_url = (f"wss://api.deepgram.com/v1/listen?model=nova-2&encoding=mulaw&sample_rate=8000&channels"
+                             f"=1&filler_words=true&endpointing={self.endpointing}")
+
+        if "en" not in self.language:
+            websocket_url += '&language={}'.format(self.language)
+        logger.info('Websocket URL: {}'.format(websocket_url))
+        return websocket_url
 
     async def send_heartbeat(self, ws):
         try:
@@ -67,19 +81,6 @@ class DeepgramTranscriber(BaseTranscriber):
             except Exception as e:
                 logger.error(f"Error while getting transcriptions {e}")
                 yield create_ws_data_packet("TRANSCRIBER_END", self.meta_info)
-
-    def get_deepgram_ws_url(self):
-        websocket_url = (f"wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=16000&channels=1"
-                         f"&filler_words=true&endpointing={self.endpointing}")
-
-        if self.provider == 'twilio':
-            websocket_url = (f"wss://api.deepgram.com/v1/listen?model=nova-2&encoding=mulaw&sample_rate=8000&channels"
-                             f"=1&filler_words=true&endpointing={self.endpointing}")
-
-        if "en" not in self.language:
-            websocket_url += '&language={}'.format(self.language)
-        logger.info('Websocket URL: {}'.format(websocket_url))
-        return websocket_url
 
     def deepgram_connect(self):
         websocket_url = self.get_deepgram_ws_url()

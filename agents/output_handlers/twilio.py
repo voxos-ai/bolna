@@ -27,6 +27,11 @@ class TwilioOutputHandler(DefaultOutputHandler):
         self.mark_set = mark_set
 
     async def handle_interruption(self):
+        if self.is_interruption_task_on:
+            return
+
+        if not self.is_interruption_task_on:
+            self.is_interruption_task_on = True
         logger.info("interrupting>>>>>>")
         if len(self.mark_set) > 0:
             message_clear = {

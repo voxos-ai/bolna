@@ -11,9 +11,8 @@ logger = configure_logger(__name__)
 
 
 class BaseTranscriber:
-    def __init__(self, input_queue=None, model='deepgram', stream=True):
+    def __init__(self, input_queue=None):
         self.input_queue = input_queue
-        self.model = model
         self.connection_on = True
         self.callee_speaking = False
         self.caller_speaking = False

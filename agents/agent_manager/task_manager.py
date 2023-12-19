@@ -303,7 +303,7 @@ class TaskManager:
                 if message['data'] == "TRANSCRIBER_BEGIN":
                     logger.info("Starting transcriber stream")
                     start_time = time.time()
-                    await self.tools["output"].handle_interruption()
+                    asyncio.create_task(self.tools["output"].handle_interruption())
                     if self.llm_task is not None:
                         logger.info("Cancelling LLM Task as it's on")
                         self.llm_task.cancel()
