@@ -373,13 +373,7 @@ class TaskManager:
                                                               self.task_config["tools_config"]["output"]["format"])
                 await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
 
-            # convert to yield for both polly and xtts
-            elif self.task_config["tools_config"]["synthesizer"]["model"] == "polly":
-                self.synthesizer_characters += len(text)
-                audio_chunk = await self.tools["synthesizer"].generate(text)
-                if not self.conversation_ended:
-                    await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
-            elif self.task_config["tools_config"]["synthesizer"]["model"] == "xtts":
+            elif self.task_config["tools_config"]["synthesizer"]["model"] in SUPPORTED_SYNTHESIZER_MODELS.keys():
                 self.synthesizer_characters += len(text)
                 async for audio_chunk in self.tools["synthesizer"].generate(text):
                     if not self.conversation_ended:
