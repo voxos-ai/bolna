@@ -4,7 +4,6 @@ from agents.agent_types import StreamingContextualAgent, GraphBasedConversationA
 import time
 import json
 from agents.helpers.logger_config import configure_logger
-from faster_whisper.vad import get_vad_model
 from agents.models import *
 from agents.helpers.utils import create_ws_data_packet, is_valid_md5, get_raw_audio_bytes_from_base64, \
     get_required_input_types, format_messages, get_prompt_responses, update_prompt_with_context
@@ -136,7 +135,6 @@ class TaskManager:
         # Setup IO SERVICE, TRANSCRIBER, LLM, SYNTHESIZER
         self.llm_task = None
         self.synthesizer_tasks = []
-        #self.vad_state = get_vad_model().get_initial_state(batch_size=1)
 
         # state of conversation
         self.was_long_pause = False
