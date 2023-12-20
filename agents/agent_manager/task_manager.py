@@ -1,6 +1,6 @@
 import asyncio
 import traceback
-from agents.agent_types import StreamingContextualAgent, GraphBasedConversationAgent, ExtractionContextualAgent
+from agents.agent_types import StreamingContextualAgent, GraphBasedConversationAgent, ExtractionContextualAgent, SummarizationContextualAgent
 import time
 import json
 from agents.helpers.logger_config import configure_logger
@@ -46,6 +46,8 @@ class TaskManager:
         if self.task_config["tools_config"]["transcriber"] is not None:
             self.task_config["tools_config"]["transcriber"]["input_queue"] = self.audio_queue
             if self.task_config["tools_config"]["transcriber"]["model"] in SUPPORTED_TRANSCRIBER_MODELS.keys():
+                if self.connected_through_dashboard:
+                    self.task_config["tools_config"]["transcriber"]["stream"] = False
                 transcriber_class = SUPPORTED_TRANSCRIBER_MODELS.get(
                     self.task_config["tools_config"]["transcriber"]["model"])
                 self.tools["transcriber"] = transcriber_class(self.task_config["tools_config"]["input"]["provider"],
@@ -98,10 +100,14 @@ class TaskManager:
                 self.tools["llm_agent"] = GraphBasedConversationAgent(llm, context_data=self.context_data,
                                                                       prompts=self.prompts,
                                                                       preprocessed=preprocessed)
-        # elif self.task_config["task_type"] == "extraction":
-        #     logger.info("Setting up extraction agent")
-        #     self.tools["llm_agent"] = ExtractionContextualAgent(llm, prompt=self.system_prompt)
-        #     self.extracted_data = None
+        elif self.task_config["task_type"] == "extraction":
+            logger.info("Setting up extraction agent")
+            self.tools["llm_agent"] = ExtractionContextualAgent(llm, prompt=self.system_prompt)
+            self.extracted_data = None
+        elif self.task_config["task_type"] == "summarization":
+            logger.info("Setting up summarization agent")
+            self.tools["llm_agent"] = SummarizationContextualAgent(llm, prompt=self.system_prompt)
+            self.summarized_data = None
 
         self.queues = {
             "transcriber": self.audio_queue,
@@ -175,7 +181,7 @@ class TaskManager:
         if "stream_sid" in message:
             self.stream_sid = message['meta_info']["stream_sid"]
 
-    async def _process_extraction_database_task(self, message, sequence, meta_info):
+    async def _process_followup_task(self, message, sequence, meta_info):
         message = format_messages(self.input_parameters["messages"]) #Remove the initial system prompt
         self.history.append({
             'role': 'user',
@@ -183,6 +189,7 @@ class TaskManager:
         })
 
         json_data = await self.tools["llm_agent"].generate(self.history)
+        #TODO validation if the required data is correct
         if self.task_config["tools_config"]["output"]["provider"] == "database":
             self.extracted_data = json.loads(json_data)
             self.input_parameters = {**self.input_parameters, **self.extracted_data}
@@ -294,6 +301,9 @@ class TaskManager:
     def _is_extraction_task(self):
         return self.task_config["task_type"] == "extraction"
 
+    def _is_summarization_task(self):
+        return self.task_config["task_type"] == "summarization"
+
     def _is_conversation_task(self):
         return self.task_config["task_type"] == "conversation"
 
@@ -327,9 +337,8 @@ class TaskManager:
         logger.info("Running llm based agent")
 
         try:
-            if self._is_extraction_task():
-                await self._process_extraction_database_task(message, sequence, meta_info)
-
+            if self._is_extraction_task()or self._is_summarization_task():
+                await self._process_followup_task(message, sequence, meta_info)
             elif self._is_conversation_task():
                 if self._is_preprocessed_flow():
                     await self._process_conversation_preprocessed_task(message, sequence, meta_info)

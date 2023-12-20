@@ -3,7 +3,7 @@ from agents.helpers.logger_config import configure_logger
 logger = configure_logger(__name__)
 
 
-class ExtractionContextualAgent:
+class SummarizationContextualAgent:
     def __init__(self, llm, prompt=None):
         self.brain = llm
 

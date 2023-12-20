@@ -8,6 +8,7 @@ import uuid
 import torch
 from agents.helpers.utils import create_ws_data_packet, int2float
 from agents.helpers.logger_config import configure_logger
+from deepgram import Deepgram
 
 torch.set_num_threads(1)
 load_dotenv()
@@ -62,11 +63,21 @@ class BaseTranscriber:
                 ws_data_packet = await self.input_queue.get()
                 audio_data = ws_data_packet.get('data')
                 self.meta_info = ws_data_packet.get('meta_info')
+                logger.info(f"sending message to deepgram")
                 await asyncio.gather(ws.send(audio_data))
+                # if not self.stream:
+                #     transcription = await self._get_transcription_from_audio(audio_data)
+                # else:
+                #     await asyncio.gather(ws.send(audio_data))
         except Exception as e:
             logger.error('Error while sending: ' + str(e))
             raise Exception("Something went wrong")
 
+    def _get_transcription_from_audio(self, audio_data):
+        logger.info(f"getting transcription from audio")
+        source = {'buffer': audio, 'mimetype': "audio/mpeg"}
+        options = { "smart_format": False, "model": "nova-2"}
+        response = dg_client.transcription.sync_prerecorded(source, options)
     def update_meta_info(self, transcript):
         self.meta_info['request_id'] = self.current_request_id if self.current_request_id else None
         self.meta_info['previous_request_id'] = self.previous_request_id
@@ -117,7 +128,7 @@ class BaseTranscriber:
 
                     curr_message += " " + transcript
 
-                if msg["speech_final"] and self.callee_speaking:
+                if (msg["speech_final"] and self.callee_speaking) or not self.stream:
                     yield create_ws_data_packet(curr_message, self.meta_info)
                     curr_message = ""
                     yield create_ws_data_packet("TRANSCRIBER_END", self.meta_info)

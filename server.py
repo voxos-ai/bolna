@@ -18,7 +18,7 @@ import boto3
 from botocore.exceptions import NoCredentialsError, ClientError
 from agents.helpers.utils import get_md5_hash, execute_tasks_in_chunks, has_placeholders
 from agents.models import *
-
+from agents.prompts import *
 
 logger = configure_logger(__name__, True)
 
@@ -28,7 +28,7 @@ redis_client = redis.Redis.from_pool(redis_pool)
 active_websockets: List[WebSocket] = []
 app = FastAPI()
 s3_client = boto3.client('s3') #Using blocking client but it's okay as we're only using it in a specific use case
-BUCKET_NAME = 'bolna-prompts'
+BUCKET_NAME = os.getenv('BUCKET_NAME')
 
 # Set up CORS middleware options
 app.add_middleware(
@@ -98,7 +98,8 @@ class LLM_Model(BaseModel):
     family: Optional[str] = "openai"
     request_json: Optional[bool] = False
     langchain_agent: Optional[bool] = False
-    extraction_details: Optional[str] = None #This is the json required for the same 
+    extraction_details: Optional[str] = None #This is the english explaination for the same 
+    extraction_json: Optional[str]= None #This is the json required for the same 
 
 class MessagingModel(BaseModel):
     provider: str
@@ -226,11 +227,24 @@ async def process_and_store_audio(conversation_graph, model_name, user_id, assis
                 save_to_s3(f"{user_id}/{assistant_id}/audio/{file_name}.mp3", audio_data, "mp3")
     save_to_s3(f"{user_id}/{assistant_id}/conversation_details.json", conversation_graph, "json")
 
+def get_follow_up_prompts(prompt_json, tasks):
+    for ind, task in enumerate(tasks):
+        task_id = ind
+        task_type = task.get('task_type')
+
+        if task_type == 'extraction':
+            extraction_json = task.get('llm_agent').get('extraction_json')
+            prompt = EXTRACTION_PROMPT.format(extraction_json)
+            prompt_json['serialized_prompts'][f'task_{task_id + 2}'] = {"system_prompt": prompt}
+        elif task_type == 'summarization':
+            prompt_json['serialized_prompts'][f'task_{task_id + 2}'] = {"system_prompt": SUMMARIZATION_PROMPT}
+    logger.info(f"returning {prompt_json}")
+    return prompt_json
+
 async def background_process_and_store(conversation_type, prompt_json, assistant_id, user_id, model_name = "polly", tasks = None):
     try:
 
         # For loop and add multiple prompts into the prompt file from here.
-
         if conversation_type == "preprocessed":
             logger.info(f"Prompt json {prompt_json}")
             conversation_graph = prompt_json['conversation_graph']
@@ -242,6 +256,11 @@ async def background_process_and_store(conversation_type, prompt_json, assistant
         else:        
             #TODO Write this as an experienced developer who will do both concurrently in a non blocking format
             object_key = f'{user_id}/{assistant_id}/conversation_details.json'
+            logger.info(f"tasks {tasks}")
+            if tasks is not None and len(tasks)>0:
+                logger.info(f"Now creating prompts for follow up tasks")
+                #make changes here
+                prompt_json = get_follow_up_prompts(prompt_json, tasks[1:])
             s3_client.put_object(Bucket=BUCKET_NAME, Key=object_key, Body=json.dumps(prompt_json['serialized_prompts']))
             logger.info(f"Now dumping deserialised prompts")
             object_key = f'{user_id}/{assistant_id}/deserialized_prompts.json'
@@ -261,10 +280,10 @@ async def create_agent(agent_data: CreateAssistantPayload):
     data_for_db = agent_data.assistant_config.dict()
     data_for_db["assistant_status"] = "seeding"
     assistant_prompts = agent_data.assistant_prompts
-
+    logger.info(f'Data for DB {data_for_db}')
     redis_task = asyncio.create_task(redis_client.set(agent_uuid, json.dumps(data_for_db)))
     dynamodb_task = asyncio.create_task(dynamodb.store_agent(user_id, f"agent#{agent_uuid}", data_for_db))
-    background_process_and_store_task = asyncio.create_task(background_process_and_store(data_for_db['tasks'][0]['tools_config']['llm_agent']['agent_flow_type'], assistant_prompts.dict(), agent_uuid, user_id, data_for_db['tasks']))
+    background_process_and_store_task = asyncio.create_task(background_process_and_store(data_for_db['tasks'][0]['tools_config']['llm_agent']['agent_flow_type'], assistant_prompts.dict(), agent_uuid, user_id, tasks =data_for_db['tasks']))
     await asyncio.gather(redis_task, dynamodb_task)
 
 
@@ -284,7 +303,7 @@ async def edit_agent(agent_uuid: str, agent_data: CreateAssistantPayload):
 
     redis_task = asyncio.create_task(redis_client.set(agent_uuid, json.dumps(updated_data)))
     dynamodb_task = asyncio.create_task(dynamodb.store_agent(user_id, f"agent#{agent_uuid}", updated_data))
-    background_process_and_store_task = asyncio.create_task(background_process_and_store(updated_data['tasks'][0]['tools_config']['llm_agent']['agent_flow_type'], assistant_prompts.dict(), agent_uuid, user_id))
+    background_process_and_store_task = asyncio.create_task(background_process_and_store(updated_data['tasks'][0]['tools_config']['llm_agent']['agent_flow_type'], assistant_prompts.dict(), agent_uuid, user_id, tasks =updated_data['tasks']))
     
     await asyncio.gather(redis_task, dynamodb_task)
 
