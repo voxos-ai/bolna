@@ -82,9 +82,9 @@ async def process_audio_data(agent_name, audio_data, synth):
 
 
 async def generate_and_save_audio(synth_instance, audio_data_row, agent_directory):
-    audio_chunk = await synth_instance.generate(audio_data_row.get('text'))
-    with open('{}/{}.{}'.format(agent_directory, audio_data_row.get('audio'), synth_instance.format), 'wb') as f:
-        f.write(audio_chunk)
+    async for audio_chunk in synth_instance.generate(audio_data_row.get('text')):
+        with open('{}/{}.{}'.format(agent_directory, audio_data_row.get('audio'), synth_instance.format), 'wb') as f:
+            f.write(audio_chunk)
 
 
 def get_agent_directory(agent_name, audio_format):
