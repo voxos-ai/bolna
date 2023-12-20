@@ -14,6 +14,7 @@ def configure_logger(file_name, enabled=True, logging_level='INFO'):
     )
 
     logger = logging.getLogger(file_name)
+
     if not enabled:
         logger.disabled = True
     return logger

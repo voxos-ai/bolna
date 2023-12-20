@@ -27,8 +27,10 @@ class StreamingContextualAgent:
         async for response in self.conversation_completion_llm.generate(messages, True, False, request_json=False):
             answer = response
 
+        logger.info('Agent: {}'.format(answer))
         return answer.lower() == "yes"
 
     async def generate(self, history, synthesize=False):
         async for token in self.brain.generate_stream(history, synthesize=synthesize):
+            logger.info('Agent: {}'.format(token))
             yield token

@@ -29,12 +29,8 @@ class TwilioInputHandler(DefaultInputHandler):
         self.call_sid = start['callSid']
         self.stream_sid = start['streamSid']
 
-        logger.info('Streaming is starting with streamSid: {}'.format(self.stream_sid))
-
     async def process_mark_message(self, packet):
-        logger.info(f"got a mark event {packet}")
         if packet["mark"]["name"] in self.mark_set:
-            logger.info(f'Streaming of event {packet["mark"]["name"]} is complete. Removing it off the set')
             self.mark_set.remove(packet["mark"]["name"])
 
     async def stop_handler(self):
@@ -53,7 +49,6 @@ class TwilioInputHandler(DefaultInputHandler):
         self.queues['transcriber'].put_nowait(ws_data_packet)
 
     async def _listen(self):
-        logger.info('twilio_receiver started')
         while True:
             try:
                 message = await self.websocket.receive_text()
@@ -88,7 +83,7 @@ class TwilioInputHandler(DefaultInputHandler):
                     await self.process_mark_message(packet)
 
                 elif packet['event'] == 'stop':
-                    logger.info(f'>>> CALL STOPPING >>>\n{packet}\n<<< CALL STOPPING <<<')
+                    logger.info('Call stopping')
                     ws_data_packet = create_ws_data_packet(data=None, meta_info={'io': 'default', 'eos': True})
                     self.queues['transcriber'].put_nowait(ws_data_packet)
                     break
