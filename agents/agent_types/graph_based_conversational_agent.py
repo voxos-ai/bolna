@@ -30,7 +30,6 @@ class Graph:
     def _create_graph(self, data):
         node_map = dict()
         for node_id, node_data in data.items():
-            logger.info(f"Putting in node data {node_data}")
             node = Node(
                 node_id=node_id,
                 node_label=node_data["label"],
@@ -110,13 +109,13 @@ class GraphBasedConversationAgent:
         try:
             if self.preprocessed:
                 next_state = await self._get_next_preprocessed_step(history)
+                logger.info('Agent: {}'.format(next_state.get('text')))
                 history.append({'role': 'assistant', 'content': next_state['text']})
                 yield next_state["audio"]
                 if len(self.current_node.children) == 0:
                     await asyncio.sleep(1)
                     yield "<end_of_conversation>"
             else:
-                logger.info("Getting next state for agent")
                 # @TODO add non-preprocessed flow
                 async for message in self._get_next_formulaic_agent_next_step(history, True, False):
                     yield message

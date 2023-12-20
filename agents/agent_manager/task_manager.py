@@ -227,7 +227,7 @@ class TaskManager:
                 await self.tools["output"].handle(create_ws_data_packet(text_chunk, meta_info))
 
         if self.current_request_id in self.llm_rejected_request_ids:
-            logger.info("While I was generating response, user spoke something else, so not appending")
+            logger.info("User spoke while LLM was generating response")
         else:
             self.history.append({"role": "assistant", "content": llm_response})
 
@@ -287,25 +287,23 @@ class TaskManager:
 
         # check if previous request id is not in transmitted request id
         if self.previous_request_id is None:
-            logger.info("Previous request id is none and hence this must be the first message")
+            is_first_message = True
         elif self.previous_request_id not in self.llm_processed_request_ids:
             self.llm_rejected_request_ids.add(self.previous_request_id)
-            logger.info("Rejection request_id: {}".format(self.previous_request_id))
         else:
-            logger.info("No need to append data")
+            skip_append_to_data = False
+
 
         return sequence
 
     async def process_interruption(self):
         await self.tools["output"].handle_interruption()
         if self.llm_task is not None:
-            logger.info("Cancelling LLM Task as it's on")
             self.llm_task.cancel()
             self.llm_task = None
             self.was_long_pause = True
 
         if len(self.synthesizer_tasks) > 0:
-            logger.info("Cancelling Synthesizer tasks")
             for synth_task in self.synthesizer_tasks:
                 synth_task.cancel()
             self.synthesizer_tasks = []
@@ -320,18 +318,14 @@ class TaskManager:
                 sequence = await self.process_transcriber_request(meta_info)
 
                 if message['data'] == "TRANSCRIBER_BEGIN":
-                    logger.info("Starting transcriber stream")
                     start_time = time.time()
                     await self.process_interruption()
                     continue
                 elif message['data'] == "TRANSCRIBER_END":
                     self.transcription_characters += len(transcriber_message)
-                    logger.info("END and invoking the next step")
                     next_task = self._get_next_step(sequence, "transcriber")
-                    logger.info(f'got the next task {next_task}')
                     if self.was_long_pause:
-                        logger.info(
-                            f"Seems like there was a long, long pause {self.history[-1]['content']} , {transcriber_message}")
+                        logger.info('Seems like there was a long pause')
                         message = self.history[-1]['content'] + " " + transcriber_message
                         self.history = self.history[:-1]
                         self.was_long_pause = False
@@ -344,11 +338,10 @@ class TaskManager:
                         self.synthesizer_tasks.append(asyncio.create_task(
                             self._synthesize(create_ws_data_packet(transcriber_message, meta_info))))
                     else:
-                        logger.info(f"Need to seperate out output task {sequence}")
+                        logger.info(f"Need to separate out output task {sequence}")
                     transcriber_message = ""
                     continue
                 else:
-                    logger.info("data")
                     transcriber_message += message['data']
         except Exception as e:
             traceback.print_exc()
@@ -365,18 +358,21 @@ class TaskManager:
         meta_info = message["meta_info"]
         text = message["data"]
         meta_info["type"] = "audio"
-        logger.info(f"Synthesizer queue message {text}, meta_info = {meta_info}")
-
         try:
             if meta_info["is_md5_hash"]:
+                logger.info('Sending preprocessed audio response to {}'.format(self.task_config["tools_config"]["output"]["provider"]))
                 audio_chunk = get_raw_audio_bytes_from_base64(self.assistant_name, text,
                                                               self.task_config["tools_config"]["output"]["format"])
                 await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
 
             elif self.task_config["tools_config"]["synthesizer"]["model"] in SUPPORTED_SYNTHESIZER_MODELS.keys():
+                logger.info(
+                    'Synthesizing chunk via {}'.format(self.task_config["tools_config"]["synthesizer"]["model"]))
                 self.synthesizer_characters += len(text)
                 async for audio_chunk in self.tools["synthesizer"].generate(text):
                     if not self.conversation_ended:
+                        logger.info('Sending synthesized audio chunk to {}'.format(
+                            self.task_config["tools_config"]["output"]["provider"]))
                         await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
             else:
                 logger.info("other models haven't been done yet")
@@ -392,7 +388,6 @@ class TaskManager:
     
         """
         try:
-            logger.info(f"running a task with task id {self.task_id}")
             if self.task_id == 0:
                 # Create transcriber and synthesizer tasks
                 tasks = [asyncio.create_task(self.tools['input'].handle())]
@@ -410,8 +405,7 @@ class TaskManager:
                 if "transcriber" in self.tools:
                     await self.tools["transcriber"].toggle_connection()
 
-                logger.info("Done with this task and returning for a post processing task")
-
+                logger.info("Conversation completed")
             else:
                 # Run agent task
                 try:

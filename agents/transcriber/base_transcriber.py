@@ -26,7 +26,6 @@ class BaseTranscriber:
         self.meta_info['request_id'] = self.current_request_id if self.current_request_id else None
         self.meta_info['previous_request_id'] = self.previous_request_id
         self.meta_info['origin'] = "transcriber"
-        logger.debug(f"received message with request id {self.meta_info['request_id']} length of transcript {len(transcript)} ")
 
     @staticmethod
     def generate_request_id():
@@ -36,7 +35,6 @@ class BaseTranscriber:
         send_begin_packet = False
         if self.current_request_id is None:
             self.current_request_id = self.generate_request_id()
-            logger.info(f"Setting current request id to {self.current_request_id}")
             self.meta_info['request_id'] = self.current_request_id
 
         if not self.callee_speaking:

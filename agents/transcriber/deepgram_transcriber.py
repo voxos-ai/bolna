@@ -30,7 +30,6 @@ class DeepgramTranscriber(BaseTranscriber):
 
         if "en" not in self.language:
             websocket_url += '&language={}'.format(self.language)
-        logger.info('Websocket URL: {}'.format(websocket_url))
         return websocket_url
 
     async def send_heartbeat(self, ws):
@@ -58,7 +57,6 @@ class DeepgramTranscriber(BaseTranscriber):
         curr_message = ""
         async for msg in ws:
             try:
-                logger.info(f"Got response from {self.model} {msg}")
                 msg = json.loads(msg)
                 transcript = msg['channel']['alternatives'][0]['transcript']
 
@@ -72,6 +70,7 @@ class DeepgramTranscriber(BaseTranscriber):
 
                 if msg["speech_final"] and self.callee_speaking:
                     yield create_ws_data_packet(curr_message, self.meta_info)
+                    logger.info('User: {}'.format(curr_message))
                     curr_message = ""
                     yield create_ws_data_packet("TRANSCRIBER_END", self.meta_info)
                     self.callee_speaking = False
