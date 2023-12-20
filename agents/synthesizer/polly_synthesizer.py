@@ -1,4 +1,3 @@
-import os
 from dotenv import load_dotenv
 from botocore.exceptions import BotoCoreError, ClientError
 from aiobotocore.session import AioSession
@@ -46,14 +45,12 @@ class PollySynthesizer(BaseSynthesizer):
             except (BotoCoreError, ClientError) as error:
                 logger.error(error)
             else:
-                return await response["AudioStream"].read()
+                yield await response["AudioStream"].read()
 
     async def generate(self, text):
-        while True:
-            try:
-                if text != "" and text != "LLM_END":
-                    chunk = await self.generate_tts_response(text)
-                    return chunk
-            except Exception as e:
-                logger.debug("Exception occurred in generate polly: {}".format(e))
-                continue
+        try:
+            if text != "" and text != "LLM_END":
+                async for message in self.generate_tts_response(text):
+                    yield message
+        except Exception as e:
+            logger.error(f"Error in polly generate {e}")

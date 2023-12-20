@@ -9,6 +9,7 @@ load_dotenv()
 class DefaultOutputHandler:
     def __init__(self, websocket=None):
         self.websocket = websocket
+        self.is_interruption_task_on = False
 
     # @TODO Figure out the best way to handle this
     async def handle_interruption(self):
