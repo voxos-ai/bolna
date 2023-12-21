@@ -27,7 +27,7 @@ class TwilioOutputHandler(DefaultOutputHandler):
         self.mark_set = mark_set
 
     async def handle_interruption(self):
-        logger.info("interrupting>>>>>>")
+        logger.info("Interrupting because user spoke in between")
         if len(self.mark_set) > 0:
             message_clear = {
                 "event": "clear",

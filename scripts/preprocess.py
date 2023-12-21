@@ -50,17 +50,16 @@ def get_unique_audio_hash(json_data, audio_values, users_data):
                 text_value = content_row.get("text")
                 audio_value = content_row.get("audio", None)
 
-                if text_value and audio_value:
-                    if is_root:
-                        for user_id, user_data in users_data.items():
-                            user_formatted_text_value = text_value.format(' '.join([user_data.get(k, '') for k in USERS_KEY_ORDER]))
+                if is_root and text_value:
+                    for user_id, user_data in users_data.items():
+                        user_formatted_text_value = text_value.format(' '.join([user_data.get(k, '') for k in USERS_KEY_ORDER]))
 
-                            # checking if substitution is there in the conversation response file
-                            if user_formatted_text_value != text_value:
-                                audio_values.append(
-                                    {"text": user_formatted_text_value, "audio": user_data.get('audio')})
-                    else:
-                        audio_values.append({"text": text_value, "audio": audio_value})
+                        # checking if substitution is there in the conversation response file
+                        if user_formatted_text_value != text_value:
+                            audio_values.append(
+                                {"text": user_formatted_text_value, "audio": user_data.get('audio')})
+                elif text_value and audio_value:
+                    audio_values.append({"text": text_value, "audio": audio_value})
 
 
 async def process_audio_data(agent_name, audio_data, synth):
@@ -82,9 +81,9 @@ async def process_audio_data(agent_name, audio_data, synth):
 
 
 async def generate_and_save_audio(synth_instance, audio_data_row, agent_directory):
-    audio_chunk = await synth_instance.generate(audio_data_row.get('text'))
-    with open('{}/{}.{}'.format(agent_directory, audio_data_row.get('audio'), synth_instance.format), 'wb') as f:
-        f.write(audio_chunk)
+    async for audio_chunk in synth_instance.generate(audio_data_row.get('text')):
+        with open('{}/{}.{}'.format(agent_directory, audio_data_row.get('audio'), synth_instance.format), 'wb') as f:
+            f.write(audio_chunk)
 
 
 def get_agent_directory(agent_name, audio_format):
