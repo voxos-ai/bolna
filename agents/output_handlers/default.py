@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from agents.helpers.logger_config import configure_logger
 
 logger = configure_logger(__name__)
-load_dotenv() 
+load_dotenv()
 
 
 class DefaultOutputHandler:
@@ -20,14 +20,16 @@ class DefaultOutputHandler:
     async def handle(self, packet):
         try:
             logger.info(f"Packet received:")
-            if packet["meta_info"]['type'] == 'audio':
-                logger.info(f"Sending audio")
-                base64_audio = base64.b64encode(packet['data']).decode("utf-8")
-                response = {"data": base64_audio, "type": "audio"}
-                await self.websocket.send_json(response)
-            elif packet["meta_info"]['type'] == 'text':
-                logger.info(f"Sending text response {packet['data']}")
-                response = {"data": packet['data'], "type": "text"}
+            data = None
+            if packet["meta_info"]['type'] in ('audio', 'text'):
+                if packet["meta_info"]['type']:
+                    logger.info(f"Sending audio")
+                    data = base64.b64encode(packet['data']).decode("utf-8")
+                elif packet["meta_info"]['type'] == 'text':
+                    logger.info(f"Sending text response {packet['data']}")
+                    data = packet['data']
+
+                response = {"data": data, "type": packet["meta_info"]['type']}
                 await self.websocket.send_json(response)
 
             else:

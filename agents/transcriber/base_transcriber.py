@@ -63,7 +63,6 @@ class BaseTranscriber:
     @staticmethod
     async def _close(ws, data):
         try:
-            logger.info(f"Closing the transcriber connection")
             await ws.send(json.dumps(data))
         except Exception as e:
             logger.error(f"Error while closing transcriber stream {e}")

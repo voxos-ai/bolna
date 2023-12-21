@@ -18,6 +18,8 @@ class DeepgramTranscriber(BaseTranscriber):
         self.language = language
         self.stream = stream
         self.provider = provider
+        self.heartbeat_task = None
+        self.sender_task = None
         self.model = 'deepgram'
 
     def get_deepgram_ws_url(self):
@@ -42,13 +44,26 @@ class DeepgramTranscriber(BaseTranscriber):
             logger.error('Error while sending: ' + str(e))
             raise Exception("Something went wrong while sending heartbeats to {}".format(self.model))
 
+    async def toggle_connection(self):
+        self.connection_on = False
+        await self.heartbeat_task.cancel()
+        await self.sender_task.cancel()
+
     async def sender(self, ws):
         try:
             while True:
                 ws_data_packet = await self.input_queue.get()
+                if 'eos' in ws_data_packet['meta_info'] and ws_data_packet['meta_info']['eos'] == True:
+                    await self._close(ws, data={"type": "CloseStream"})
+                    break
+
                 audio_data = ws_data_packet.get('data')
                 self.meta_info = ws_data_packet.get('meta_info')
                 await ws.send(audio_data)
+                # if not self.stream:
+                #     transcription = await self._get_transcription_from_audio(audio_data)
+                # else:
+                #     await asyncio.gather(ws.send(audio_data))
         except Exception as e:
             logger.error('Error while sending: ' + str(e))
             raise Exception("Something went wrong")
@@ -58,9 +73,14 @@ class DeepgramTranscriber(BaseTranscriber):
         async for msg in ws:
             try:
                 msg = json.loads(msg)
+                if msg['type'] == "Metadata":
+                    logger.info(f"Got a summary object")
+                    yield create_ws_data_packet("transcriber_connection_closed", self.meta_info)
+                    return
+
                 transcript = msg['channel']['alternatives'][0]['transcript']
 
-                self.update_meta_info(transcript)
+                self.update_meta_info()
 
                 if transcript and len(transcript.strip()) != 0:
                     if await self.signal_transcription_begin(msg):
@@ -68,7 +88,7 @@ class DeepgramTranscriber(BaseTranscriber):
 
                     curr_message += " " + transcript
 
-                if msg["speech_final"] and self.callee_speaking:
+                if (msg["speech_final"] and self.callee_speaking) or not self.stream:
                     yield create_ws_data_packet(curr_message, self.meta_info)
                     logger.info('User: {}'.format(curr_message))
                     curr_message = ""
