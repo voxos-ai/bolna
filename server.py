@@ -241,7 +241,7 @@ def get_follow_up_prompts(prompt_json, tasks):
     logger.info(f"returning {prompt_json}")
     return prompt_json
     
-def create_prompts_for_followup_tasks(tasks, prompts_json):
+def create_prompts_for_followup_tasks(tasks, prompt_json):
     if tasks is not None and len(tasks)>0:
         logger.info(f"Now creating prompts for follow up tasks")
         #make changes here
