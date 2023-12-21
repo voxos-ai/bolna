@@ -233,7 +233,7 @@ def get_follow_up_prompts(prompt_json, tasks):
         task_type = task.get('task_type')
 
         if task_type == 'extraction':
-            extraction_json = task.get('llm_agent').get('extraction_json')
+            extraction_json = task.get("tools_config").get('llm_agent').get('extraction_json')
             prompt = EXTRACTION_PROMPT.format(extraction_json)
             prompt_json['serialized_prompts'][f'task_{task_id + 2}'] = {"system_prompt": prompt}
         elif task_type == 'summarization':
