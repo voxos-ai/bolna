@@ -99,13 +99,13 @@ class GraphBasedConversationAgent:
 
         message = [{"role": "system", "content": self.current_node.prompt}] + prev_messages
         # Get classification label from LLM
-        async for response in self.brain.generate(message, True, False, request_json=True):
-            classification_result = json.loads(response)
-            label = classification_result["classification_label"]
-            for child in self.current_node.children:
-                if child.node_label.strip().lower() == label.strip().lower():
-                    self.current_node = child
-                    return self._get_audio_text_pair(child)
+        response = await self.brain.generate(message, True, False, request_json=True)
+        classification_result = json.loads(response)
+        label = classification_result["classification_label"]
+        for child in self.current_node.children:
+            if child.node_label.strip().lower() == label.strip().lower():
+                self.current_node = child
+                return self._get_audio_text_pair(child)
 
     async def generate(self, history, stream=False, synthesize=False, label_flow=None):
         try:

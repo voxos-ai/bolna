@@ -15,7 +15,7 @@ logger = configure_logger(__name__, True)
 class TaskManager:
     def __init__(self, assistant_name, task_id, task, ws, input_parameters=None, context_data=None, user_id=None,
                  assistant_id=None, run_id=None, connected_through_dashboard = False):
-        
+        logger.info(f"doing task {task}")
         self.task_id = task_id
         self.assistant_name = assistant_name
         self.tools = {}
@@ -189,10 +189,12 @@ class TaskManager:
         })
 
         json_data = await self.tools["llm_agent"].generate(self.history)
+
         #TODO validation if the required data is correct
         if self.task_config["tools_config"]["output"]["provider"] == "database":
             self.extracted_data = json.loads(json_data)
             self.input_parameters = {**self.input_parameters, **self.extracted_data}
+            logger.info(f"Saving data in DB {json_data}")
             await self.tools["output"].handle(self.input_parameters)
         else:
             await self.tools["output"].handle(self.input_parameters)
@@ -215,6 +217,7 @@ class TaskManager:
                     if "transcriber" in self.tools and not self.connected_through_dashboard:
                         logger.info("Stopping transcriber")
                         await self.tools["transcriber"].toggle_connection()
+                        await asyncio.sleep(5) #Making sure whatever message was passed is over
                     return
                 logger.info(f"Text chunk {text_chunk}")
                 if is_valid_md5(text_chunk):
@@ -271,7 +274,7 @@ class TaskManager:
         else:
             logger.info(f"Since we do not have to discard this response adding it {self.current_request_id}")
             self.history.append({"role": "assistant", "content": llm_response})
-
+            
             answer = await self.tools["llm_agent"].check_for_completion(self.history)
             if answer:
                 logger.info("Got end of conversation. I'm stopping now")
@@ -281,6 +284,7 @@ class TaskManager:
                 if "transcriber" in self.tools and not  self.connected_through_dashboard:
                     logger.info("Stopping transcriber")
                     await self.tools["transcriber"].toggle_connection()
+                    await asyncio.sleep(5) #Making sure whatever message was passed is over
                 return
 
             self.llm_processed_request_ids.add(self.current_request_id)
@@ -360,6 +364,11 @@ class TaskManager:
         start_time = None
         try:
             async for message in self.tools["transcriber"].transcribe():
+                
+                if message['data'] == "transcriber_connection_closed":
+                    logger.info("transcriber connection closed")
+                    return
+
                 self._set_call_details(message)
                 meta_info = message["meta_info"]
                 self.previous_request_id, self.current_request_id = self.current_request_id, message["meta_info"][
@@ -476,7 +485,7 @@ class TaskManager:
                 if "synthesizer" in self.tools and self.task_config["tools_config"]["synthesizer"]["model"] == "xtts":
                     tasks.append(asyncio.create_task(self._receive_from_synthesizer()))
 
-                if self.connected_through_dashboard:
+                if self.connected_through_dashboard and self.task_config['task_type'] == "conversation":
                     logger.info("Since it's connected through dashboard, I'll run listen_llm_tas too in case user wants to simply text")
                     self.llm_queue_task = asyncio.create_task(self._listen_llm_input_queue())
                 try:
@@ -485,16 +494,17 @@ class TaskManager:
                     logger.error(f"Error: {e}")
 
                 # Close connections
-                if "transcriber" in self.tools:
-                    await self.tools["transcriber"].toggle_connection()
+                # if "transcriber" in self.tools:
+                #     logger.info(f"Closing transcriber")
+                #     await self.tools["transcriber"].toggle_connection()
+                #     await asyncio.sleep(5) #Making sure whatever message was passed is over
+
 
                 logger.info("Done with this task and returning for a post processing task")
 
             else:
-                # Run agent task
+                # Run agent followup tasks
                 try:
-                    if self.connected_through_dashboard or self.textual_chat_agent:
-                        await self._listen_llm_input_queue()
                     await self._run_llm_task(self.input_parameters)
                 except Exception as e:
                     logger.error(f"Could not do llm call: {e}")
@@ -502,7 +512,8 @@ class TaskManager:
 
         except asyncio.CancelledError as e:
             # Cancel all tasks on cancel
-            handle_cancellation("Websocket got cancelled")
+            traceback.print_exc()
+            handle_cancellation(f"Websocket got cancelled {self.task_id}")
 
         except Exception as e:
             # Cancel all tasks on error
@@ -520,16 +531,22 @@ class TaskManager:
                 output = self.input_parameters
                 if self.task_config["task_type"] == "extraction":
                     output["extracted_data"] = self.extracted_data
-                elif self.task_config["tools_config"]["llm_agent"]["agent_task"] == "summarization":
-                    output["summarization"] = self.summary
+                elif self.task_config["task_type"] == "summarization":
+                    output["summarization"] = self.summarized_data
 
             return output
 
 
 def handle_cancellation(message):
+    try:    
     # Cancel all tasks on cancellation
-    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
-    for task in tasks:
-        task.cancel()
+        tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+        logger.info(f"tasks {len(tasks)}")
+        for task in tasks:
+            logger.info(f"Cancelling task {task.get_name()}")
+            task.cancel()
+        logger.info(message)
+    except Exception as e:
+        traceback.print_exc()
+        logger
 
-    logger.info(message)

@@ -61,6 +61,10 @@ class BaseTranscriber:
         try:
             while True:
                 ws_data_packet = await self.input_queue.get()
+                if 'eos' in ws_data_packet['meta_info'] and ws_data_packet['meta_info']['eos'] == True:
+                    await self._close(ws, data={"type": "CloseStream"})
+                    break
+
                 audio_data = ws_data_packet.get('data')
                 self.meta_info = ws_data_packet.get('meta_info')
                 logger.info(f"sending message to deepgram")
@@ -118,6 +122,10 @@ class BaseTranscriber:
             try:
                 logger.info(f"Got response from {self.model} {msg}")
                 msg = json.loads(msg)
+                if msg['type'] == "Metadata":
+                    logger.info(f"Got a summary object")
+                    yield create_ws_data_packet("transcriber_connection_closed", self.meta_info)
+                    return
                 transcript = msg['channel']['alternatives'][0]['transcript']
 
                 self.update_meta_info(transcript)
@@ -141,12 +149,17 @@ class BaseTranscriber:
                 logger.error(f"Error while getting transcriptions {e}")
                 yield create_ws_data_packet("TRANSCRIBER_END", self.meta_info)
 
-    def toggle_connection(self):
+    async def toggle_connection(self):
         self.connection_on = False
+        logger.info("existing the listening task")
+        await self.heartbeat_task.cancel()
+        await self.sender_task.cancel()
+
 
     @staticmethod
     async def _close(ws, data):
         try:
+            logger.info(f"Closing the transcriber connection")
             await ws.send(json.dumps(data))
         except Exception as e:
             logger.error(f"Error while closing transcriber stream {e}")

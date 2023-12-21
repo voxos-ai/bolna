@@ -57,7 +57,7 @@ class OpenAiLLM(BaseLLM):
         completion = await self.async_client.chat.completions.create(model=model, temperature=0.0, messages=messages,
                                                                      stream=False, response_format=response_format)
         text = completion.choices[0].message.content
-        yield text
+        return text
 
     @staticmethod
     def get_response_format(is_json_format: bool):

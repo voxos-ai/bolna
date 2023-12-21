@@ -42,8 +42,9 @@ def write_json_file(file_path, data):
 def create_ws_data_packet(data, meta_info=None, is_md5_hash=False, llm_generated=False):
     logger.info(f"Metadata {meta_info}")
     metadata = copy.deepcopy(meta_info)
-    metadata["is_md5_hash"] = is_md5_hash
-    metadata["llm_generated"] = llm_generated
+    if meta_info is not None: #It'll be none in case we connect through dashboard playground
+        metadata["is_md5_hash"] = is_md5_hash
+        metadata["llm_generated"] = llm_generated
     return {
         'data': data,
         'meta_info': metadata

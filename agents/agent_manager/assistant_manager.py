@@ -18,7 +18,7 @@ auth_token = os.environ['TWILIO_AUTH_TOKEN']
 client = Client(account_sid, auth_token)
 #s3 = boto3.client('s3')
 #dynamodb = DynamoDB(os.getenv('TABLE_NAME'))
-enc = tiktoken.get_encoding("cl100k_base")
+#enc = tiktoken.get_encoding("cl100k_base")
 
 
 
@@ -43,7 +43,7 @@ class AssistantManager:
     def find_llm_output_price(outputs):
         num_token = 0
         for op in outputs:
-            num_token += len(enc.encode(str(op)))
+            num_token += 100
         return 0.0020 * num_token
     
     @staticmethod
@@ -60,7 +60,8 @@ class AssistantManager:
                 this_run += message['content']
             
             if message['role'] =='assistant':
-                num_token += len(enc.encode(str(this_run)))
+                #num_token += len(enc.encode(str(this_run))) #just doing this to stop this weird isssue https://github.com/KillianLucas/open-interpreter/issues/641
+                num_token += 100
                 this_run += message['content']
 
         return 0.0010 * num_token

@@ -43,8 +43,8 @@ class DeepgramTranscriber(BaseTranscriber):
 
     async def transcribe(self):
         async with self.deepgram_connect() as deepgram_ws:
-            sender_task = asyncio.create_task(self.sender(deepgram_ws))
-            heartbeat_task = asyncio.create_task(self.send_heartbeat(deepgram_ws))
+            self.sender_task = asyncio.create_task(self.sender(deepgram_ws))
+            self.heartbeat_task = asyncio.create_task(self.send_heartbeat(deepgram_ws))
 
             async for message in self.receiver(deepgram_ws):
                 if self.connection_on:
