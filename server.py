@@ -240,7 +240,13 @@ def get_follow_up_prompts(prompt_json, tasks):
             prompt_json['serialized_prompts'][f'task_{task_id + 2}'] = {"system_prompt": SUMMARIZATION_PROMPT}
     logger.info(f"returning {prompt_json}")
     return prompt_json
-
+    
+def create_prompts_for_followup_tasks(tasks, prompt_json):
+    if tasks is not None and len(tasks)>0:
+        logger.info(f"Now creating prompts for follow up tasks")
+        #make changes here
+        prompt_json = get_follow_up_prompts(prompt_json, tasks[1:])
+        return prompt_json
 async def background_process_and_store(conversation_type, prompt_json, assistant_id, user_id, model_name = "polly", tasks = None):
     try:
 
@@ -249,18 +255,17 @@ async def background_process_and_store(conversation_type, prompt_json, assistant
             logger.info(f"Prompt json {prompt_json}")
             conversation_graph = prompt_json['conversation_graph']
             logger.info(f"Preprocessed conversation. Storing required files to s3")
+            prompt_json = create_prompts_for_followup_tasks(tasks, prompt_json)
             await process_and_store_audio(prompt_json['serialized_prompts'], model_name, user_id, assistant_id)
             logger.info("Now storing nodes and graph")
+
             save_to_s3(f'{user_id}/{assistant_id}/deserialized_prompts.json', prompt_json["deserialized_prompts"], "json") 
 
         else:        
             #TODO Write this as an experienced developer who will do both concurrently in a non blocking format
             object_key = f'{user_id}/{assistant_id}/conversation_details.json'
             logger.info(f"tasks {tasks}")
-            if tasks is not None and len(tasks)>0:
-                logger.info(f"Now creating prompts for follow up tasks")
-                #make changes here
-                prompt_json = get_follow_up_prompts(prompt_json, tasks[1:])
+            prompt_json = create_prompts_for_followup_tasks(tasks, prompt_json)
             s3_client.put_object(Bucket=BUCKET_NAME, Key=object_key, Body=json.dumps(prompt_json['serialized_prompts']))
             logger.info(f"Now dumping deserialised prompts")
             object_key = f'{user_id}/{assistant_id}/deserialized_prompts.json'
