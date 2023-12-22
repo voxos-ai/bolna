@@ -200,8 +200,8 @@ async def generate_audio_from_text(model_name, text):
     #A simple polly or eleven labs call for now
     synthesizer_class = SUPPORTED_SYNTHESIZER_MODELS.get("polly")
     synth_instance = synthesizer_class('polly', 'mp3', 'Kajal', 'en', '24000')
-    audio_data = await synth_instance.generate_tts_response(text)
-    return audio_data
+    async for audio_data in synth_instance.generate_tts_response(text):
+        return audio_data
 
 def save_to_s3(object_key, data, content_type):
     try:
@@ -334,7 +334,6 @@ async def create_agent(agent_data: AssistantModel):
     # response = requests.get('http://twilio-app:8001/make_call?agent_uuid={}'.format(agent_uuid))
 
     return {"agent_id": "{}".format(agent_uuid), "state": "created"}
-
 
 
 @app.websocket("/chat/v1/{user_id}/{agent_id}")
