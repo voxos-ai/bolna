@@ -1,4 +1,4 @@
-aiobotocore==2.7.0
+aiobotocore==2.9.0
 aiodynamo==23.10.1
 fastapi==0.95.1
 numpy==1.26.1
