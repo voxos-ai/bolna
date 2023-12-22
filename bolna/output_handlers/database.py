@@ -1,7 +1,7 @@
 import os
-from agents.database.dynamodb import DynamoDB
+from bolna.database.dynamodb import DynamoDB
 from dotenv import load_dotenv
-from agents.helpers.logger_config import configure_logger
+from bolna.helpers.logger_config import configure_logger
 from .default import DefaultOutputHandler
 
 logger = configure_logger(__name__)

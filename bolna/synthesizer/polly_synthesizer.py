@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 from botocore.exceptions import BotoCoreError, ClientError
 from aiobotocore.session import AioSession
 from contextlib import AsyncExitStack
-from agents.helpers.logger_config import configure_logger
+from bolna.helpers.logger_config import configure_logger
 from .base_synthesizer import BaseSynthesizer
 
 

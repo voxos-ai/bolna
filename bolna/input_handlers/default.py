@@ -1,8 +1,8 @@
 import asyncio
 import base64
 from dotenv import load_dotenv
-from agents.helpers.logger_config import configure_logger
-from agents.helpers.utils import create_ws_data_packet
+from bolna.helpers.logger_config import configure_logger
+from bolna.helpers.utils import create_ws_data_packet
 
 logger = configure_logger(__name__)
 load_dotenv()

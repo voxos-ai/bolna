@@ -1,4 +1,4 @@
-from agents.helpers.logger_config import configure_logger
+from bolna.helpers.logger_config import configure_logger
 
 logger = configure_logger(__name__)
 

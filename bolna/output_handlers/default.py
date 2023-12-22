@@ -1,6 +1,6 @@
 import base64
 from dotenv import load_dotenv
-from agents.helpers.logger_config import configure_logger
+from bolna.helpers.logger_config import configure_logger
 
 logger = configure_logger(__name__)
 load_dotenv()

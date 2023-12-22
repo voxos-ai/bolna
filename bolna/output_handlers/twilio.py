@@ -7,7 +7,7 @@ import audioop
 import uuid
 import redis.asyncio as redis
 from .default import DefaultOutputHandler
-from agents.helpers.logger_config import configure_logger
+from bolna.helpers.logger_config import configure_logger
 
 logger = configure_logger(__name__, True)
 load_dotenv()

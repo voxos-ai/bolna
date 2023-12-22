@@ -1,7 +1,7 @@
 import json
-from agents.helpers.logger_config import configure_logger
-from agents.helpers.utils import format_messages
-from agents.llms import OpenAiLLM
+from bolna.helpers.logger_config import configure_logger
+from bolna.helpers.utils import format_messages
+from bolna.llms import OpenAiLLM
 
 logger = configure_logger(__name__)
 

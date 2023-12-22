@@ -1,11 +1,11 @@
 import asyncio
 import traceback
-from agents.agent_types import StreamingContextualAgent, GraphBasedConversationAgent, ExtractionContextualAgent, SummarizationContextualAgent
+from bolna.agent_types import StreamingContextualAgent, GraphBasedConversationAgent, ExtractionContextualAgent, SummarizationContextualAgent
 import time
 import json
-from agents.helpers.logger_config import configure_logger
-from agents.models import *
-from agents.helpers.utils import create_ws_data_packet, is_valid_md5, get_raw_audio_bytes_from_base64, \
+from bolna.helpers.logger_config import configure_logger
+from bolna.models import *
+from bolna.helpers.utils import create_ws_data_packet, is_valid_md5, get_raw_audio_bytes_from_base64, \
     get_required_input_types, format_messages, get_prompt_responses, update_prompt_with_context
 
 logger = configure_logger(__name__, True)

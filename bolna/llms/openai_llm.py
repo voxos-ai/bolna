@@ -2,7 +2,7 @@ import openai
 from openai import AsyncOpenAI
 import os
 from dotenv import load_dotenv
-from agents.helpers.logger_config import configure_logger
+from bolna.helpers.logger_config import configure_logger
 from .llm import BaseLLM
 
 logger = configure_logger(__name__)

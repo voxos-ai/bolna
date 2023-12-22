@@ -2,7 +2,7 @@ import asyncio
 import websockets
 import json
 import os
-from agents.helpers.logger_config import configure_logger
+from bolna.helpers.logger_config import configure_logger
 import audioop
 from .base_synthesizer import BaseSynthesizer
 

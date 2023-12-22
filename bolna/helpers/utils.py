@@ -5,7 +5,7 @@ import numpy as np
 import copy
 import hashlib
 from .logger_config import configure_logger
-from agents.constants import PREPROCESS_DIR
+from bolna.constants import PREPROCESS_DIR
 import boto3
 import os
 import traceback

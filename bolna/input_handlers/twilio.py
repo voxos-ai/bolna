@@ -5,8 +5,8 @@ import json
 from twilio.rest import Client
 from dotenv import load_dotenv
 import os
-from agents.helpers.utils import create_ws_data_packet
-from agents.helpers.logger_config import configure_logger
+from bolna.helpers.utils import create_ws_data_packet
+from bolna.helpers.logger_config import configure_logger
 
 logger = configure_logger(__name__, True)
 load_dotenv()

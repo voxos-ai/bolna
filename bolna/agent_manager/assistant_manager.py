@@ -6,9 +6,9 @@ from twilio.rest import Client
 import requests
 #import boto3
 import tiktoken
-#from agents.database.dynamodb import DynamoDB
-from agents.agent_manager import TaskManager
-from agents.helpers.logger_config import configure_logger
+#from bolna.database.dynamodb import DynamoDB
+from bolna.agent_manager import TaskManager
+from bolna.helpers.logger_config import configure_logger
 
 
 # Find your Account SID and Auth Token at twilio.com/console
@@ -81,7 +81,7 @@ class AssistantManager:
         call_meta["duration"] = call.duration
         call_meta["transcriber_cost"] = int(call.duration) *(0.0043/ 60)
         call_meta["to_number"] = call.to_formatted
-        recording = client.recordings.list(call_sid=call_sid)[0]
+        recordings = client.recordings.list(call_sid=call_sid)[0]
         call_meta["recording_url"] = recordings.media_url
         call_meta["tts_cost"] = 0 if self.tasks[0]['tools_config']['synthesizer']['model'] != "polly" else (synthesizer_characters * 16/1000000)
         call_meta["llm_cost"] = self.find_llm_input_token_price(messages) + self.find_llm_output_token_price(label_flow)

@@ -2,8 +2,8 @@ import random
 import json
 import asyncio
 import traceback
-from agents.helpers.logger_config import configure_logger
-from agents.constants import USERS_KEY_ORDER
+from bolna.helpers.logger_config import configure_logger
+from bolna.constants import USERS_KEY_ORDER
 
 logger = configure_logger(__name__)
 
