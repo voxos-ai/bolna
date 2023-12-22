@@ -347,6 +347,11 @@ async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket, 
     try:
         retrieved_agent_config, retrieved_context_data = await redis_client.mget([agent_id, user_id])
         logger.info(f"Retrieved agent config: {retrieved_agent_config}, retrieved_context_data {retrieved_context_data}")
+        if retrieved_agent_config is None:
+            logger.info("Could not retreive config from redis. So, simply retreiving it from DB and dumping it to redis")
+            retrieved_agent_config = await dynamodb.get_agent_data(user_id, f"agent#{agent_id}")
+            redis_task = asyncio.create_task(redis_client.set(agent_id, json.dumps(retrieved_agent_config)))
+
         agent_config, context_data = json.loads(retrieved_agent_config), json.loads(retrieved_context_data) if retrieved_context_data is not None else None
     except Exception as e:
         traceback.print_exc()

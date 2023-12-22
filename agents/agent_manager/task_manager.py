@@ -324,7 +324,7 @@ class TaskManager:
                 logger.info(f"ws_data_packet {ws_data_packet}")
                 bos_packet = create_ws_data_packet("<beginning_of_stream>", ws_data_packet['meta_info'])
                 await self.tools["output"].handle(bos_packet)
-                await self._run_llm_task(ws_data_packet)
+                await self._run_llm_task(ws_data_packet) #In case s3 is down and it's an audio processing job, this might produce blank message on the frontend of playground.
                 eos_packet = create_ws_data_packet("<end_of_stream>",ws_data_packet['meta_info'])
                 await self.tools["output"].handle(eos_packet)
 

@@ -64,6 +64,7 @@ class GraphBasedConversationAgent:
         # Goals
         self.graph = Graph(prompts)
         self.current_node = self.graph.root
+        self.conversation_intro_done = False
 
     def _get_audio_text_pair(self, node):
         ind = random.randint(0, len(node.content) - 1)
@@ -78,18 +79,23 @@ class GraphBasedConversationAgent:
     async def _get_next_formulaic_agent_next_step(self, history, stream=True, synthesize=False):
         pass
 
-    def _handle_intro_message(self, history):
-        if self.current_node.prompt is None:
-            audio_pair = self._get_audio_text_pair(self.current_node)
+    def _handle_intro_message(self):
+        audio_pair = self._get_audio_text_pair(self.current_node)
+        self.conversation_intro_done = True
+        logger.info("Conversation intro done")
+        if self.current_node.prompt == None:
+            #These are convos with two step intros
             ind = random.randint(0, len(self.current_node.children) - 1)
-            self.current_node = self.current_node.children[ind]
-            return audio_pair
+            self.current_node  = self.current_node.children[ind]
+        return audio_pair
+
 
     async def _get_next_preprocessed_step(self, history):
-        logger.info(f"current node {self.current_node}")
-        if self.current_node.prompt is None:
-            return self._handle_intro_message(history)
+        logger.info(f"current node {self.current_node.node_label}, self.current_node == self.graph.root {self.current_node == self.graph.root}, and self.conversation_intro_done {self.conversation_intro_done}")
+        if self.current_node == self.graph.root and not self.conversation_intro_done:
+            return self._handle_intro_message()
 
+        logger.info(f"Conversation intro was done and hence moving forward")
         if len(history) > 7:
             # @TODO: Add summary of left out messages
             prev_messages = history[-6:]
