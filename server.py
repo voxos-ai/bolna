@@ -1,113 +1,165 @@
-import asyncio
-import uvloop
-import time
-import os
-from twilio.rest import Client
-import requests
-import tiktoken
-from bolna.agent_manager import TaskManager
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from typing import Optional
+from pydantic import BaseModel, Field, validator, ValidationError
+from typing import List
+import sys, os
+import uuid
+import redis.asyncio as redis
+from dotenv import load_dotenv
+from bolna.agent_manager import AssistantManager
+import traceback
+import json
 from bolna.helpers.logger_config import configure_logger
+import asyncio
+from bolna.models import *
 
-# Find your Account SID and Auth Token at twilio.com/console
-# and set the environment variables. See http://twil.io/secure
-account_sid = os.environ['TWILIO_ACCOUNT_SID']
-auth_token = os.environ['TWILIO_AUTH_TOKEN']
-client = Client(account_sid, auth_token)
-enc = tiktoken.get_encoding("cl100k_base")
 
 logger = configure_logger(__name__)
 
+load_dotenv()
+redis_pool = redis.ConnectionPool.from_url(os.getenv('REDIS_URL'), decode_responses=True)
+redis_client = redis.Redis.from_pool(redis_pool)
+active_websockets: List[WebSocket] = []
+app = FastAPI()
 
-class AssistantManager:
-    def __init__(self, agent_config, ws, context_data=None, user_id=None, assistant_id=None):
-        # Set up communication queues between processes
-        self.tools = {}
-        self.websocket = ws
-        self.agent_config = agent_config
-        self.context_data = context_data
-        self.tasks = agent_config.get('tasks', [])
-        self.task_states = [False] * len(self.tasks)
-        self.user_id = user_id
-        self.assistant_id = assistant_id
-        self.run_id = f"{self.assistant_id}#{str(int(time.time() * 1000))}"  # multiply by 1000 to get timestamp in nano seconds to reduce probability of collisions in simultaneously triggered runs.
 
-    @staticmethod
-    def find_llm_output_price(outputs):
-        num_token = 0
-        for op in outputs:
-            num_token += len(enc.encode(str(op)))
-        return 0.0020 * num_token
+try:
+    logger.info(sys.version)
+    logger.info(f"Nogil python state {sys.flags.nogil}")
+except Exception as e:
+    logger.info("Nogil python not available, hence threads will run with GIL:")
 
-    @staticmethod
-    def find_llm_input_token_price(messages):
-        total_str = []
-        this_run = ''
-        prev_run = ''
-        num_token = 0
-        for message in messages:
-            if message['role'] == 'system':
-                this_run += message['content']
 
-            if message['role'] == 'user':
-                this_run += message['content']
+def validate_attribute(value, allowed_values):
+    if value not in allowed_values:
+        raise ValidationError(f"Invalid provider. Supported values: {', '.join(allowed_values)}")
+    return value
 
-            if message['role'] == 'assistant':
-                num_token += len(enc.encode(str(this_run)))
-                this_run += message['content']
 
-        return 0.0010 * num_token
+class TranscriberModel(BaseModel):
+    model: str
+    language: Optional[str] = None
+    stream: bool = False
 
-    async def _save_meta(self, call_sid, stream_sid, messages, transcriber_characters, synthesizer_characters,
-                         label_flow):
-        logger.info(f"call sid {call_sid}, stream_sid {stream_sid}")
-        # transcriber_cost = time * 0.0043/ 60
-        # telephony_cost = cost
-        # llm_cost = input_tokens  * price + output_tokens * price
-        # tts_cost = 0 for now
-        # if polly - characters * 16/1000000
-        #     input_tokens, output_tokens
+    @validator("model")
+    def validate_model(cls, value):
+        return validate_attribute(value, ["deepgram"])
 
-        call_meta = dict()
-        call = client.calls(call_sid).fetch()
-        call_meta["telephony_cost"] = call.price
-        call_meta["duration"] = call.duration
-        call_meta["transcriber_cost"] = int(call.duration) * (0.0043 / 60)
-        call_meta["to_number"] = call.to_formatted
-        recording = client.recordings.list(call_sid=call_sid)[0]
-        call_meta["recording_url"] = recordings.media_url
-        call_meta["tts_cost"] = 0 if self.tasks[0]['tools_config']['synthesizer']['model'] != "polly" else (
-                synthesizer_characters * 16 / 1000000)
-        call_meta["llm_cost"] = self.find_llm_input_token_price(messages) + self.find_llm_output_token_price(label_flow)
-        logger.info(f"Saving call meta {call_meta}")
-        await self.dynamodb.store_run(self.user_id, self.assistant_id, self.run_id, call_meta)
+    @validator("language")
+    def validate_language(cls, value):
+        return validate_attribute(value, ["en", "hi"])
 
-    async def download_record_from_twilio_and_save_to_s3(self, recording_url):
-        response = requests.get(recording_url, auth=(account_sid, auth_token))
-        if response.status_code == 200:
-            bucket_name = 'bolna/'
-            object_key = 'user_id/agent_id/run_id.mp3'
 
-            # Upload the downloaded MP3 file to S3
-            s3.put_object(Bucket=bucket_name, Key=object_key, Body=response.content)
-            print("MP3 file uploaded to S3 successfully!")
+class SynthesizerModel(BaseModel):
+    model: str
+    language: Optional[str] = None
+    voice: str
+    stream: bool = False
+    buffer_size: Optional[int] = 40
+    audio_format: Optional[str] = "mp3"
+    sampling_rate: Optional[str] = "24000"
 
-    async def run(self):
-        '''
-        Run will start all tasks in sequential format
-        '''
-        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-        input_parameters = None
-        for task_id, task in enumerate(self.tasks):
-            task_manager = TaskManager(self.agent_config["assistant_name"], task_id, task, self.websocket,
-                                       context_data=self.context_data, input_parameters=input_parameters,
-                                       user_id=self.user_id, assistant_id=self.assistant_id, run_id=self.run_id)
-            await task_manager.load_prompt(self.agent_config["assistant_name"], task_id)
-            input_parameters = await task_manager.run()
-            logger.info(f"Got parameters {input_parameters}")
-            self.task_states[task_id] = True
-        if input_parameters['call_sid'] is not None:
-            await self._save_meta(input_parameters['call_sid'], input_parameters['stream_sid'],
-                                  input_parameters['messages'], input_parameters['transcriber_characters'],
-                                  input_parameters['synthesizer_characters'], input_parameters["label_flow"])
+    @validator("model")
+    def validate_model(cls, value):
+        return validate_attribute(value, list(SUPPORTED_SYNTHESIZER_MODELS.keys()))
 
-        logger.info("Done with execution of the agent")
+    @validator("language")
+    def validate_language(cls, value):
+        return validate_attribute(value, ["en"])
+
+
+class IOModel(BaseModel):
+    provider: str
+    format: str
+
+    @validator("provider")
+    def validate_provider(cls, value):
+        return validate_attribute(value, list(SUPPORTED_INPUT_HANDLERS.keys()))
+
+
+class LLM_Model(BaseModel):
+    streaming_model: Optional[str] = "gpt-3.5-turbo-16k"
+    classification_model: Optional[str] = "gpt-4"
+    max_tokens: Optional[int]
+    agent_flow_type: Optional[str] = "streaming"
+    use_fallback: Optional[bool] = False
+    family: Optional[str] = "openai"
+    agent_task: Optional[str] = "conversation"
+    request_json: Optional[bool] = False
+    langchain_agent: Optional[bool] = False
+
+
+class ToolsConfigModel(BaseModel):
+    llm_agent: Optional[LLM_Model] = None
+    synthesizer: Optional[SynthesizerModel] = None
+    transcriber: Optional[TranscriberModel] = None
+    input: Optional[IOModel] = None
+    output: Optional[IOModel] = None
+
+
+class ToolsChainModel(BaseModel):
+    execution: str = Field(..., regex="^(parallel|sequential)$")
+    sequences: List[List[str]]
+
+
+class TaskConfigModel(BaseModel):
+    tools_config: ToolsConfigModel
+    toolchain: ToolsChainModel
+
+
+class AssistantModel(BaseModel):
+    assistant_name: str
+    tasks: List[TaskConfigModel]
+
+
+def create_agent(agent_name, tasks):
+    # TODO Persist agent
+    agent_config = {
+        "assistant_name": agent_name,
+        "tasks": tasks
+    }
+    return agent_config
+
+
+@app.on_event("startup")
+async def startup_event():
+    pass
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await redis_client.aclose()
+    pass
+
+
+@app.post("/create_agent")
+async def create_agent(agent_data: AssistantModel):
+    agent_uuid = '{}'.format(str(uuid.uuid4()))
+    redis_task = asyncio.create_task(redis_client.set(agent_uuid, agent_data.json()))
+    await asyncio.gather(redis_task)
+
+    return {"agent_id": "{}".format(agent_uuid), "state": "created"}
+
+
+@app.websocket("/chat/v1/{user_id}/{agent_id}")
+async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket):
+    logger.info("Connected to ws")
+    await websocket.accept()
+    active_websockets.append(websocket)
+
+    agent_config, context_data = None, None
+    try:
+        retrieved_agent_config, retrieved_context_data = await redis_client.mget([agent_id, user_id])
+        agent_config, context_data = json.loads(retrieved_agent_config), json.loads(retrieved_context_data)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    agent_manager = AssistantManager(agent_config, websocket, context_data, user_id, agent_id)
+
+    try:
+        await agent_manager.run()
+    except WebSocketDisconnect:
+        active_websockets.remove(websocket)
+    except Exception as e:
+        traceback.print_exc()
+        logger.error(f"error in executing {e}")

@@ -4,29 +4,22 @@ import time
 import os
 from twilio.rest import Client
 import requests
-#import boto3
 import tiktoken
-#from bolna.database.dynamodb import DynamoDB
 from bolna.agent_manager import TaskManager
 from bolna.helpers.logger_config import configure_logger
-
 
 # Find your Account SID and Auth Token at twilio.com/console
 # and set the environment variables. See http://twil.io/secure
 account_sid = os.environ['TWILIO_ACCOUNT_SID']
 auth_token = os.environ['TWILIO_AUTH_TOKEN']
 client = Client(account_sid, auth_token)
-#s3 = boto3.client('s3')
-#dynamodb = DynamoDB(os.getenv('TABLE_NAME'))
-#enc = tiktoken.get_encoding("cl100k_base")
-
-
+enc = tiktoken.get_encoding("cl100k_base")
 
 logger = configure_logger(__name__)
 
 
 class AssistantManager:
-    def __init__(self, agent_config, ws, context_data = None, user_id = None, assistant_id = None, connected_through_dashboard = True):
+    def __init__(self, agent_config, ws, context_data=None, user_id=None, assistant_id=None):
         # Set up communication queues between processes
         self.tools = {}
         self.websocket = ws
@@ -34,18 +27,17 @@ class AssistantManager:
         self.context_data = context_data
         self.tasks = agent_config.get('tasks', [])
         self.task_states = [False] * len(self.tasks)
-        self.user_id = user_id    
+        self.user_id = user_id
         self.assistant_id = assistant_id
-        self.run_id = f"{self.assistant_id}#{str(int(time.time() * 1000))}" #multiply by 1000 to get timestamp in nano seconds to reduce probability of collisions in simultaneously triggered runs.
-        self.connected_through_dashboard = connected_through_dashboard
+        self.run_id = f"{self.assistant_id}#{str(int(time.time() * 1000))}"  # multiply by 1000 to get timestamp in nano seconds to reduce probability of collisions in simultaneously triggered runs.
 
     @staticmethod
     def find_llm_output_price(outputs):
         num_token = 0
         for op in outputs:
-            num_token += 100
+            num_token += len(enc.encode(str(op)))
         return 0.0020 * num_token
-    
+
     @staticmethod
     def find_llm_input_token_price(messages):
         total_str = []
@@ -55,23 +47,23 @@ class AssistantManager:
         for message in messages:
             if message['role'] == 'system':
                 this_run += message['content']
-            
+
             if message['role'] == 'user':
                 this_run += message['content']
-            
-            if message['role'] =='assistant':
-                #num_token += len(enc.encode(str(this_run))) #just doing this to stop this weird isssue https://github.com/KillianLucas/open-interpreter/issues/641
-                num_token += 100
+
+            if message['role'] == 'assistant':
+                num_token += len(enc.encode(str(this_run)))
                 this_run += message['content']
 
         return 0.0010 * num_token
 
-    async def _save_meta(self, call_sid, stream_sid, messages, transcriber_characters, synthesizer_characters, label_flow):
+    async def _save_meta(self, call_sid, stream_sid, messages, transcriber_characters, synthesizer_characters,
+                         label_flow):
         logger.info(f"call sid {call_sid}, stream_sid {stream_sid}")
         # transcriber_cost = time * 0.0043/ 60
-        # telephony_cost = cost 
+        # telephony_cost = cost
         # llm_cost = input_tokens  * price + output_tokens * price
-        # tts_cost = 0 for now 
+        # tts_cost = 0 for now
         # if polly - characters * 16/1000000
         #     input_tokens, output_tokens
 
@@ -79,16 +71,16 @@ class AssistantManager:
         call = client.calls(call_sid).fetch()
         call_meta["telephony_cost"] = call.price
         call_meta["duration"] = call.duration
-        call_meta["transcriber_cost"] = int(call.duration) *(0.0043/ 60)
+        call_meta["transcriber_cost"] = int(call.duration) * (0.0043 / 60)
         call_meta["to_number"] = call.to_formatted
-        recordings = client.recordings.list(call_sid=call_sid)[0]
+        recording = client.recordings.list(call_sid=call_sid)[0]
         call_meta["recording_url"] = recordings.media_url
-        call_meta["tts_cost"] = 0 if self.tasks[0]['tools_config']['synthesizer']['model'] != "polly" else (synthesizer_characters * 16/1000000)
+        call_meta["tts_cost"] = 0 if self.tasks[0]['tools_config']['synthesizer']['model'] != "polly" else (
+                    synthesizer_characters * 16 / 1000000)
         call_meta["llm_cost"] = self.find_llm_input_token_price(messages) + self.find_llm_output_token_price(label_flow)
         logger.info(f"Saving call meta {call_meta}")
         await self.dynamodb.store_run(self.user_id, self.assistant_id, self.run_id, call_meta)
-        
-    
+
     async def download_record_from_twilio_and_save_to_s3(self, recording_url):
         response = requests.get(recording_url, auth=(account_sid, auth_token))
         if response.status_code == 200:
@@ -106,12 +98,16 @@ class AssistantManager:
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
         input_parameters = None
         for task_id, task in enumerate(self.tasks):
-            task_manager = TaskManager(self.agent_config["assistant_name"], task_id, task, self.websocket, context_data=self.context_data, input_parameters=input_parameters, user_id=self.user_id, assistant_id=self.assistant_id, run_id=self.run_id, connected_through_dashboard = self.connected_through_dashboard)
+            task_manager = TaskManager(self.agent_config["assistant_name"], task_id, task, self.websocket,
+                                       context_data=self.context_data, input_parameters=input_parameters,
+                                       user_id=self.user_id, assistant_id=self.assistant_id, run_id=self.run_id)
             await task_manager.load_prompt(self.agent_config["assistant_name"], task_id)
             input_parameters = await task_manager.run()
             logger.info(f"Got parameters {input_parameters}")
             self.task_states[task_id] = True
         if input_parameters['call_sid'] is not None:
-           await self._save_meta(input_parameters['call_sid'], input_parameters['stream_sid'], input_parameters['messages'], input_parameters['transcriber_characters'], input_parameters['synthesizer_characters'], input_parameters["label_flow"])
+            await self._save_meta(input_parameters['call_sid'], input_parameters['stream_sid'],
+                                  input_parameters['messages'], input_parameters['transcriber_characters'],
+                                  input_parameters['synthesizer_characters'], input_parameters["label_flow"])
 
         logger.info("Done with execution of the agent")
