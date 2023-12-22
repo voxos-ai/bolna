@@ -24,7 +24,7 @@ requires-python = ">=3.8"
 dev = ["pip-tools"]
 
 [tool.setuptools]
-package-dir = {"" = "bolna"}
+package-dir = {"bolna" = "bolna"}
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
@@ -32,8 +32,8 @@ dependencies = {file = ["requirements.txt"]}
 [tool.bumpver]
 current_version = "0.1.0"
 version_pattern = "MAJOR.MINOR.PATCH"
-commit_message = "bump version {old_version} -> {new_version}"
-tag_message = "{new_version}"
+commit_message = "bump bolna version {old_version} -> {new_version}"
+tag_message = "bolna-{new_version}"
 tag_scope = "default"
 pre_commit_hook = ""
 post_commit_hook = ""

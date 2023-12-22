@@ -99,7 +99,6 @@ class AssistantManager:
             s3.put_object(Bucket=bucket_name, Key=object_key, Body=response.content)
             print("MP3 file uploaded to S3 successfully!")
 
-
     async def run(self):
         '''
         Run will start all tasks in sequential format
@@ -108,6 +107,7 @@ class AssistantManager:
         input_parameters = None
         for task_id, task in enumerate(self.tasks):
             task_manager = TaskManager(self.agent_config["assistant_name"], task_id, task, self.websocket, context_data=self.context_data, input_parameters=input_parameters, user_id=self.user_id, assistant_id=self.assistant_id, run_id=self.run_id, connected_through_dashboard = self.connected_through_dashboard)
+            await task_manager.load_prompt(self.agent_config["assistant_name"], task_id)
             input_parameters = await task_manager.run()
             logger.info(f"Got parameters {input_parameters}")
             self.task_states[task_id] = True

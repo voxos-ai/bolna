@@ -4,24 +4,20 @@ import re
 import numpy as np
 import copy
 import hashlib
-from .logger_config import configure_logger
-from bolna.constants import PREPROCESS_DIR
-import boto3
 import os
 import traceback
+from botocore.exceptions import BotoCoreError, ClientError
+from aiobotocore.session import AioSession
+from contextlib import AsyncExitStack
 from dotenv import load_dotenv
 
+from .logger_config import configure_logger
+from bolna.constants import PREPROCESS_DIR
+
 logger = configure_logger(__name__)
-
 load_dotenv()
+BUCKET_NAME = os.getenv('BUCKET_NAME')
 
-session = boto3.session.Session()
-s3 = session.client('s3')
-BUCKET_NAME  = os.getenv('BUCKET_NAME')
-
-
-
-logger.info("BUCKET_NAME: {}".format(BUCKET_NAME))
 
 def load_file(file_path, is_json=False):
     data = None
@@ -81,7 +77,40 @@ def raw_to_mulaw(raw_bytes):
     return mulaw_encoded
 
 
-def get_raw_audio_bytes_from_base64(agent_name, b64_string, audio_format='mp3', user_id = None, assistant_id=None, local = False):
+async def get_s3_file(bucket_name, file_key):
+    session = AioSession()
+
+    async with AsyncExitStack() as exit_stack:
+        s3_client = await exit_stack.enter_async_context(session.create_client('s3'))
+        try:
+            response = await s3_client.get_object(Bucket=bucket_name, Key=file_key)
+        except (BotoCoreError, ClientError) as error:
+            logger.error(error)
+        else:
+            file_content = await response['Body'].read()
+            return file_content
+
+
+async def put_s3_file(bucket_name, file_key, file_data, content_type):
+    session = AioSession()
+
+    async with AsyncExitStack() as exit_stack:
+        s3_client = await exit_stack.enter_async_context(session.create_client('s3'))
+        data = None
+        if content_type == "json":
+            data = json.dumps(file_data)
+        elif content_type == "mp3":
+            data = file_data
+
+        try:
+            await s3_client.put_object(Bucket=bucket_name, Key=file_key, Body=data)
+        except (BotoCoreError, ClientError) as error:
+            logger.error(error)
+        except Exception as e:
+            logger.error('Exception occurred while s3 put object: {}'.format(e))
+
+
+async def get_raw_audio_bytes_from_base64(agent_name, b64_string, audio_format='mp3', user_id = None, assistant_id=None, local = False):
     # we are already storing pcm formatted audio in the filler config. No need to encode/decode them further
     audio_data = None
     logger.info(f"getting audio from base64 string {b64_string}")
@@ -92,10 +121,9 @@ def get_raw_audio_bytes_from_base64(agent_name, b64_string, audio_format='mp3', 
             # Read the entire file content into a variable
             audio_data = file.read()
     else:
-        object_key  = f"{user_id}/{assistant_id}/audio/{b64_string}.{audio_format}"
+        object_key = f"{user_id}/{assistant_id}/audio/{b64_string}.{audio_format}"
         logger.info(f"Reading {object_key}")
-        obj = s3.get_object(Bucket=BUCKET_NAME, Key=object_key)
-        audio_data = obj['Body'].read()
+        audio_data = await get_s3_file(BUCKET_NAME, object_key)
 
     return audio_data
 
@@ -143,7 +171,7 @@ def update_prompt_with_context(prompt, context_data):
     return prompt.format(**context_data.get('recipient_data', {}))
 
 
-def get_prompt_responses(agent_name, local= False, user_id=None, assistant_id = None):
+async def get_prompt_responses(agent_name, local= False, user_id=None, assistant_id = None):
     filepath = f"{PREPROCESS_DIR}/{agent_name}/conversation_details.json"
     data = ""
     if local:
@@ -157,8 +185,8 @@ def get_prompt_responses(agent_name, local= False, user_id=None, assistant_id = 
         key = f"{user_id}/{assistant_id}/conversation_details.json"
         logger.info(f"Loading up the conversation details from the s3 file BUCKET_NAME {BUCKET_NAME} {key}")
         try:
-            response = s3.get_object(Bucket=BUCKET_NAME, Key= key)
-            file_content = response['Body'].read().decode('utf-8')
+            response = await get_s3_file(BUCKET_NAME, key)
+            file_content = response.decode('utf-8')
             json_content = json.loads(file_content)
             return json_content
 

@@ -39,74 +39,12 @@ class TaskManager:
         self.run_id = run_id
         self.mark_set = set()
 
-        llm_config = {"streaming_model": self.task_config["tools_config"]["llm_agent"]["streaming_model"]}
-
-        # setting transcriber
-        if self.task_config["tools_config"]["transcriber"] is not None:
-            self.task_config["tools_config"]["transcriber"]["input_queue"] = self.audio_queue
-            if self.task_config["tools_config"]["transcriber"]["model"] in SUPPORTED_TRANSCRIBER_MODELS.keys():
-                if self.connected_through_dashboard:
-                    self.task_config["tools_config"]["transcriber"]["stream"] = False
-                transcriber_class = SUPPORTED_TRANSCRIBER_MODELS.get(
-                    self.task_config["tools_config"]["transcriber"]["model"])
-                self.tools["transcriber"] = transcriber_class(self.task_config["tools_config"]["input"]["provider"],
-                                                              **self.task_config["tools_config"]["transcriber"])
-
-        # setting synthesizer
-        if self.task_config["tools_config"]["synthesizer"] is not None:
-            synthesizer_class = SUPPORTED_SYNTHESIZER_MODELS.get(
-                self.task_config["tools_config"]["synthesizer"]["model"])
-            self.tools["synthesizer"] = synthesizer_class(**self.task_config["tools_config"]["synthesizer"])
-
-            llm_config["max_tokens"] = self.task_config["tools_config"]["synthesizer"].get('max_tokens')
-            llm_config["buffer_size"] = self.task_config["tools_config"]["synthesizer"].get('buffer_size')
-
         self.conversation_ended = False
 
         # Prompts
-        self.prompts = get_prompt_responses(assistant_name, assistant_id = self.assistant_id, user_id = self.user_id)["task_{}".format(task_id + 1)]
-
-        if "system_prompt" in self.prompts:
-            # This isn't a graph based agent
-            enriched_prompt  = update_prompt_with_context(self.prompts["system_prompt"], self.context_data) if self.context_data is not None else self.prompts["system_prompt"]
-            self.system_prompt = {
-                'role': "system",
-                'content': enriched_prompt
-            }
-        else:
-            self.system_prompt = {
-                'role': "system",
-                'content': ""
-            }
+        self.prompts, self.system_prompt = {}, {}
 
         self.input_parameters = input_parameters
-
-        if self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "preprocessed":
-            llm_config["classification_model"] = self.task_config["tools_config"]["llm_agent"]["classification_model"]
-
-        if self.task_config["tools_config"]["llm_agent"]["family"] in SUPPORTED_LLM_MODELS.keys():
-            llm_class = SUPPORTED_LLM_MODELS.get(self.task_config["tools_config"]["llm_agent"]["family"])
-            llm = llm_class(**llm_config)
-        else:
-            raise Exception(f'LLM {self.task_config["tools_config"]["llm_agent"]["family"]} not supported')
-
-        if self.task_config["task_type"] == "conversation":
-            if self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "streaming":
-                self.tools["llm_agent"] = StreamingContextualAgent(llm)
-            elif self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] in ("preprocessed", "formulaic"):
-                preprocessed = self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "preprocessed"
-                # TODO START WITH LOOKING INTO PROMPTS
-                self.tools["llm_agent"] = GraphBasedConversationAgent(llm, context_data=self.context_data,
-                                                                      prompts=self.prompts,
-                                                                      preprocessed=preprocessed)
-        elif self.task_config["task_type"] == "extraction":
-            logger.info("Setting up extraction agent")
-            self.tools["llm_agent"] = ExtractionContextualAgent(llm, prompt=self.system_prompt)
-            self.extracted_data = None
-        elif self.task_config["task_type"] == "summarization":
-            logger.info("Setting up summarization agent")
-            self.tools["llm_agent"] = SummarizationContextualAgent(llm, prompt=self.system_prompt)
-            self.summarized_data = None
 
         self.queues = {
             "transcriber": self.audio_queue,
@@ -142,7 +80,7 @@ class TaskManager:
         self.llm_processed_request_ids = set()
 
         # Agent stuff
-        self.history = [self.system_prompt]
+        self.history = []
         self.label_flow = []
 
         # Setup IO SERVICE, TRANSCRIBER, LLM, SYNTHESIZER
@@ -160,7 +98,76 @@ class TaskManager:
         self.transcription_characters = 0
         self.synthesizer_characters = 0
 
-        # TODO START WITHH GETTING THE NEXT STEP
+        self.extracted_data = None
+        self.summarized_data = None
+
+    async def load_prompt(self, assistant_name, task_id):
+        prompt_responses = await get_prompt_responses(assistant_name, assistant_id=self.assistant_id, user_id=self.user_id)
+        self.prompts = prompt_responses["task_{}".format(task_id + 1)]
+
+        if "system_prompt" in self.prompts:
+            # This isn't a graph based agent
+            enriched_prompt = update_prompt_with_context(self.prompts["system_prompt"], self.context_data) if self.context_data is not None else self.prompts["system_prompt"]
+            self.system_prompt = {
+                'role': "system",
+                'content': enriched_prompt
+            }
+        else:
+            self.system_prompt = {
+                'role': "system",
+                'content': ""
+            }
+
+        self.history = [self.system_prompt]
+
+        llm_config = {"streaming_model": self.task_config["tools_config"]["llm_agent"]["streaming_model"]}
+
+        if self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "preprocessed":
+            llm_config["classification_model"] = self.task_config["tools_config"]["llm_agent"]["classification_model"]
+
+        # setting transcriber
+        if self.task_config["tools_config"]["transcriber"] is not None:
+            self.task_config["tools_config"]["transcriber"]["input_queue"] = self.audio_queue
+            if self.task_config["tools_config"]["transcriber"]["model"] in SUPPORTED_TRANSCRIBER_MODELS.keys():
+                if self.connected_through_dashboard:
+                    self.task_config["tools_config"]["transcriber"]["stream"] = False
+                transcriber_class = SUPPORTED_TRANSCRIBER_MODELS.get(
+                    self.task_config["tools_config"]["transcriber"]["model"])
+                self.tools["transcriber"] = transcriber_class(self.task_config["tools_config"]["input"]["provider"],
+                                                              **self.task_config["tools_config"]["transcriber"])
+
+        # setting synthesizer
+        if self.task_config["tools_config"]["synthesizer"] is not None:
+            synthesizer_class = SUPPORTED_SYNTHESIZER_MODELS.get(
+                self.task_config["tools_config"]["synthesizer"]["model"])
+            self.tools["synthesizer"] = synthesizer_class(**self.task_config["tools_config"]["synthesizer"])
+
+            llm_config["max_tokens"] = self.task_config["tools_config"]["synthesizer"].get('max_tokens')
+            llm_config["buffer_size"] = self.task_config["tools_config"]["synthesizer"].get('buffer_size')
+
+        if self.task_config["tools_config"]["llm_agent"]["family"] in SUPPORTED_LLM_MODELS.keys():
+            llm_class = SUPPORTED_LLM_MODELS.get(self.task_config["tools_config"]["llm_agent"]["family"])
+            llm = llm_class(**llm_config)
+        else:
+            raise Exception(f'LLM {self.task_config["tools_config"]["llm_agent"]["family"]} not supported')
+
+        if self.task_config["task_type"] == "conversation":
+            if self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "streaming":
+                self.tools["llm_agent"] = StreamingContextualAgent(llm)
+            elif self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] in ("preprocessed", "formulaic"):
+                preprocessed = self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "preprocessed"
+                # TODO START WITH LOOKING INTO PROMPTS
+                self.tools["llm_agent"] = GraphBasedConversationAgent(llm, context_data=self.context_data,
+                                                                      prompts=self.prompts,
+                                                                      preprocessed=preprocessed)
+        elif self.task_config["task_type"] == "extraction":
+            logger.info("Setting up extraction agent")
+            self.tools["llm_agent"] = ExtractionContextualAgent(llm, prompt=self.system_prompt)
+            self.extracted_data = None
+        elif self.task_config["task_type"] == "summarization":
+            logger.info("Setting up summarization agent")
+            self.tools["llm_agent"] = SummarizationContextualAgent(llm, prompt=self.system_prompt)
+            self.summarized_data = None
 
     def _get_next_step(self, sequence, origin):
         try:
@@ -446,7 +453,7 @@ class TaskManager:
         try:
             if meta_info["is_md5_hash"]:
                 logger.info('Sending preprocessed audio response to {}'.format(self.task_config["tools_config"]["output"]["provider"]))
-                audio_chunk = get_raw_audio_bytes_from_base64(self.assistant_name, text,
+                audio_chunk = await get_raw_audio_bytes_from_base64(self.assistant_name, text,
                                                               self.task_config["tools_config"]["output"]["format"], local = False, user_id=self.user_id, assistant_id = self.assistant_id)
                 await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
 
