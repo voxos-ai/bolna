@@ -18,7 +18,7 @@ class DefaultOutputHandler:
 
     async def handle(self, packet):
         try:
-            logger.info(f"Packet received:")
+            logger.info(f"Packet received")
             if packet["meta_info"]['type'] == 'audio':
                 logger.info(f"Sending audio")
                 base64_audio = base64.b64encode(packet['data']).decode("utf-8")
