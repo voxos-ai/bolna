@@ -2,13 +2,11 @@ import asyncio
 import websockets
 import os
 from dotenv import load_dotenv
-import torch
 from .base_transcriber import BaseTranscriber
 from agents.helpers.logger_config import configure_logger
 
 logger = configure_logger(__name__)
 load_dotenv()
-torch.set_num_threads(1)
 
 
 class DeepgramTranscriber(BaseTranscriber):

@@ -5,12 +5,10 @@ import numpy as np
 import time
 import traceback
 import uuid
-import torch
 from agents.helpers.utils import create_ws_data_packet, int2float
 from agents.helpers.logger_config import configure_logger
 from deepgram import Deepgram
 
-torch.set_num_threads(1)
 load_dotenv()
 
 
