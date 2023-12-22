@@ -9,7 +9,7 @@ load_dotenv()
 
 
 class DefaultInputHandler:
-    def __init__(self, queues=None,  websocket=None, input_types=None, mark_set=None, connected_through_dashboard = False):
+    def __init__(self, queues=None, websocket=None, input_types=None, mark_set=None, connected_through_dashboard=False):
         self.queues = queues
         self.websocket = websocket
         self.input_types = input_types
@@ -26,10 +26,8 @@ class DefaultInputHandler:
 
     async def _listen(self):
         try:
-            logger.info(f"Listening to websocket ")
             while self.running:
                 request = await self.websocket.receive_json()
-                #logger.info(f"Received request: {request}")
 
                 if request['type'] not in self.input_types.keys() and not self.connected_through_dashboard:
                     logger.info(f"straight away returning")
@@ -39,12 +37,12 @@ class DefaultInputHandler:
                     data = base64.b64decode(request['data'])
                     logger.info(f"Got data {data}")
                     ws_data_packet = create_ws_data_packet(
-                    data=data,
-                    meta_info={
-                        'io': 'default',
-                        'type': request['type'],
-                        'sequence': self.input_types['audio']
-                    })
+                        data=data,
+                        meta_info={
+                            'io': 'default',
+                            'type': request['type'],
+                            'sequence': self.input_types['audio']
+                        })
 
                     file_path = "received_audio.wav"  # Replace with your desired file path
                     with open(file_path, 'wb') as file:
@@ -58,13 +56,13 @@ class DefaultInputHandler:
                     data = request['data']
                     logger.info(f"Sequences {self.input_types}")
                     ws_data_packet = create_ws_data_packet(
-                    data=data,
-                    meta_info={
-                        'io': 'default',
-                        'type': request['type'],
-                        'sequence': self.input_types['audio']
+                        data=data,
+                        meta_info={
+                            'io': 'default',
+                            'type': request['type'],
+                            'sequence': self.input_types['audio']
 
-                    })
+                        })
 
                     if self.connected_through_dashboard:
                         ws_data_packet["meta_info"]["bypass_synth"] = True
@@ -74,17 +72,16 @@ class DefaultInputHandler:
                 else:
                     return {"message": "Other modalities not implemented yet"}
         except Exception as e:
-            #SEnd EOS message to transcriber to shut the connection
+            # Send EOS message to transcriber to shut the connection
             ws_data_packet = create_ws_data_packet(
-                    data=None,
-                    meta_info={
-                        'io': 'default',
-                        'eos': True
-                    })
+                data=None,
+                meta_info={
+                    'io': 'default',
+                    'eos': True
+                })
             self.queues['transcriber'].put_nowait(ws_data_packet)
             logger.info(f"Error while handling websocket message: {e}")
             return
 
     async def handle(self):
         self.websocket_listen_task = asyncio.create_task(self._listen())
-        
