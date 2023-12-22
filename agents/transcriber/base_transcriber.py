@@ -1,4 +1,3 @@
-import asyncio
 import json
 from dotenv import load_dotenv
 import time
@@ -20,13 +19,6 @@ class BaseTranscriber:
         self.last_vocal_frame_time = None
         self.previous_request_id = None
         self.current_request_id = None
-
-    @staticmethod
-    def _get_transcription_from_audio(self, audio_data):
-        logger.info(f"getting transcription from audio")
-        source = {'buffer': audio_data, 'mimetype': "audio/mpeg"}
-        options = {"smart_format": False, "model": "nova-2"}
-        response = dg_client.transcription.sync_prerecorded(source, options)
 
     def update_meta_info(self):
         self.meta_info['request_id'] = self.current_request_id if self.current_request_id else None
