@@ -15,8 +15,8 @@ twilio_client = Client(os.getenv('TWILIO_ACCOUNT_SID'), os.getenv('TWILIO_AUTH_T
 
 
 class TwilioInputHandler(DefaultInputHandler):
-    def __init__(self, queues, websocket=None, input_types=None, mark_set=None):
-        super().__init__(queues, websocket, input_types)
+    def __init__(self, queues, websocket=None, input_types=None, mark_set=None, connected_through_dashboard=False):
+        super().__init__(queues, websocket, input_types, connected_through_dashboard)
         self.stream_sid = None
         self.call_sid = None
         self.buffer = []

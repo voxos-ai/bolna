@@ -36,7 +36,6 @@ def write_json_file(file_path, data):
 
 
 def create_ws_data_packet(data, meta_info=None, is_md5_hash=False, llm_generated=False):
-    logger.info(f"Metadata {meta_info}")
     metadata = copy.deepcopy(meta_info)
     if meta_info is not None: #It'll be none in case we connect through dashboard playground
         metadata["is_md5_hash"] = is_md5_hash
@@ -171,7 +170,7 @@ def update_prompt_with_context(prompt, context_data):
     return prompt.format(**context_data.get('recipient_data', {}))
 
 
-async def get_prompt_responses(agent_name, local= False, user_id=None, assistant_id = None):
+async def get_prompt_responses(agent_name, local=False, user_id=None, assistant_id = None):
     filepath = f"{PREPROCESS_DIR}/{agent_name}/conversation_details.json"
     data = ""
     if local:

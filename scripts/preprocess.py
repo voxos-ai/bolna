@@ -4,9 +4,9 @@ import asyncio
 import argparse
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from agents.helpers.utils import get_md5_hash, load_file, write_json_file, execute_tasks_in_chunks, has_placeholders
-from agents.models import SUPPORTED_SYNTHESIZER_MODELS
-from agents.constants import PREPROCESS_DIR, USERS_KEY_ORDER
+from bolna.helpers.utils import get_md5_hash, load_file, write_json_file, execute_tasks_in_chunks, has_placeholders
+from bolna.providers import SUPPORTED_SYNTHESIZER_MODELS
+from bolna.constants import PREPROCESS_DIR, USERS_KEY_ORDER
 
 
 async def update_users_json(agent_name):
