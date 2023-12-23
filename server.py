@@ -6,12 +6,12 @@ import sys, os
 import uuid
 import redis.asyncio as redis
 from dotenv import load_dotenv
-from agents.agent_manager import AssistantManager
+from bolna.agent_manager import AssistantManager
 import traceback
 import json
-from agents.helpers.logger_config import configure_logger
+from bolna.helpers.logger_config import configure_logger
 import asyncio
-from agents.models import *
+from bolna.models import *
 
 
 logger = configure_logger(__name__)
