@@ -46,3 +46,6 @@ push = false
     'current_version = "{version}"',
     'version = "{version}"',
 ]
+"bolna/__init__.py" = [
+    '^__version__ = "{version}"$',
+]
