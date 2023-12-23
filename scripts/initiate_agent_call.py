@@ -6,8 +6,8 @@ import aiohttp
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from agents.helpers.utils import load_file, execute_tasks_in_chunks
-from agents.constants import PREPROCESS_DIR
+from bolna.helpers.utils import load_file, execute_tasks_in_chunks
+from bolna.constants import PREPROCESS_DIR
 
 
 async def fetch(session, url, payload):
