@@ -89,7 +89,6 @@ class GraphBasedConversationAgent:
             self.current_node  = self.current_node.children[ind]
         return audio_pair
 
-
     async def _get_next_preprocessed_step(self, history):
         logger.info(f"current node {self.current_node.node_label}, self.current_node == self.graph.root {self.current_node == self.graph.root}, and self.conversation_intro_done {self.conversation_intro_done}")
         if self.current_node == self.graph.root and not self.conversation_intro_done:
