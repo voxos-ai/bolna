@@ -4,7 +4,7 @@ from bolna.agent_types import StreamingContextualAgent, GraphBasedConversationAg
 import time
 import json
 from bolna.helpers.logger_config import configure_logger
-from bolna.models import *
+from bolna.providers import *
 from bolna.helpers.utils import create_ws_data_packet, is_valid_md5, get_raw_audio_bytes_from_base64, \
     get_required_input_types, format_messages, get_prompt_responses, update_prompt_with_context
 
