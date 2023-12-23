@@ -30,15 +30,15 @@ package-dir = {"bolna" = "bolna"}
 dependencies = {file = ["requirements.txt"]}
 
 [tool.bumpver]
-current_version = "0.1.0"
+current_version = "0.2.0"
 version_pattern = "MAJOR.MINOR.PATCH"
 commit_message = "bump bolna version {old_version} -> {new_version}"
 tag_message = "bolna-{new_version}"
 tag_scope = "default"
 pre_commit_hook = ""
 post_commit_hook = ""
-commit = false
-tag = false
+commit = true
+tag = true
 push = false
 
 [tool.bumpver.file_patterns]
