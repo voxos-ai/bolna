@@ -9,20 +9,22 @@ services:
     depends_on:
       - redis
     env_file:
-      - ../.env
+      - .env
 
   bolna-app:
     build:
-      context: ../
-      dockerfile: local_setup/dockerfiles/bolna_server.Dockerfile
+      context: .
+      dockerfile: dockerfiles/bolna_server.Dockerfile
     ports:
       - "5001:5001"
     depends_on:
       - redis
     env_file:
-        - ../.env
+        - .env
     volumes:
       - ../agent_data:/app/agent_data
+      - $HOME/.aws/credentials:/root/.aws/credentials:ro
+      - $HOME/.aws/config:/root/.aws/config:ro
 
   redis:
     image: "redis:latest"

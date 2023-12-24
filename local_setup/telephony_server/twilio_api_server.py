@@ -76,7 +76,7 @@ async def make_call(request: Request):
             from_=twilio_phone_number,
             url=f"{app_callback_url}/twilio_callback?ws_url={websocket_url}&agent_id={agent_id}&user_id={user_id}",
             method="POST",
-            record=True
+            record=False
         )
 
         # persisting user details

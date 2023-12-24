@@ -1,8 +1,6 @@
 import os
-import sys
 import asyncio
 import argparse
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from bolna.helpers.utils import get_md5_hash, load_file, write_json_file, execute_tasks_in_chunks, has_placeholders
 from bolna.providers import SUPPORTED_SYNTHESIZER_MODELS
