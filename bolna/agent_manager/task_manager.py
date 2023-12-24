@@ -1,9 +1,8 @@
 import asyncio
 import traceback
-from bolna.agent_types import StreamingContextualAgent, GraphBasedConversationAgent, ExtractionContextualAgent, \
-    SummarizationContextualAgent
 import time
 import json
+from bolna.agent_types import *
 from bolna.helpers.logger_config import configure_logger
 from bolna.providers import *
 from bolna.helpers.utils import create_ws_data_packet, is_valid_md5, get_raw_audio_bytes_from_base64, \
@@ -30,9 +29,9 @@ class TaskManager:
         self.synthesizer_queue = asyncio.Queue()
 
         self.pipelines = task['toolchain']['pipelines']
-        self.textual_chat_agent = True if (
-                    task['toolchain']['pipelines'][0] == "llm" and task["tools_config"]["llm_agent"][
-                "agent_task"] == "conversation") else False
+        self.textual_chat_agent = False
+        if task['toolchain']['pipelines'][0] == "llm" and task["tools_config"]["llm_agent"]["agent_task"] == "conversation":
+            self.textual_chat_agent = False
 
         self.start_time = time.time()
 
@@ -59,11 +58,10 @@ class TaskManager:
             if self.task_config["tools_config"]["input"]["provider"] in SUPPORTED_INPUT_HANDLERS.keys():
                 logger.info(f"Connected through dashboard {connected_through_dashboard}")
                 if connected_through_dashboard:
-                    input_handler_class = SUPPORTED_INPUT_HANDLERS.get(
-                        "default")  # If connected through dashboard get basic dashboard class
+                    # If connected through dashboard get basic dashboard class
+                    input_handler_class = SUPPORTED_INPUT_HANDLERS.get("default")
                 else:
-                    input_handler_class = SUPPORTED_INPUT_HANDLERS.get(
-                        self.task_config["tools_config"]["input"]["provider"])
+                    input_handler_class = SUPPORTED_INPUT_HANDLERS.get(self.task_config["tools_config"]["input"]["provider"])
                 self.tools["input"] = input_handler_class(self.queues, self.websocket, get_required_input_types(task),
                                                           self.mark_set, self.connected_through_dashboard)
             else:
@@ -118,9 +116,9 @@ class TaskManager:
 
         if "system_prompt" in self.prompts:
             # This isn't a graph based agent
-            enriched_prompt = update_prompt_with_context(self.prompts["system_prompt"],
-                                                         self.context_data) if self.context_data is not None else \
-            self.prompts["system_prompt"]
+            enriched_prompt = self.prompts["system_prompt"]
+            if self.context_data is not None:
+                enriched_prompt = update_prompt_with_context(self.prompts["system_prompt"], self.context_data)
             self.system_prompt = {
                 'role': "system",
                 'content': enriched_prompt
