@@ -22,7 +22,7 @@ class DefaultOutputHandler:
             logger.info(f"Packet received:")
             data = None
             if packet["meta_info"]['type'] in ('audio', 'text'):
-                if packet["meta_info"]['type']:
+                if packet["meta_info"]['type'] == 'audio':
                     logger.info(f"Sending audio")
                     data = base64.b64encode(packet['data']).decode("utf-8")
                 elif packet["meta_info"]['type'] == 'text':
