@@ -44,7 +44,7 @@ class DefaultInputHandler:
                             'sequence': self.input_types['audio']
                         })
 
-                    file_path = "received_audio.wav"  # Replace with your desired file path
+                    file_path = "received_audio.webm"  # Replace with your desired file path
                     with open(file_path, 'wb') as file:
                         file.write(data)
                     logger.info(f"Saved audio data to {file_path}")
