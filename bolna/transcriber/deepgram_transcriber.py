@@ -2,6 +2,8 @@ import asyncio
 import websockets
 import os
 import json
+import aiohttp
+import time
 from dotenv import load_dotenv
 from .base_transcriber import BaseTranscriber
 from bolna.helpers.logger_config import configure_logger
@@ -21,6 +23,10 @@ class DeepgramTranscriber(BaseTranscriber):
         self.heartbeat_task = None
         self.sender_task = None
         self.model = 'deepgram'
+        self.audio_format = "audio/webm"
+        if not self.stream:
+            self.session = aiohttp.ClientSession()
+            self.api_url = f"https://api.deepgram.com/v1/listen?model=nova-2&filler_words=true&language={self.language}"
 
     def get_deepgram_ws_url(self):
         websocket_url = (f"wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=16000&channels=1"
@@ -30,6 +36,9 @@ class DeepgramTranscriber(BaseTranscriber):
             websocket_url = (f"wss://api.deepgram.com/v1/listen?model=nova-2&encoding=mulaw&sample_rate=8000&channels"
                              f"=1&filler_words=true&endpointing={self.endpointing}")
 
+        if self.provider == "playground":
+            websocket_url = (f"wss://api.deepgram.com/v1/listen?model=nova-2&encoding=opus&sample_rate=8000&channels"
+                             f"=1&filler_words=true&endpointing={self.endpointing}")
         if "en" not in self.language:
             websocket_url += '&language={}'.format(self.language)
         return websocket_url
@@ -46,10 +55,24 @@ class DeepgramTranscriber(BaseTranscriber):
 
     async def toggle_connection(self):
         self.connection_on = False
-        await self.heartbeat_task.cancel()
+        if self.heartbeat_task is not None:
+            await self.heartbeat_task.cancel()
         await self.sender_task.cancel()
 
-    async def sender(self, ws):
+    async def _get_http_transcription(self, audio_data):
+        headers = {
+        'Authorization': 'Token {}'.format(os.getenv('DEEPGRAM_AUTH_TOKEN')),
+        'Content-Type': 'audio/webm' #Currently we are assuming this is via browser
+        }
+        start_time = time.time()
+        async with self.session as session:
+            async with session.post(self.api_url, data=audio_data, headers=headers) as response:
+                response_data = await response.json()
+                transcript = response_data["results"]["channels"][0]["alternatives"][0]["transcript"]
+                logger.info(f"transcript {transcript} total time {time.time() - start_time}")
+                return create_ws_data_packet(transcript, self.meta_info)
+
+    async def sender(self, ws=None):
         try:
             while True:
                 ws_data_packet = await self.input_queue.get()
@@ -59,7 +82,11 @@ class DeepgramTranscriber(BaseTranscriber):
 
                 audio_data = ws_data_packet.get('data')
                 self.meta_info = ws_data_packet.get('meta_info')
-                await ws.send(audio_data)
+                if self.stream:
+                    await asyncio.gather(ws.send(audio_data))
+                else:
+                    transcription = await self._get_http_transcription(audio_data)
+                    yield transcription
         except Exception as e:
             logger.error('Error while sending: ' + str(e))
             raise Exception("Something went wrong")
@@ -108,12 +135,15 @@ class DeepgramTranscriber(BaseTranscriber):
 
     async def transcribe(self):
         async with self.deepgram_connect() as deepgram_ws:
-            self.sender_task = asyncio.create_task(self.sender(deepgram_ws))
-            self.heartbeat_task = asyncio.create_task(self.send_heartbeat(deepgram_ws))
-
-            async for message in self.receiver(deepgram_ws):
-                if self.connection_on:
+            if self.stream:
+                self.sender_task = asyncio.create_task(self.sender(deepgram_ws))
+                self.heartbeat_task = asyncio.create_task(self.send_heartbeat(deepgram_ws))
+                async for message in self.receiver(deepgram_ws):
+                    if self.connection_on:
+                        yield message
+                    else:
+                        logger.info("Closing the connection")
+                        await self._close(deepgram_ws, data={"type": "CloseStream"})
+            else:
+                async for message in self.sender():
                     yield message
-                else:
-                    logger.info("Closing the connection")
-                    await self._close(deepgram_ws, data={"type": "CloseStream"})
