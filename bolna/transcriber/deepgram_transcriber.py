@@ -68,8 +68,10 @@ class DeepgramTranscriber(BaseTranscriber):
         async with self.session as session:
             async with session.post(self.api_url, data=audio_data, headers=headers) as response:
                 response_data = await response.json()
+                logger.info(f"response_data {response_data} total time {time.time() - start_time}")
                 transcript = response_data["results"]["channels"][0]["alternatives"][0]["transcript"]
                 logger.info(f"transcript {transcript} total time {time.time() - start_time}")
+                self.meta_info['transcriber_duration'] =  response_data["metadata"]["duration"]
                 return create_ws_data_packet(transcript, self.meta_info)
 
     async def sender(self, ws=None):
@@ -97,7 +99,8 @@ class DeepgramTranscriber(BaseTranscriber):
             try:
                 msg = json.loads(msg)
                 if msg['type'] == "Metadata":
-                    logger.info(f"Got a summary object")
+                    logger.info(f"Got a summary object {msg}")
+                    self.meta_info["transcriber_duration"] = msg["duration"]
                     yield create_ws_data_packet("transcriber_connection_closed", self.meta_info)
                     return
 

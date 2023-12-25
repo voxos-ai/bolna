@@ -15,7 +15,8 @@ class PollySynthesizer(BaseSynthesizer):
         super().__init__(stream, buffer_size)
         self.model = model
         self.format = audio_format
-        self.voice = voice
+        #self.voice = voice
+        self.voice = "Kajal"
         self.language = '{}-IN'.format(language)
         self.sample_rate = sampling_rate
 
