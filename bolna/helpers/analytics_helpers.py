@@ -3,6 +3,7 @@ import os
 from .utils import format_messages
 from .logger_config import configure_logger
 from bolna.prompts import CHECK_FOR_COMPLETION_PROMPT
+from collections import defaultdict
 from dotenv import load_dotenv 
 load_dotenv()
 logger = configure_logger(__name__)
@@ -16,7 +17,7 @@ def calculate_total_cost_of_llm_from_transcript(messages, cost_per_input_token, 
     completion_model = os.getenv("CHECK_FOR_COMPLETION_LLM")
     completion_wrong_answer_tokens = token_counter(model=model, text="{'answer': 'No'}") 
     completion_right_answer_tokens = token_counter(model=model, text="{'answer': 'Yes'}")  
-
+    llm_token_usage = dict()
     for i, message in enumerate(messages):
         if message['role'] == 'assistant':
             total_input_tokens += token_counter(model=model, messages=messages[:i])
@@ -35,9 +36,18 @@ def calculate_total_cost_of_llm_from_transcript(messages, cost_per_input_token, 
 
 
     total_cost = (total_input_tokens * cost_per_input_token) + (total_output_tokens * cost_per_output_token)
+    llm_token_usage[model] = {
+        "input": total_input_tokens,
+        "output": total_output_tokens,
+    }
+
     if check_for_completion:
+        if completion_model not in llm_token_usage:
+            llm_token_usage[completion_model] = {"input": 0, "output": 0}
+        llm_token_usage[completion_model]["input"] += completion_check_input_tokens
+        llm_token_usage[completion_model]["output"] += completion_check_output_tokens
         check_for_completion_cost = (completion_check_input_tokens * completion_input_token_cost) + (completion_check_output_tokens * completion_output_token_cost)
         logger.info(f"Cost to check completion = {check_for_completion_cost}")
         total_cost += check_for_completion_cost
 
-    return total_cost
+    return total_cost, llm_token_usage

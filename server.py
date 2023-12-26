@@ -15,6 +15,7 @@ from bolna.prompts import *
 from bolna.helpers.logger_config import configure_logger
 from bolna.models import *
 from litellm import token_counter
+from datetime import datetime, timezone
 
 from bolna.agent_manager.assistant_manager import AssistantManager
 from database.dynamodb import DynamoDB
@@ -235,6 +236,10 @@ async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket, 
     agent_manager = AssistantManager(agent_config, websocket, context_data, user_id, agent_id,
                                      connected_through_dashboard=connected_through_dashboard)
 
+    llm_model = agent_config["tasks"][0]["tools_config"]["llm_agent"]["streaming_model"]
+    pricing = load_file("model_pricing.json", is_json = True)
+    conversation_data = None
+
     cost_breakdown = {
         "transcriber": 0,
         "llm": 0,
@@ -242,17 +247,19 @@ async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket, 
         "network": 0
     }
     usage_breakdown = {
-            "transcriberModel": "nova2",
+            "transcriberModel": agent_config["tasks"][0]["tools_config"]["transcriber"]["model"],
             "transcriberDuration": 0,
-            "llmModel": "gpt-3.5-turbo",
+            "llmModel": {
+                llm_model: { 
+                    "input": 0,
+                    "output": 0
+                }
+            },
             "llmTokens": 0,
-            "synthesizerModel": "openai-tts",
+            "synthesizerModel": agent_config["tasks"][0]["tools_config"]["synthesizer"]["model"],
             "synthesizerCharacters": 0
     }
 
-    llm_model = agent_config["tasks"][0]["tools_config"]["llm_agent"]["streaming_model"]
-    pricing = load_file("model_pricing.json", is_json = True)
-    conversation_data = None
     try:
         async for index, task_output in agent_manager.run():
             if index == 0:
@@ -265,18 +272,23 @@ async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket, 
                 if agent_config['tasks'][0]['tools_config']['llm_agent']['agent_flow_type'] != "preprocessed":
                     check_for_completion = True
                     completion_model = os.getenv('CHECK_FOR_COMPLETION_LLM')
-                cost_breakdown["llm"] = calculate_total_cost_of_llm_from_transcript(messages =messages, cost_per_input_token = pricing["llm"][llm_model]["input"], 
+                
+                cost_breakdown["llm"], usage_breakdown["llmModel"] = calculate_total_cost_of_llm_from_transcript(messages =messages, cost_per_input_token = pricing["llm"][llm_model]["input"], 
                         cost_per_output_token = pricing["llm"][llm_model]["output"], model =llm_model, check_for_completion = check_for_completion, 
                         ended_by_assistant = task_output["ended_by_assistant"], completion_input_token_cost = pricing["llm"][completion_model]["input"], 
                         completion_output_token_cost = pricing["llm"][completion_model]["output"])
                 cost_breakdown["synth"] = round(task_output["synthesizer_characters"] * pricing["tts"]["polly-neural"], 5)
                 cost_breakdown["transcriber"] = round(task_output["transcriber_duration"]/60 * pricing["asr"]["nova-2"], 5)
                 messages = format_messages(messages)
+
                 agent_run_details = {
                     "transcript": messages,
                     "conversation_time": task_output["conversation_time"],
                     "usage_breakdown": usage_breakdown,
-                    "cost_breakdown": cost_breakdown
+                    "cost_breakdown": cost_breakdown,
+                    "createdAt": datetime.now(timezone.utc).isoformat(),
+                    "updatedAt": datetime.now(timezone.utc).isoformat()
+
                 }
                 conversation_data = messages
                 logger.info(f"storing conversation task output {agent_run_details}")
@@ -287,14 +299,42 @@ async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket, 
                     model  = agent_config["tasks"][index]["tools_config"]["llm_agent"]["streaming_model"]
                     input_tokens = token_counter(model=model, text=conversation_data)
                     output_tokens = token_counter(model=model, text=json.dumps(task_output["extracted_data"]))
-                    cost_breakdown["llm"] = round(input_tokens * pricing["llm"][model]["input"] + output_tokens * pricing["llm"][model]["output"], 5)
-                    await dynamodb.update_run(user_id, agent_id, task_output["run_id"], {"extracted_data": task_output["extracted_data"], "cost_breakdown": cost_breakdown})
+                    cost_breakdown["llm"] += round(input_tokens * pricing["llm"][model]["input"] + output_tokens * pricing["llm"][model]["output"], 5)
+                    if model not in usage_breakdown["llmModel"]:
+                        usage_breakdown["llmModel"][model] = {"input": 0, "output": 0}
+                    
+                    usage_breakdown["llmModel"][model]["input"] += input_tokens
+                    usage_breakdown["llmModel"][model]["output"] += output_tokens
+
+                    agent_run_details = {
+                        "extracted_data": task_output["extracted_data"], 
+                        "cost_breakdown": cost_breakdown,
+                        "usage_breakdown": usage_breakdown,
+                        "updatedAt": datetime.now(timezone.utc).isoformat()
+
+                    }
+                
+                    await dynamodb.update_run(user_id, agent_id, task_output["run_id"], agent_run_details)
 
                 elif task_output["task_type"] == "summarization":
                     model  = agent_config["tasks"][index]["tools_config"]["llm_agent"]["streaming_model"]
                     input_tokens = token_counter(model=model, text=conversation_data)
                     output_tokens = token_counter(model=model, text=task_output["summary"])
                     cost_breakdown["llm"] = round(input_tokens * pricing["llm"][model]["input"] + output_tokens * pricing["llm"][model]["output"], 5)
+
+                    if model not in usage_breakdown["llmModel"]:
+                        usage_breakdown["llmModel"][model] = {"input": 0, "output": 0}
+                    
+                    usage_breakdown["llmModel"][model]["input"] += input_tokens
+                    usage_breakdown["llmModel"][model]["output"] += output_tokens
+
+                    agent_run_details = {
+                        "summary": task_output["summary"], 
+                        "cost_breakdown": cost_breakdown,
+                        "usage_breakdown": usage_breakdown,
+                        "updatedAt": datetime.now(timezone.utc).isoformat()
+                    }
+
                     await dynamodb.update_run(user_id, agent_id, task_output["run_id"], {"summary": task_output["summary"], "cost_breakdown": cost_breakdown})
 
                 logger.info(f"storing followup task in database {task_output}")
