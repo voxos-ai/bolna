@@ -60,6 +60,9 @@ class DeepgramTranscriber(BaseTranscriber):
         await self.sender_task.cancel()
 
     async def _get_http_transcription(self, audio_data):
+        if self.session is None or self.session.closed:
+            self.session = aiohttp.ClientSession()
+
         headers = {
         'Authorization': 'Token {}'.format(os.getenv('DEEPGRAM_AUTH_TOKEN')),
         'Content-Type': 'audio/webm' #Currently we are assuming this is via browser

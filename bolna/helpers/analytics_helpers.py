@@ -3,7 +3,9 @@ import os
 from .utils import format_messages
 from .logger_config import configure_logger
 from bolna.prompts import CHECK_FOR_COMPLETION_PROMPT
+from bolna.constants import HIGH_LEVEL_ASSISTANT_ANALYTICS_DATA
 from collections import defaultdict
+from datetime import datetime, timezone
 from dotenv import load_dotenv 
 load_dotenv()
 logger = configure_logger(__name__)
@@ -50,4 +52,33 @@ def calculate_total_cost_of_llm_from_transcript(messages, cost_per_input_token, 
         logger.info(f"Cost to check completion = {check_for_completion_cost}")
         total_cost += check_for_completion_cost
 
-    return total_cost, llm_token_usage
+    return round(total_cost, 5), llm_token_usage
+
+# def update_extraction_details(current_high_level_assistant_analytics_data, extraction_data):
+#     # Use object.entries to loop thorugh extraction details
+#     # For every element in the array, check if label is there in current_high_level_assistant_analytics_data[extraction_details][index]
+#     # If yes, increment by 1 and if no make it 0
+#     # If current_high_level_assistant_analytics_data[extraction_details] is empty, create a first element that's a dictionary and initialise the label with 1
+
+def update_extraction_details(current_high_level_assistant_analytics_data, extraction_data):
+    if len(current_high_level_assistant_analytics_data["extraction_details"]) == 0:
+        current_high_level_assistant_analytics_data['extraction_details'] = {}
+
+    for index, key in enumerate(extraction_data.keys()):
+        found_label = False
+        for detail in current_high_level_assistant_analytics_data['extraction_details']:
+            if extraction_data[key] in detail:
+                detail[label] += 1
+                found_label = True
+                break
+        if not found_label:
+            current_high_level_assistant_analytics_data['extraction_details'][index][extraction_data[key]] = 1
+
+
+def update_high_level_assistant_analytics_data(current_high_level_assistant_analytics_data, run_details):
+    logger.info(f"run details {run_details}")
+    if current_high_level_assistant_analytics_data == None:
+        current_high_level_assistant_analytics_data = HIGH_LEVEL_ASSISTANT_ANALYTICS_DATA
+    
+    # extraction_details = update_extraction_details(current_high_level_assistant_analytics_data, run_details)
+    # logger.info(f"current_high_level_assistant_analytics_data {current_high_level_assistant_analytics_data} \n Extracting data {extraction_details}")
