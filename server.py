@@ -269,8 +269,8 @@ async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket, 
                         cost_per_output_token = pricing["llm"][llm_model]["output"], model =llm_model, check_for_completion = check_for_completion, 
                         ended_by_assistant = task_output["ended_by_assistant"], completion_input_token_cost = pricing["llm"][completion_model]["input"], 
                         completion_output_token_cost = pricing["llm"][completion_model]["output"])
-                cost_breakdown["synth"] = task_output["synthesizer_characters"] * pricing["tts"]["polly-neural"]
-                cost_breakdown["transcriber"] = task_output["transcriber_duration"] * pricing["asr"]["nova-2"]
+                cost_breakdown["synth"] = round(task_output["synthesizer_characters"] * pricing["tts"]["polly-neural"], 5)
+                cost_breakdown["transcriber"] = round(task_output["transcriber_duration"]/60 * pricing["asr"]["nova-2"], 5)
                 messages = format_messages(messages)
                 agent_run_details = {
                     "transcript": messages,
@@ -287,14 +287,15 @@ async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket, 
                     model  = agent_config["tasks"][index]["tools_config"]["llm_agent"]["streaming_model"]
                     input_tokens = token_counter(model=model, text=conversation_data)
                     output_tokens = token_counter(model=model, text=json.dumps(task_output["extracted_data"]))
-                    cost_breakdown["llm"] = input_tokens * pricing["llm"][model]["input"] + output_tokens * pricing["llm"][model]["output"]
-                    await dynamodb.store_run(user_id, agent_id, task_output["run_id"], {"extracted_data": task_output["extracted_data"], "cost_breakdown": cost_breakdown})
+                    cost_breakdown["llm"] = round(input_tokens * pricing["llm"][model]["input"] + output_tokens * pricing["llm"][model]["output"], 5)
+                    await dynamodb.update_run(user_id, agent_id, task_output["run_id"], {"extracted_data": task_output["extracted_data"], "cost_breakdown": cost_breakdown})
+
                 elif task_output["task_type"] == "summarization":
                     model  = agent_config["tasks"][index]["tools_config"]["llm_agent"]["streaming_model"]
                     input_tokens = token_counter(model=model, text=conversation_data)
                     output_tokens = token_counter(model=model, text=task_output["summary"])
-                    cost_breakdown["llm"] = input_tokens * pricing["llm"][model]["input"] + output_tokens * pricing["llm"][model]["output"]
-                    await dynamodb.store_run(user_id, agent_id, task_output["run_id"], {"summary": task_output["summary"], "cost_breakdown": cost_breakdown})
+                    cost_breakdown["llm"] = round(input_tokens * pricing["llm"][model]["input"] + output_tokens * pricing["llm"][model]["output"], 5)
+                    await dynamodb.update_run(user_id, agent_id, task_output["run_id"], {"summary": task_output["summary"], "cost_breakdown": cost_breakdown})
 
                 logger.info(f"storing followup task in database {task_output}")
 
