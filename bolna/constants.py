@@ -1,9 +1,10 @@
 from datetime import datetime, timezone
+from collections import defaultdict
 PREPROCESS_DIR = 'agent_data'
 USERS_KEY_ORDER = ["honorific", "first_name", "last_name"]
 
 HIGH_LEVEL_ASSISTANT_ANALYTICS_DATA = {
-        "extraction_details":[], 
+        "extraction_details":{}, 
         "cost_details": {
             "average_transcriber_cost_per_conversation": 0, 
             "average_llm_cost_per_conversation": 0,
@@ -14,13 +15,13 @@ HIGH_LEVEL_ASSISTANT_ANALYTICS_DATA = {
             "cost_past_5_days": [],
             "average_duration_past_5_days": []
         },
-        "call_details": { 
-            "finished_calls": 0, 
-            "not_picked_up": 0, 
-            "unfinished_calls": 0 
+        "conversation_details": { 
+            "total_conversations": 0,
+            "finished_conversations": 0, 
+            "rejected_conversations": 0
         },
         "execution_details": {
-            "total_conversations": 0,
+            "total_conversations": 0, 
             "total_cost": 0,
             "average_duration_of_conversation": 0
         },

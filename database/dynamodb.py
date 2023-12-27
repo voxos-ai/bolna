@@ -10,7 +10,7 @@ from aiodynamo.credentials import Credentials
 from aiodynamo.expressions import F, UpdateExpression, SetAction
 from aiodynamo.expressions import Condition
 from aiodynamo.expressions import HashKey, RangeKey
-
+from aiodynamo.errors import ItemNotFound
 from aiodynamo.http.aiohttp import AIOHTTP
 from aiodynamo.models import Throughput, KeySchema, KeySpec, KeyType
 
@@ -36,7 +36,7 @@ class DynamoDB(BaseDatabase):
 
         return self.table
 
-    async def store_agent(self, user_id, sort_key, agent_data):
+    async def store_agent_data(self, user_id, sort_key, agent_data):
         table = await self.get_table()
 
         logger.info(f"agent_data {type(agent_data)}  {agent_data}")
@@ -85,7 +85,6 @@ class DynamoDB(BaseDatabase):
                 else:
                     ue = ue & F(field_name).set(value)
 
-
             response = await table.update_item(
                 key,
                 update_expression = ue
@@ -122,12 +121,33 @@ class DynamoDB(BaseDatabase):
         except ClientError as e:
             print(f"An error occurred: {e}")
             return None
-
-    async def get_agent_data(self, user_id, agent_id):
+    
+    async def get_all_executions_for_assistant(self, user_id, agent_id):
         table = await self.get_table()
         try:
-            agent = await table.get_item(key={'user_id': user_id, 'range': agent_id})
-            return agent
+            executions = []
+            async for item in table.query(
+                    key_condition=HashKey('user_id', user_id) & RangeKey('range').begins_with(f"{agent_id}#")):
+                executions.append(item)
+            return executions
         except ClientError as e:
             print(f"An error occurred: {e}")
+            return None
+
+    async def get_assistant_data(self, user_id, agent_id, analytics = False):
+        table = await self.get_table()
+        try:
+            key = {'user_id': user_id, 'range': f"analytics#{agent_id}" if analytics else agent_id}
+            agent_data = await table.get_item(key=key)
+
+            return agent_data if agent_data is not None else None
+
+        except ClientError as e:
+            print(f"An error occurred: {e}")
+            return None
+        except ItemNotFound as e:
+            logger.error(f"Could not find item with {user_id}, {agent_id} analytics {analytics}")
+            return None
+        except Exception as e:
+            logger.error(f"Error executing query {user_id}, {agent_id} analytics {analytics}")
             return None

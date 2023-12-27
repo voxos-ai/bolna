@@ -21,7 +21,9 @@ completion_json_format = {"answer": "A simple Yes or No based on if you should c
 CHECK_FOR_COMPLETION_PROMPT = """
 You are an helpful AI assistant that's having a conversation with customer. 
 Based on the given transcript, should you cut the call?\n\n 
-NOTE: If user is not interested in talking, or is annoying or something, we need to cut the phone. 
+RULES: 
+1. If user is not interested in talking, or is annoying or something, we need to cut the phone. 
+2. You are also provided with original prompt to make your decision if we need to cut the phone or not.  
 
 ### JSON Structure
 {}

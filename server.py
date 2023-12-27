@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import List
 import redis.asyncio as redis
 from dotenv import load_dotenv
-from bolna.helpers.analytics_helpers import calculate_total_cost_of_llm_from_transcript
+from bolna.helpers.analytics_helpers import calculate_total_cost_of_llm_from_transcript, update_high_level_assistant_analytics_data
 from bolna.helpers.utils import get_md5_hash, get_s3_file, put_s3_file, format_messages, load_file
 from bolna.providers import *
 from bolna.prompts import *
@@ -31,7 +31,7 @@ BUCKET_NAME = os.getenv('BUCKET_NAME')
 # Set up CORS middleware options
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://app.bolna.dev"],  # Allow all origins
+    allow_origins=["*"],  # Allow all origins
     allow_credentials=True,
     allow_methods=["*"],  # Allow all methods
     allow_headers=["*"],  # Allow all headers
@@ -53,7 +53,7 @@ async def shutdown_event():
 @app.get("/assistant/prompts")
 async def get_files(user_id: str, assistant_id: str):
     try:
-        existing_data = await dynamodb.get_agent_data(user_id, f"agent#{assistant_id}")
+        existing_data = await dynamodb.get_assistant_data(user_id, f"agent#{assistant_id}")
         if not existing_data:
             raise HTTPException(status_code=404, detail="Agent not found")
 
@@ -64,7 +64,6 @@ async def get_files(user_id: str, assistant_id: str):
         return {
             "data": deserialized_json
         }
-
     except HTTPException as e:
         return e.detail
 
@@ -156,7 +155,7 @@ async def create_agent(agent_data: CreateAssistantPayload):
     assistant_prompts = agent_data.assistant_prompts
     logger.info(f'Data for DB {data_for_db}')
     redis_task = asyncio.create_task(redis_client.set(agent_uuid, json.dumps(data_for_db)))
-    dynamodb_task = asyncio.create_task(dynamodb.store_agent(user_id, f"agent#{agent_uuid}", data_for_db))
+    dynamodb_task = asyncio.create_task(dynamodb.store_agent_data(user_id, f"agent#{agent_uuid}", data_for_db))
     background_process_and_store_task = asyncio.create_task(
         background_process_and_store(data_for_db['tasks'][0]['tools_config']['llm_agent']['agent_flow_type'],
                                      assistant_prompts.dict(), agent_uuid, user_id, tasks=data_for_db['tasks']))
@@ -168,7 +167,7 @@ async def create_agent(agent_data: CreateAssistantPayload):
 @app.put("/assistant/{agent_uuid}")
 async def edit_agent(agent_uuid: str, agent_data: CreateAssistantPayload):
     user_id = agent_data.user_id
-    existing_data = await dynamodb.get_agent_data(user_id, f"agent#{agent_uuid}")
+    existing_data = await dynamodb.get_assistant_data(user_id, f"agent#{agent_uuid}")
     if not existing_data:
         raise HTTPException(status_code=404, detail="Agent not found")
 
@@ -177,7 +176,7 @@ async def edit_agent(agent_uuid: str, agent_data: CreateAssistantPayload):
     assistant_prompts = agent_data.assistant_prompts
 
     redis_task = asyncio.create_task(redis_client.set(agent_uuid, json.dumps(updated_data)))
-    dynamodb_task = asyncio.create_task(dynamodb.store_agent(user_id, f"agent#{agent_uuid}", updated_data))
+    dynamodb_task = asyncio.create_task(dynamodb.store_agent_data(user_id, f"agent#{agent_uuid}", updated_data))
     background_process_and_store_task = asyncio.create_task(
         background_process_and_store(updated_data['tasks'][0]['tools_config']['llm_agent']['agent_flow_type'],
                                      assistant_prompts.dict(), agent_uuid, user_id, tasks=updated_data['tasks']))
@@ -202,12 +201,38 @@ async def create_agent(agent_data: AssistantModel):
     user_id = get_user_id()
     redis_task = asyncio.create_task(redis_client.set(agent_uuid, agent_data.json()))
     dynamodb_task = asyncio.create_task(
-        dynamodb.store_agent(user_id, f"agent#{agent_uuid}", json.loads(agent_data.json())))
+        dynamodb.store_agent_data(user_id, f"agent#{agent_uuid}", json.loads(agent_data.json())))
     await asyncio.gather(redis_task, dynamodb_task)
     # response = requests.get('http://twilio-app:8001/make_call?agent_uuid={}'.format(agent_uuid))
 
     return {"agent_id": "{}".format(agent_uuid), "state": "created"}
 
+@app.get("/assistant/analytics")
+async def get_files(user_id: str, assistant_id: str):
+    try:
+        agent_analytics = await dynamodb.get_assistant_data(user_id, assistant_id, True)
+        logger.info(f"Found high level assistant analytics {agent_analytics} ")
+        return {
+            "data": agent_analytics
+        }
+    except HTTPException as e:
+        return e.detail
+
+
+@app.get("/assistant/executions")
+async def get_runs(user_id: str, assistant_id: str):
+    try:
+        logger.info(f"user id {user_id} assistant_id {assistant_id}")
+        agent_analytics = await dynamodb.get_all_executions_for_assistant(user_id, assistant_id)
+        logger.info(f"Found high level assistant analytics {agent_analytics} ")
+        return {
+            "data": agent_analytics
+        }
+    except HTTPException as e:
+        return e.detail
+
+
+##### Websocket
 
 @app.websocket("/chat/v1/{user_id}/{agent_id}")
 async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket, user_agent: str = Query(None)):
@@ -224,7 +249,7 @@ async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket, 
         if retrieved_agent_config is None:
             logger.info(
                 "Could not retreive config from redis. So, simply retreiving it from DB and dumping it to redis")
-            retrieved_agent_config = await dynamodb.get_agent_data(user_id, f"agent#{agent_id}")
+            retrieved_agent_config = await dynamodb.get_assistant_data(user_id, f"agent#{agent_id}")
             redis_task = asyncio.create_task(redis_client.set(agent_id, json.dumps(retrieved_agent_config)))
 
         agent_config, context_data = json.loads(retrieved_agent_config), json.loads(
@@ -243,7 +268,7 @@ async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket, 
     cost_breakdown = {
         "transcriber": 0,
         "llm": 0,
-        "synth": 0,
+        "synthesizer": 0,
         "network": 0
     }
     usage_breakdown = {
@@ -260,6 +285,7 @@ async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket, 
             "synthesizerCharacters": 0
     }
 
+    assistant_analytics_input = None
     try:
         async for index, task_output in agent_manager.run():
             if index == 0:
@@ -277,19 +303,21 @@ async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket, 
                         cost_per_output_token = pricing["llm"][llm_model]["output"], model =llm_model, check_for_completion = check_for_completion, 
                         ended_by_assistant = task_output["ended_by_assistant"], completion_input_token_cost = pricing["llm"][completion_model]["input"], 
                         completion_output_token_cost = pricing["llm"][completion_model]["output"])
-                cost_breakdown["synth"] = round(task_output["synthesizer_characters"] * pricing["tts"]["polly-neural"], 5)
+                cost_breakdown["synthesizer"] = round(task_output["synthesizer_characters"] * pricing["tts"]["polly-neural"], 5)
                 cost_breakdown["transcriber"] = round(task_output["transcriber_duration"]/60 * pricing["asr"]["nova-2"], 5)
+                total_cost = round(cost_breakdown["llm"], 5) + cost_breakdown["synthesizer"] + cost_breakdown["transcriber"] 
                 messages = format_messages(messages)
-
+                
                 agent_run_details = {
                     "transcript": messages,
-                    "conversation_time": task_output["conversation_time"],
+                    "conversation_time": round(task_output["conversation_time"], 3),
                     "usage_breakdown": usage_breakdown,
                     "cost_breakdown": cost_breakdown,
                     "createdAt": datetime.now(timezone.utc).isoformat(),
-                    "updatedAt": datetime.now(timezone.utc).isoformat()
-
+                    "updatedAt": datetime.now(timezone.utc).isoformat(),
+                    "total_cost": total_cost
                 }
+                assistant_analytics_input = agent_run_details
                 conversation_data = messages
                 logger.info(f"storing conversation task output {agent_run_details}")
                 await dynamodb.store_run(user_id, agent_id, task_output["run_id"], agent_run_details)
@@ -299,10 +327,13 @@ async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket, 
                     model  = agent_config["tasks"][index]["tools_config"]["llm_agent"]["streaming_model"]
                     input_tokens = token_counter(model=model, text=conversation_data)
                     output_tokens = token_counter(model=model, text=json.dumps(task_output["extracted_data"]))
-                    cost_breakdown["llm"] += round(input_tokens * pricing["llm"][model]["input"] + output_tokens * pricing["llm"][model]["output"], 5)
+                    task_cost = round(input_tokens * pricing["llm"][model]["input"] + output_tokens * pricing["llm"][model]["output"], 5)
+                    cost_breakdown["llm"] += task_cost
+                    assistant_analytics_input["total_cost"] += task_cost
                     if model not in usage_breakdown["llmModel"]:
                         usage_breakdown["llmModel"][model] = {"input": 0, "output": 0}
                     
+                    total_cost = round(cost_breakdown["llm"] )
                     usage_breakdown["llmModel"][model]["input"] += input_tokens
                     usage_breakdown["llmModel"][model]["output"] += output_tokens
 
@@ -310,17 +341,19 @@ async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket, 
                         "extracted_data": task_output["extracted_data"], 
                         "cost_breakdown": cost_breakdown,
                         "usage_breakdown": usage_breakdown,
-                        "updatedAt": datetime.now(timezone.utc).isoformat()
-
+                        "updatedAt": datetime.now(timezone.utc).isoformat(),
+                        "total_cost": assistant_analytics_input["total_cost"]
                     }
-                
+                    assistant_analytics_input = {**assistant_analytics_input, **agent_run_details}
                     await dynamodb.update_run(user_id, agent_id, task_output["run_id"], agent_run_details)
 
                 elif task_output["task_type"] == "summarization":
                     model  = agent_config["tasks"][index]["tools_config"]["llm_agent"]["streaming_model"]
                     input_tokens = token_counter(model=model, text=conversation_data)
                     output_tokens = token_counter(model=model, text=task_output["summary"])
-                    cost_breakdown["llm"] = round(input_tokens * pricing["llm"][model]["input"] + output_tokens * pricing["llm"][model]["output"], 5)
+                    task_cost = round(input_tokens * pricing["llm"][model]["input"] + output_tokens * pricing["llm"][model]["output"], 5)
+                    cost_breakdown["llm"] += task_cost
+                    assistant_analytics_input["total_cost"] += task_cost
 
                     if model not in usage_breakdown["llmModel"]:
                         usage_breakdown["llmModel"][model] = {"input": 0, "output": 0}
@@ -332,13 +365,18 @@ async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket, 
                         "summary": task_output["summary"], 
                         "cost_breakdown": cost_breakdown,
                         "usage_breakdown": usage_breakdown,
-                        "updatedAt": datetime.now(timezone.utc).isoformat()
+                        "updatedAt": datetime.now(timezone.utc).isoformat(),
+                        "total_cost": assistant_analytics_input["total_cost"]
                     }
-
+                    assistant_analytics_input = {**assistant_analytics_input, **agent_run_details}
                     await dynamodb.update_run(user_id, agent_id, task_output["run_id"], {"summary": task_output["summary"], "cost_breakdown": cost_breakdown})
+        logger.info(f"assitant_run_details {assistant_analytics_input}")
 
-                logger.info(f"storing followup task in database {task_output}")
-
+        agent_analytics = await dynamodb.get_assistant_data(user_id, agent_id, True)
+        logger.info(f"agent_analytics {agent_analytics}")
+        high_level_analytics_object = update_high_level_assistant_analytics_data(None, assistant_analytics_input)
+        logger.info(f"high_level_analytics_object {high_level_analytics_object}")
+        await dynamodb.store_agent_data(user_id, f"analytics#{agent_id}", high_level_analytics_object)
     except WebSocketDisconnect:
         active_websockets.remove(websocket)
     except Exception as e:
