@@ -273,7 +273,7 @@ class TaskManager:
                     self._synthesize(create_ws_data_packet(text_chunk, meta_info, is_md5_hash=True))))
             else:
                 # TODO Make it more modular
-                llm_response += text_chunk
+                llm_response += " " + text_chunk
                 next_step = self._get_next_step(sequence, "llm")
                 if next_step == "synthesizer":
                     task = asyncio.gather(self._synthesize(create_ws_data_packet(text_chunk, meta_info)))
