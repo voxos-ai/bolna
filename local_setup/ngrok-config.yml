@@ -1,10 +1,10 @@
 region: us
 version: '2'
-authtoken: 2Zkr057AqQV9mz3PVw9mRCmzOvg_55oFTqD9vSrnN5UnPxweo
+authtoken: <auth-token>
 tunnels:
   twilio-app:
     addr: twilio-app:8001
     proto: http
   bolna-app:
-    addr: host.docker.internal:5001
+    addr: bolna-app:5001
     proto: http
