@@ -1,50 +1,23 @@
+import os
+import asyncio
+import json
+import uuid
+import traceback
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from typing import List
-import sys, os
-import uuid
 import redis.asyncio as redis
 from dotenv import load_dotenv
 from bolna.agent_manager import AssistantManager
-import traceback
-import json
-from bolna.helpers.logger_config import configure_logger
-import asyncio
+from bolna.helpers.logger_config import CustomLogger
+from bolna.helpers.utils import setenv, getenv
+from bolna.models import AssistantModel
 
-
-logger = configure_logger(__name__)
-
+custom_logger = CustomLogger(__name__)
 load_dotenv()
-redis_pool = redis.ConnectionPool.from_url(os.getenv('REDIS_URL'), decode_responses=True)
+redis_pool = redis.ConnectionPool.from_url(getenv('REDIS_URL'), decode_responses=True)
 redis_client = redis.Redis.from_pool(redis_pool)
 active_websockets: List[WebSocket] = []
 app = FastAPI()
-
-
-try:
-    logger.info(sys.version)
-    logger.info(f"Nogil python state {sys.flags.nogil}")
-except Exception as e:
-    logger.info("Nogil python not available, hence threads will run with GIL:")
-
-
-def create_agent(agent_name, tasks):
-    # TODO Persist agent
-    agent_config = {
-        "assistant_name": agent_name,
-        "tasks": tasks
-    }
-    return agent_config
-
-
-@app.on_event("startup")
-async def startup_event():
-    pass
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    await redis_client.aclose()
-    pass
 
 
 @app.post("/create_agent")
@@ -58,9 +31,11 @@ async def create_agent(agent_data: AssistantModel):
 
 @app.websocket("/chat/v1/{user_id}/{agent_id}")
 async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket):
-    logger.info("Connected to ws")
+    log_dir_name = '{}-{}'.format(user_id, agent_id)
+    logger = custom_logger.update_logger(log_dir_name=log_dir_name)
     await websocket.accept()
     active_websockets.append(websocket)
+    logger.info('ws connected')
 
     agent_config, context_data = None, None
     try:
@@ -70,7 +45,7 @@ async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket):
         raise HTTPException(status_code=404, detail="Agent not found")
 
     is_local = True
-    agent_manager = AssistantManager(agent_config, websocket, context_data, user_id, agent_id)
+    agent_manager = AssistantManager(agent_config, websocket, context_data, user_id, agent_id, log_dir_name)
 
     try:
         await agent_manager.run(is_local)
@@ -78,4 +53,4 @@ async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket):
         active_websockets.remove(websocket)
     except Exception as e:
         traceback.print_exc()
-        logger.error(f"error in executing {e}")
+        custom_logger.logger.error(f"error in executing {e}")
