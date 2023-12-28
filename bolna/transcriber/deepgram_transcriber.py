@@ -84,9 +84,9 @@ class DeepgramTranscriber(BaseTranscriber):
                 self.meta_info = ws_data_packet.get('meta_info')
                 if self.stream:
                     await asyncio.gather(ws.send(audio_data))
-                else:
-                    transcription = await self._get_http_transcription(audio_data)
-                    yield transcription
+                # else:
+                #     transcription = await self._get_http_transcription(audio_data)
+                #     yield transcription
         except Exception as e:
             self.logger.error('Error while sending: ' + str(e))
             raise Exception("Something went wrong")
