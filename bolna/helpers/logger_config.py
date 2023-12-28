@@ -3,7 +3,7 @@ import sys
 import os
 
 VALID_LOGGING_LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-FORMAT = "%(asctime)s.%(msecs)03d %(levelname)s {%(module)s} [%(filename)s] [%(funcName)s] %(message)s"
+FORMAT = "%(asctime)s.%(msecs)03d %(log_dir)s %(levelname)s {%(module)s} [%(filename)s] [%(funcName)s] %(message)s"
 
 
 class CustomLogger:
@@ -13,6 +13,7 @@ class CustomLogger:
         self.logging_level = logging_level
         self.log_dir = None
         self.logger = self.configure_logger()
+        self.old_factory = None
 
     def configure_logger(self):
         if self.logging_level not in VALID_LOGGING_LEVELS:
@@ -23,10 +24,11 @@ class CustomLogger:
 
         logging_handlers = [logging.StreamHandler()]
         if self.log_dir:
-            logging_handlers.append(logging.FileHandler('{}.log'.format(self.log_dir), mode='w'))
+            logging_handlers.append(logging.FileHandler('{}/{}.log'.format(self.log_dir, self.logger_name), mode='w'))
 
         logger.handlers = []
         formatter = logging.Formatter(FORMAT, datefmt="%Y-%m-%d %H:%M:%S")
+        self.old_factory = logging.getLogRecordFactory()
         for handler in logging_handlers:
             handler.setFormatter(formatter)
             logger.addHandler(handler)
@@ -38,7 +40,13 @@ class CustomLogger:
     def update_logger(self, log_dir_name=None):
         if log_dir_name:
             self.log_dir = log_dir_name
-            # if not os.path.exists(self.log_dir):
-            #     os.makedirs(self.log_dir)
+            if not os.path.exists(self.log_dir):
+                os.makedirs(self.log_dir)
+            logging.setLogRecordFactory(self.record_factory)
             self.logger = self.configure_logger()
         return self.logger
+
+    def record_factory(self, *args, **kwargs):
+        record = logging.LogRecord(*args, **kwargs)
+        record.log_dir = self.log_dir
+        return record
