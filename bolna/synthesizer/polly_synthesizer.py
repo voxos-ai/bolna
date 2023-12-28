@@ -11,13 +11,12 @@ load_dotenv()
 
 
 class PollySynthesizer(BaseSynthesizer):
-    def __init__(self, model, audio_format, voice, language, sampling_rate, stream=False, buffer_size=400):
+    def __init__(self, voice, language, audio_format = "mp3", sampling_rate = "22000", stream=False, engine = "neural", buffer_size=400):
         super().__init__(stream, buffer_size)
-        self.model = model
+        self.engine = engine
         self.format = audio_format
-        #self.voice = voice
-        self.voice = "Kajal"
-        self.language = '{}-IN'.format(language)
+        self.voice = voice
+        self.language = language
         self.sample_rate = sampling_rate
 
         # @TODO: initialize client here
@@ -34,9 +33,10 @@ class PollySynthesizer(BaseSynthesizer):
 
         async with AsyncExitStack() as exit_stack:
             polly = await self.create_client("polly", session, exit_stack)
+            logger.info(f"Generating TTS response for text: {text}, SampleRate {self.sample_rate}")
             try:
                 response = await polly.synthesize_speech(
-                    Engine='neural',
+                    Engine=self.engine,
                     Text=text,
                     OutputFormat=self.format,
                     VoiceId=self.voice,
@@ -47,6 +47,7 @@ class PollySynthesizer(BaseSynthesizer):
                 logger.error(error)
             else:
                 yield await response["AudioStream"].read()
+
 
     async def generate(self, text):
         try:

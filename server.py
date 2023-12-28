@@ -16,9 +16,10 @@ from bolna.helpers.logger_config import configure_logger
 from bolna.models import *
 from litellm import token_counter
 from datetime import datetime, timezone
-
+from models import VoiceRequestModel, CreateAssistantPayload, CreateUserModel, AddVoiceModel, VoiceRequestModel, DEFAULT_VOICES
 from bolna.agent_manager.assistant_manager import AssistantManager
 from database.dynamodb import DynamoDB
+import base64
 
 load_dotenv()
 logger = configure_logger(__name__, True)
@@ -232,8 +233,63 @@ async def get_runs(user_id: str, assistant_id: str):
         return e.detail
 
 
-##### Websocket
+##### User Level endpoints
+@app.post("/tts")
+async def get_voice_demo(tts_request: VoiceRequestModel):
+    tts_request = tts_request.dict()
+    logger.info(f"Generating audio for tts request {tts_request}")
+    synthesizer_class = SUPPORTED_SYNTHESIZER_MODELS.get(tts_request['provider'])
+    text = tts_request.pop('text')
+    synthesizer = synthesizer_class(stream = False, **tts_request["provider_config"])
+    audio = None
+    async for message in synthesizer.generate(text):
+        logger.info(f"Got message")
+        audio = message
+        base64_audio_frame = base64.b64encode(audio).decode('utf-8')
+    return {
+        "data": base64_audio_frame
+    }
 
+@app.get("/user/voices")
+async def get_voices(user_id: str):
+    try:
+        user_details = await dynamodb.get_user(user_id)
+        logger.info(f"user voices {user_details['voices']} ")
+        return user_details['voices']
+    except HTTPException as e:
+        return e.detail
+
+@app.post("/user/voice")
+async def add_voices(user_voice: AddVoiceModel):
+    try:
+        logger.info(f"user id {user_voice.user_id} voice {user_voice.dict()}")
+        user_details = await dynamodb.add_voice(user_voice.user_id, user_voice.voice.dict())
+        return {
+            "message": "added"
+        }
+    except HTTPException as e:
+        return e.detail
+
+@app.post("/user")
+async def store_user(user: CreateUserModel):
+    try:
+        
+        user_details = {
+            "wallet": user.user_id,
+            "voices": DEFAULT_VOICES
+        }
+
+        agent_analytics = await dynamodb.store_user(user.user_id, user_details)
+        return {
+            "data": agent_analytics
+        }
+    except HTTPException as e:
+        return e.detail
+
+
+############################################################################################# 
+# Websocket
+#############################################################################################
 @app.websocket("/chat/v1/{user_id}/{agent_id}")
 async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket, user_agent: str = Query(None)):
     logger.info("Connected to ws")
@@ -374,7 +430,7 @@ async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket, 
 
         agent_analytics = await dynamodb.get_assistant_data(user_id, agent_id, True)
         logger.info(f"agent_analytics {agent_analytics}")
-        high_level_analytics_object = update_high_level_assistant_analytics_data(None, assistant_analytics_input)
+        high_level_analytics_object = update_high_level_assistant_analytics_data(agent_analytics, assistant_analytics_input)
         logger.info(f"high_level_analytics_object {high_level_analytics_object}")
         await dynamodb.store_agent_data(user_id, f"analytics#{agent_id}", high_level_analytics_object)
     except WebSocketDisconnect:

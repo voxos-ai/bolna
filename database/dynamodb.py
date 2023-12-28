@@ -75,8 +75,7 @@ class DynamoDB(BaseDatabase):
                 'user_id': user_id,
                 'range': run_id
             }
-
-            update_expression = UpdateExpression()
+    
 
             ue = None
             for field_name, value in update_parameters.items():
@@ -150,4 +149,52 @@ class DynamoDB(BaseDatabase):
             return None
         except Exception as e:
             logger.error(f"Error executing query {user_id}, {agent_id} analytics {analytics}")
+            return None
+    
+    async def get_user(self, user_id):
+        table = await self.get_table()
+        try:
+            key = {'user_id': user_id, 'range': "user_details"}
+            user_details = await table.get_item(key=key)
+
+            return user_details if user_details is not None else None
+
+        except ClientError as e:
+            print(f"An error occurred: {e}")
+            return None
+        except ItemNotFound as e:
+            logger.error(f"Could not find item with {user_id}, {agent_id} analytics {analytics}")
+            return None
+        except Exception as e:
+            logger.error(f"Error executing query {user_id}, {agent_id} analytics {analytics}")
+            return None
+    
+    async def store_user(self, user_id, user):
+        table = await self.get_table()
+        logger.info(f"agent_data {type(user)}  {user}")
+        try:
+            response = await table.put_item(
+                {
+                    'user_id': str(user_id),
+                    'range': "user_details",
+                    **user
+                }
+            )
+            return response
+        except ClientError as e:
+            print(f"An error occurred: {e}")
+            return None
+    
+    async def add_voice(self, user_id, voice):
+        table = await self.get_table()
+        try:
+            logger.info(f"User id {user_id}, voice {voice}")
+            key = {'user_id': user_id, 'range': "user_details"}
+            response = await table.update_item(
+                key,
+                update_expression = F('voices').append([voice])
+            )
+            return response
+        except ClientError as e:
+            print(f"An error occurred: {e}")
             return None
