@@ -34,6 +34,6 @@ class DefaultOutputHandler:
                 await self.websocket.send_json(response)
 
             else:
-                logger.error("Other modalities are not implemented yet")
+                self.logger.error("Other modalities are not implemented yet")
         except Exception as e:
-            logger.error(f"something went wrong in speaking {e}")
+            self.logger.error(f"something went wrong in speaking {e}")

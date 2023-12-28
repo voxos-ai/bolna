@@ -304,7 +304,7 @@ class TaskManager(BaseManager):
 
         async for text_chunk in self.tools['llm_agent'].generate(self.history, synthesize=True):
             self.logger.info(f"###### time to get the first chunk {time.time() - start_time} {text_chunk}")
-            llm_response += text_chunk
+            llm_response += " " + text_chunk
             next_step = self._get_next_step(sequence, "llm")
             if self.stream:
                 await self._handle_llm_output(next_step, text_chunk, should_bypass_synth, meta_info)

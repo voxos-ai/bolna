@@ -9,12 +9,11 @@ import redis.asyncio as redis
 from dotenv import load_dotenv
 from bolna.agent_manager import AssistantManager
 from bolna.helpers.logger_config import CustomLogger
-from bolna.helpers.utils import setenv, getenv
 from bolna.models import AssistantModel
 
 custom_logger = CustomLogger(__name__)
 load_dotenv()
-redis_pool = redis.ConnectionPool.from_url(getenv('REDIS_URL'), decode_responses=True)
+redis_pool = redis.ConnectionPool.from_url(os.getenv('REDIS_URL'), decode_responses=True)
 redis_client = redis.Redis.from_pool(redis_pool)
 active_websockets: List[WebSocket] = []
 app = FastAPI()
