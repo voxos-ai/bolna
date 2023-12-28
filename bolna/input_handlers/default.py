@@ -1,15 +1,16 @@
 import asyncio
 import base64
 from dotenv import load_dotenv
-from bolna.helpers.logger_config import configure_logger
+from bolna.helpers.logger_config import CustomLogger
 from bolna.helpers.utils import create_ws_data_packet
 
-logger = configure_logger(__name__)
+custom_logger = CustomLogger(__name__)
 load_dotenv()
 
 
 class DefaultInputHandler:
-    def __init__(self, queues=None, websocket=None, input_types=None, mark_set=None, connected_through_dashboard=False):
+    def __init__(self, queues=None, websocket=None, input_types=None, mark_set=None, connected_through_dashboard=False,
+                 log_dir_name=None):
         self.queues = queues
         self.websocket = websocket
         self.input_types = input_types
@@ -17,12 +18,14 @@ class DefaultInputHandler:
         self.running = True
         self.connected_through_dashboard = connected_through_dashboard
 
+        self.logger = custom_logger.update_logger(log_dir_name=log_dir_name)
+
     async def stop_handler(self):
         self.running = False
         try:
             await self.websocket.close()
         except Exception as e:
-            logger.error(f"Error closing WebSocket: {e}")
+            self.logger.error(f"Error closing WebSocket: {e}")
 
     async def _listen(self):
         try:
@@ -30,12 +33,12 @@ class DefaultInputHandler:
                 request = await self.websocket.receive_json()
 
                 if request['type'] not in self.input_types.keys() and not self.connected_through_dashboard:
-                    logger.info(f"straight away returning")
+                    self.logger.info(f"straight away returning")
                     return {"message": "invalid input type"}
 
                 if request['type'] == 'audio':
                     data = base64.b64decode(request['data'])
-                    logger.info(f"Got data {data}")
+                    self.logger.info(f"Got data {data}")
                     ws_data_packet = create_ws_data_packet(
                         data=data,
                         meta_info={
@@ -47,14 +50,14 @@ class DefaultInputHandler:
                     file_path = "received_audio.webm"  # Replace with your desired file path
                     with open(file_path, 'wb') as file:
                         file.write(data)
-                    logger.info(f"Saved audio data to {file_path}")
+                    self.logger.info(f"Saved audio data to {file_path}")
 
                     self.queues['transcriber'].put_nowait(ws_data_packet)
 
                 elif request["type"] == "text":
-                    logger.info(f"Received text: {request['data']}")
+                    self.logger.info(f"Received text: {request['data']}")
                     data = request['data']
-                    logger.info(f"Sequences {self.input_types}")
+                    self.logger.info(f"Sequences {self.input_types}")
                     ws_data_packet = create_ws_data_packet(
                         data=data,
                         meta_info={
@@ -68,7 +71,7 @@ class DefaultInputHandler:
                         ws_data_packet["meta_info"]["bypass_synth"] = True
 
                     self.queues['llm'].put_nowait(ws_data_packet)
-                    logger.info(f"Put into llm queue")
+                    self.logger.info(f"Put into llm queue")
                 else:
                     return {"message": "Other modalities not implemented yet"}
         except Exception as e:
@@ -80,7 +83,7 @@ class DefaultInputHandler:
                     'eos': True
                 })
             self.queues['transcriber'].put_nowait(ws_data_packet)
-            logger.info(f"Error while handling websocket message: {e}")
+            self.logger.info(f"Error while handling websocket message: {e}")
             return
 
     async def handle(self):

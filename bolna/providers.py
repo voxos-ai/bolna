@@ -1,7 +1,7 @@
 from .synthesizer import PollySynthesizer, XTTSSynthesizer
 from .transcriber import DeepgramTranscriber
 from .input_handlers import DefaultInputHandler, TwilioInputHandler
-from .output_handlers import DefaultOutputHandler, TwilioOutputHandler, DatabaseOutputHandler
+from .output_handlers import DefaultOutputHandler, TwilioOutputHandler
 from .llms import OpenAiLLM, LiteLLM
 
 SUPPORTED_SYNTHESIZER_MODELS = {
@@ -22,6 +22,5 @@ SUPPORTED_INPUT_HANDLERS = {
 }
 SUPPORTED_OUTPUT_HANDLERS = {
     'default': DefaultOutputHandler,
-    'twilio': TwilioOutputHandler,
-    'database': DatabaseOutputHandler
+    'twilio': TwilioOutputHandler
 }

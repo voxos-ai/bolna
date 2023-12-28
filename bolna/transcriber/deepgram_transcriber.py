@@ -6,16 +6,16 @@ import aiohttp
 import time
 from dotenv import load_dotenv
 from .base_transcriber import BaseTranscriber
-from bolna.helpers.logger_config import configure_logger
+from bolna.helpers.logger_config import CustomLogger
 from bolna.helpers.utils import create_ws_data_packet
 
-logger = configure_logger(__name__)
+custom_logger = CustomLogger(__name__)
 load_dotenv()
 
 
 class DeepgramTranscriber(BaseTranscriber):
-    def __init__(self, provider, input_queue=None, model='deepgram', stream=True, language="en", endpointing="400"):
-        super().__init__(input_queue)
+    def __init__(self, provider, input_queue=None, model='deepgram', stream=True, language="en", endpointing="400", log_dir_name=None):
+        super().__init__(input_queue, log_dir_name)
         self.endpointing = endpointing
         self.language = language
         self.stream = stream
@@ -50,7 +50,7 @@ class DeepgramTranscriber(BaseTranscriber):
                 await ws.send(json.dumps(data))
                 await asyncio.sleep(5)  # Send a heartbeat message every 5 seconds
         except Exception as e:
-            logger.error('Error while sending: ' + str(e))
+            self.logger.error('Error while sending: ' + str(e))
             raise Exception("Something went wrong while sending heartbeats to {}".format(self.model))
 
     async def toggle_connection(self):
@@ -69,7 +69,7 @@ class DeepgramTranscriber(BaseTranscriber):
             async with session.post(self.api_url, data=audio_data, headers=headers) as response:
                 response_data = await response.json()
                 transcript = response_data["results"]["channels"][0]["alternatives"][0]["transcript"]
-                logger.info(f"transcript {transcript} total time {time.time() - start_time}")
+                self.logger.info(f"transcript {transcript} total time {time.time() - start_time}")
                 return create_ws_data_packet(transcript, self.meta_info)
 
     async def sender(self, ws=None):
@@ -88,7 +88,7 @@ class DeepgramTranscriber(BaseTranscriber):
                     transcription = await self._get_http_transcription(audio_data)
                     yield transcription
         except Exception as e:
-            logger.error('Error while sending: ' + str(e))
+            self.logger.error('Error while sending: ' + str(e))
             raise Exception("Something went wrong")
 
     async def receiver(self, ws):
@@ -97,7 +97,7 @@ class DeepgramTranscriber(BaseTranscriber):
             try:
                 msg = json.loads(msg)
                 if msg['type'] == "Metadata":
-                    logger.info(f"Got a summary object")
+                    self.logger.info(f"Got a summary object")
                     yield create_ws_data_packet("transcriber_connection_closed", self.meta_info)
                     return
 
@@ -113,7 +113,7 @@ class DeepgramTranscriber(BaseTranscriber):
 
                 if (msg["speech_final"] and self.callee_speaking) or not self.stream:
                     yield create_ws_data_packet(curr_message, self.meta_info)
-                    logger.info('User: {}'.format(curr_message))
+                    self.logger.info('User: {}'.format(curr_message))
                     curr_message = ""
                     yield create_ws_data_packet("TRANSCRIBER_END", self.meta_info)
                     self.callee_speaking = False
@@ -121,7 +121,7 @@ class DeepgramTranscriber(BaseTranscriber):
                     self.previous_request_id = self.current_request_id
                     self.current_request_id = None
             except Exception as e:
-                logger.error(f"Error while getting transcriptions {e}")
+                self.logger.error(f"Error while getting transcriptions {e}")
                 yield create_ws_data_packet("TRANSCRIBER_END", self.meta_info)
 
     def deepgram_connect(self):
@@ -131,6 +131,7 @@ class DeepgramTranscriber(BaseTranscriber):
         }
         deepgram_ws = websockets.connect(websocket_url, extra_headers=extra_headers)
 
+        self.logger.info('got here')
         return deepgram_ws
 
     async def transcribe(self):
@@ -142,7 +143,7 @@ class DeepgramTranscriber(BaseTranscriber):
                     if self.connection_on:
                         yield message
                     else:
-                        logger.info("Closing the connection")
+                        self.logger.info("Closing the connection")
                         await self._close(deepgram_ws, data={"type": "CloseStream"})
             else:
                 async for message in self.sender():

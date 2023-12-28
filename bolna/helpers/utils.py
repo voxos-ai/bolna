@@ -11,10 +11,11 @@ from aiobotocore.session import AioSession
 from contextlib import AsyncExitStack
 from dotenv import load_dotenv
 
-from .logger_config import configure_logger
+from .logger_config import CustomLogger
 from bolna.constants import PREPROCESS_DIR
 
-logger = configure_logger(__name__)
+custom_logger = CustomLogger(__name__)
+logger = custom_logger.update_logger()
 load_dotenv()
 BUCKET_NAME = os.getenv('BUCKET_NAME')
 

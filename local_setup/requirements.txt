@@ -1,4 +1,0 @@
-git+https://github.com/bolna-ai/bolna@master
-python-dotenv==1.0.0
-fastapi==0.95.1
-redis==5.0.1

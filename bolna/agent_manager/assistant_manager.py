@@ -6,7 +6,7 @@ from twilio.rest import Client
 import requests
 import tiktoken
 from bolna.agent_manager import TaskManager
-from bolna.helpers.logger_config import configure_logger
+from .base_manager import BaseManager
 
 # Find your Account SID and Auth Token at twilio.com/console
 # and set the environment variables. See http://twil.io/secure
@@ -15,12 +15,12 @@ auth_token = os.environ['TWILIO_AUTH_TOKEN']
 client = Client(account_sid, auth_token)
 enc = tiktoken.get_encoding("cl100k_base")
 
-logger = configure_logger(__name__)
 
-
-class AssistantManager:
-    def __init__(self, agent_config, ws, context_data=None, user_id=None, assistant_id=None):
+class AssistantManager(BaseManager):
+    def __init__(self, agent_config, ws, context_data=None, user_id=None, assistant_id=None, log_dir_name=None):
         # Set up communication queues between processes
+        super().__init__(log_dir_name=log_dir_name)
+        self.log_dir_name = log_dir_name
         self.tools = {}
         self.websocket = ws
         self.agent_config = agent_config
@@ -59,7 +59,7 @@ class AssistantManager:
 
     async def _save_meta(self, call_sid, stream_sid, messages, transcriber_characters, synthesizer_characters,
                          label_flow):
-        logger.info(f"call sid {call_sid}, stream_sid {stream_sid}")
+        self.logger.info(f"call sid {call_sid}, stream_sid {stream_sid}")
         # transcriber_cost = time * 0.0043/ 60
         # telephony_cost = cost
         # llm_cost = input_tokens  * price + output_tokens * price
@@ -76,9 +76,9 @@ class AssistantManager:
         recording = client.recordings.list(call_sid=call_sid)[0]
         call_meta["recording_url"] = recordings.media_url
         call_meta["tts_cost"] = 0 if self.tasks[0]['tools_config']['synthesizer']['model'] != "polly" else (
-                    synthesizer_characters * 16 / 1000000)
+                synthesizer_characters * 16 / 1000000)
         call_meta["llm_cost"] = self.find_llm_input_token_price(messages) + self.find_llm_output_token_price(label_flow)
-        logger.info(f"Saving call meta {call_meta}")
+        self.logger.info(f"Saving call meta {call_meta}")
         await self.dynamodb.store_run(self.user_id, self.assistant_id, self.run_id, call_meta)
 
     async def download_record_from_twilio_and_save_to_s3(self, recording_url):
@@ -100,14 +100,15 @@ class AssistantManager:
         for task_id, task in enumerate(self.tasks):
             task_manager = TaskManager(self.agent_config["assistant_name"], task_id, task, self.websocket,
                                        context_data=self.context_data, input_parameters=input_parameters,
-                                       user_id=self.user_id, assistant_id=self.assistant_id, run_id=self.run_id)
+                                       user_id=self.user_id, assistant_id=self.assistant_id, run_id=self.run_id,
+                                       log_dir_name=self.log_dir_name)
             await task_manager.load_prompt(self.agent_config["assistant_name"], task_id, is_local=is_local)
             input_parameters = await task_manager.run()
-            logger.info(f"Got parameters {input_parameters}")
+            self.logger.info(f"Got parameters {input_parameters}")
             self.task_states[task_id] = True
         if input_parameters['call_sid'] is not None:
             await self._save_meta(input_parameters['call_sid'], input_parameters['stream_sid'],
                                   input_parameters['messages'], input_parameters['transcriber_characters'],
                                   input_parameters['synthesizer_characters'], input_parameters["label_flow"])
 
-        logger.info("Done with execution of the agent")
+        self.logger.info("Done with execution of the agent")

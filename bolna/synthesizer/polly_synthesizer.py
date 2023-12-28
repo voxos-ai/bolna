@@ -2,17 +2,15 @@ from dotenv import load_dotenv
 from botocore.exceptions import BotoCoreError, ClientError
 from aiobotocore.session import AioSession
 from contextlib import AsyncExitStack
-from bolna.helpers.logger_config import configure_logger
 from .base_synthesizer import BaseSynthesizer
 
 
-logger = configure_logger(__name__)
 load_dotenv()
 
 
 class PollySynthesizer(BaseSynthesizer):
-    def __init__(self, model, audio_format, voice, language, sampling_rate, stream=False, buffer_size=400):
-        super().__init__(stream, buffer_size)
+    def __init__(self, model, audio_format, voice, language, sampling_rate, stream=False, buffer_size=400, log_dir_name=None):
+        super().__init__(stream, buffer_size, log_dir_name)
         self.model = model
         self.format = audio_format
         self.voice = voice
@@ -43,7 +41,7 @@ class PollySynthesizer(BaseSynthesizer):
                     SampleRate=self.sample_rate
                 )
             except (BotoCoreError, ClientError) as error:
-                logger.error(error)
+                self.logger.error(error)
             else:
                 yield await response["AudioStream"].read()
 
@@ -53,4 +51,4 @@ class PollySynthesizer(BaseSynthesizer):
                 async for message in self.generate_tts_response(text):
                     yield message
         except Exception as e:
-            logger.error(f"Error in polly generate {e}")
+            self.logger.error(f"Error in polly generate {e}")

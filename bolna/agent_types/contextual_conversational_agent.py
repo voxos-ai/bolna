@@ -1,13 +1,12 @@
 import json
-from bolna.helpers.logger_config import configure_logger
+from .base_agent import BaseAgent
 from bolna.helpers.utils import format_messages
 from bolna.llms import OpenAiLLM
 
-logger = configure_logger(__name__)
 
-
-class StreamingContextualAgent:
-    def __init__(self, llm):
+class StreamingContextualAgent(BaseAgent):
+    def __init__(self, llm, log_dir_name=None):
+        super().__init__(log_dir_name)
         self.brain = llm
         self.conversation_completion_llm = OpenAiLLM(classification_model="gpt-3.5-turbo-1106")
         self.history = [{'content': ""}]
@@ -25,10 +24,10 @@ class StreamingContextualAgent:
         response = await self.conversation_completion_llm.generate(prompt, True, False, request_json=True)
         answer = json.loads(response)
 
-        logger.info('Agent: {}'.format(answer['answer']))
+        self.logger.info('Agent: {}'.format(answer['answer']))
         return answer['answer'].lower() == "yes"
 
     async def generate(self, history, synthesize=False):
         async for token in self.brain.generate_stream(history, synthesize=synthesize):
-            logger.info('Agent: {}'.format(token))
+            self.logger.info('Agent: {}'.format(token))
             yield token
