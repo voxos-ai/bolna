@@ -23,7 +23,7 @@ class CustomLogger:
 
         logging_handlers = [logging.StreamHandler()]
         if self.log_dir:
-            logging_handlers.append(logging.FileHandler('{}/{}.log'.format(self.log_dir, self.logger_name), mode='w'))
+            logging_handlers.append(logging.FileHandler('{}.log'.format(self.log_dir), mode='w'))
 
         logger.handlers = []
         formatter = logging.Formatter(FORMAT, datefmt="%Y-%m-%d %H:%M:%S")
@@ -38,7 +38,7 @@ class CustomLogger:
     def update_logger(self, log_dir_name=None):
         if log_dir_name:
             self.log_dir = log_dir_name
-            if not os.path.exists(self.log_dir):
-                os.makedirs(self.log_dir)
+            # if not os.path.exists(self.log_dir):
+            #     os.makedirs(self.log_dir)
             self.logger = self.configure_logger()
         return self.logger
