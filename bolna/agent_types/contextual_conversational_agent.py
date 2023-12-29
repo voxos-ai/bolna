@@ -12,7 +12,7 @@ class StreamingContextualAgent(BaseAgent):
     def __init__(self, llm, log_dir_name=None):
         super().__init__(log_dir_name)
         self.brain = llm
-        self.conversation_completion_llm = OpenAiLLM(classification_model=os.getenv('CHECK_FOR_COMPLETION_LLM'))
+        self.conversation_completion_llm = OpenAiLLM(classification_model=os.getenv('CHECK_FOR_COMPLETION_LLM', llm.classification_model))
         self.history = [{'content': ""}]
 
     async def check_for_completion(self, messages):

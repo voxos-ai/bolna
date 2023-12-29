@@ -2,7 +2,7 @@ import logging
 import os
 
 VALID_LOGGING_LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-FORMAT = "%(asctime)s.%(msecs)03d %(log_dir)s %(levelname)s {%(module)s} [%(filename)s] [%(funcName)s] %(message)s"
+FORMAT = "%(asctime)s.%(msecs)03d {log_dir} %(levelname)s {%(module)s} [%(filename)s] [%(funcName)s] %(message)s"
 
 
 class CustomLogger:
@@ -20,13 +20,15 @@ class CustomLogger:
 
         logger = logging.getLogger(self.logger_name)
         logger.setLevel(self.logging_level)
+        logger_format = FORMAT.replace('{log_dir}', '')
 
         logging_handlers = [logging.StreamHandler()]
         if self.log_dir:
             logging_handlers.append(logging.FileHandler('{}/{}.log'.format(self.log_dir, self.logger_name), mode='w'))
+            logger_format = FORMAT.format('{log_dir}', '%(log_dir)s')
 
         logger.handlers = []
-        formatter = logging.Formatter(FORMAT, datefmt="%Y-%m-%d %H:%M:%S")
+        formatter = logging.Formatter(logger_format, datefmt="%Y-%m-%d %H:%M:%S")
         self.old_factory = logging.getLogRecordFactory()
         for handler in logging_handlers:
             handler.setFormatter(formatter)

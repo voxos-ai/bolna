@@ -4,12 +4,12 @@ from aiobotocore.session import AioSession
 from contextlib import AsyncExitStack
 from .base_synthesizer import BaseSynthesizer
 
-
 load_dotenv()
 
 
 class PollySynthesizer(BaseSynthesizer):
-    def __init__(self, voice, language, audio_format = "mp3", sampling_rate = "22000", stream=False, engine = "neural", buffer_size=400, log_dir_name=None):
+    def __init__(self, voice, language, audio_format="mp3", sampling_rate="22000", stream=False, engine="neural",
+                 buffer_size=400, log_dir_name=None):
         super().__init__(stream, buffer_size, log_dir_name)
         self.engine = engine
         self.format = audio_format
@@ -20,7 +20,6 @@ class PollySynthesizer(BaseSynthesizer):
         # @TODO: initialize client here
         self.client = None
 
-    # @TODO: remove AWS client passed as params
     @staticmethod
     async def create_client(service: str, session: AioSession, exit_stack: AsyncExitStack):
         # creates AWS session from system environment credentials & config
@@ -45,7 +44,6 @@ class PollySynthesizer(BaseSynthesizer):
                 self.logger.error(error)
             else:
                 yield await response["AudioStream"].read()
-
 
     async def generate(self, text):
         try:

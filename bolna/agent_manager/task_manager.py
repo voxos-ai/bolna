@@ -54,7 +54,6 @@ class TaskManager(BaseManager):
             "llm": self.llm_queue,
             "synthesizer": self.synthesizer_queue
         }
-        
 
         if task_id == 0:
             if self.task_config["tools_config"]["input"]["provider"] in SUPPORTED_INPUT_HANDLERS.keys():
@@ -136,7 +135,9 @@ class TaskManager(BaseManager):
 
         self.history = [self.system_prompt]
 
-        llm_config = {"streaming_model": self.task_config["tools_config"]["llm_agent"]["streaming_model"]}
+        llm_config = {"streaming_model": self.task_config["tools_config"]["llm_agent"]["streaming_model"],
+                      "classification_model": self.task_config["tools_config"]["llm_agent"]["classification_model"]
+        }
 
         if self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "preprocessed":
             llm_config["classification_model"] = self.task_config["tools_config"]["llm_agent"]["classification_model"]
@@ -475,7 +476,7 @@ class TaskManager(BaseManager):
                             self.synthesizer_tasks = []
                         continue
                     elif message['data'] == "TRANSCRIBER_END":
-                        self.transcription_characters += len(transcriber_message)
+                        #self.transcription_characters += len(transcriber_message)
                         self.logger.info("END and gerring the next step")
                         next_task = self._get_next_step(sequence, "transcriber")
                         self.logger.info(f'got the next task {next_task}')
@@ -607,16 +608,15 @@ class TaskManager(BaseManager):
 
             return output
 
-
-def handle_cancellation(message):
-    try:
-        # Cancel all tasks on cancellation
-        tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
-        self.logger.info(f"tasks {len(tasks)}")
-        for task in tasks:
-            self.logger.info(f"Cancelling task {task.get_name()}")
-            task.cancel()
-        self.logger.info(message)
-    except Exception as e:
-        traceback.print_exc()
-        logger
+    def handle_cancellation(self, message):
+        try:
+            # Cancel all tasks on cancellation
+            tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+            self.logger.info(f"tasks {len(tasks)}")
+            for task in tasks:
+                self.logger.info(f"Cancelling task {task.get_name()}")
+                task.cancel()
+            self.logger.info(message)
+        except Exception as e:
+            traceback.print_exc()
+            self.logger.info(e)
