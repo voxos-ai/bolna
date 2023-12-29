@@ -528,10 +528,10 @@ class TaskManager(BaseManager):
                 self.synthesizer_characters += len(text)
                 self.logger.info('sending text to {} for generation: {} '.format(self.synthesizer_provider, text))
 
+                self.logger.info('Sending synthesized audio chunk to {}'.format(
+                    self.task_config["tools_config"]["output"]["provider"]))
                 async for audio_chunk in self.tools["synthesizer"].generate(text):
                     if not self.conversation_ended:
-                        self.logger.info('Sending synthesized audio chunk to {}'.format(
-                            self.task_config["tools_config"]["output"]["provider"]))
                         await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
             else:
                 self.logger.info("other synthesizer models not supported yet")
