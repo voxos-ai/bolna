@@ -1,17 +1,15 @@
 import os
 import litellm
 from dotenv import load_dotenv
-from bolna.helpers.logger_config import configure_logger
 from .llm import BaseLLM
 
-logger = configure_logger(__name__)
 load_dotenv()
 
 
 class LiteLLM(BaseLLM):
     def __init__(self, streaming_model, api_key=None, api_base=None, max_tokens=100, buffer_size=40,
-                 classification_model=None):
-        super().__init__(max_tokens, buffer_size)
+                 classification_model=None, log_dir_name=None):
+        super().__init__(max_tokens, buffer_size, log_dir_name)
         self.model = streaming_model
         self.api_key = api_key or os.getenv('LLM_MODEL_API_KEY')
         self.api_base = api_base or os.getenv('LLM_MODEL_API_BASE')
@@ -21,7 +19,7 @@ class LiteLLM(BaseLLM):
 
     async def generate_stream(self, messages, synthesize=True):
         answer, buffer = "", ""
-        logger.info(f"request to model: {self.model}: {messages}")
+        self.logger.info(f"request to model: {self.model}: {messages}")
 
         async for chunk in await litellm.acompletion(model=self.model, messages=messages, api_key=self.api_key,
                                                      api_base=self.api_base, temperature=0.2,

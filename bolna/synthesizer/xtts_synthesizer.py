@@ -2,16 +2,13 @@ import asyncio
 import websockets
 import json
 import os
-from bolna.helpers.logger_config import configure_logger
 import audioop
 from .base_synthesizer import BaseSynthesizer
 
-logger = configure_logger(__name__, True)
-
 
 class XTTSSynthesizer(BaseSynthesizer):
-    def __init__(self, model, audio_format, stream, buffer_size=400):
-        super().__init__(stream, buffer_size)
+    def __init__(self, model, audio_format, stream, buffer_size=400, log_dir_name=None):
+        super().__init__(stream, buffer_size, log_dir_name)
         self.websocket_connection = None
         self.buffer = []  # Initialize buffer to make sure we're sending chunks of words instead of token wise
         self.buffered = False
@@ -55,10 +52,10 @@ class XTTSSynthesizer(BaseSynthesizer):
                 yield chunk
 
             except websockets.exceptions.ConnectionClosed:
-                logger.error("Connection closed")
+                self.logger.error("Connection closed")
                 break
             except Exception as e:
-                logger.error(f"Error in receiving and processing audio bytes {e}")
+                self.logger.error(f"Error in receiving and processing audio bytes {e}")
 
     async def generate(self, text):
         try:
@@ -71,4 +68,4 @@ class XTTSSynthesizer(BaseSynthesizer):
             else:
                 logger.info("Generating via simple http post request")
         except Exception as e:
-            logger.error(f"Error in xtts generate {e}")
+            self.logger.error(f"Error in xtts generate {e}")
