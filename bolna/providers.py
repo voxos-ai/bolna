@@ -14,7 +14,10 @@ SUPPORTED_TRANSCRIBER_MODELS = {
 SUPPORTED_LLM_MODELS = {
     'openai': OpenAiLLM,
     'cohere': LiteLLM,
-    'ollama': LiteLLM
+    'ollama': LiteLLM,
+    'mistral': LiteLLM,
+    'llama': LiteLLM,
+    'zephyr': LiteLLM
 }
 SUPPORTED_INPUT_HANDLERS = {
     'default': DefaultInputHandler,
