@@ -153,10 +153,11 @@ class TaskManager:
 
         # setting synthesizer
         if self.task_config["tools_config"]["synthesizer"] is not None:
-            synthesizer_class = SUPPORTED_SYNTHESIZER_MODELS.get(
-                self.task_config["tools_config"]["synthesizer"]["model"])
-            self.tools["synthesizer"] = synthesizer_class(**self.task_config["tools_config"]["synthesizer"])
-
+            logger.info(f"Synthesizer config {self.task_config['tools_config']['synthesizer']}")
+            self.synthesizer_provider = self.task_config["tools_config"]["synthesizer"].pop("provider")
+            synthesizer_class = SUPPORTED_SYNTHESIZER_MODELS.get(self.synthesizer_provider)
+            provider_config = self.task_config["tools_config"]["synthesizer"].pop("provider_config")
+            self.tools["synthesizer"] = synthesizer_class(**self.task_config["tools_config"]["synthesizer"], **provider_config)
             llm_config["max_tokens"] = self.task_config["tools_config"]["synthesizer"].get('max_tokens')
             llm_config["buffer_size"] = self.task_config["tools_config"]["synthesizer"].get('buffer_size')
 
@@ -520,9 +521,9 @@ class TaskManager:
                                                                     assistant_id=self.assistant_id)
                 await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
 
-            elif self.task_config["tools_config"]["synthesizer"]["model"] in SUPPORTED_SYNTHESIZER_MODELS.keys():
+            elif self.synthesizer_provider in SUPPORTED_SYNTHESIZER_MODELS.keys():
                 logger.info(
-                    'Synthesizing chunk via {}'.format(self.task_config["tools_config"]["synthesizer"]["model"]))
+                    'Synthesizing chunk via {}'.format(self.synthesizer_provider))
                 self.synthesizer_characters += len(text)
                 async for audio_chunk in self.tools["synthesizer"].generate(text):
                     if not self.conversation_ended:
@@ -548,7 +549,7 @@ class TaskManager:
                 tasks = [asyncio.create_task(self.tools['input'].handle())]
                 if "transcriber" in self.tools:
                     tasks.append(asyncio.create_task(self._listen_transcriber()))
-                if "synthesizer" in self.tools and self.task_config["tools_config"]["synthesizer"]["model"] == "xtts":
+                if "synthesizer" in self.tools and self.synthesizer_provider== "xtts":
                     tasks.append(asyncio.create_task(self._receive_from_synthesizer()))
 
                 if self.connected_through_dashboard and self.task_config['task_type'] == "conversation":

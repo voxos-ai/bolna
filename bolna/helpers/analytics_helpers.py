@@ -57,9 +57,9 @@ def calculate_total_cost_of_llm_from_transcript(messages, cost_per_input_token, 
     return round(total_cost, 5), llm_token_usage
 
 def update_extraction_details(current_high_level_assistant_analytics_data, run_details):
-    extraction_data = run_details['extracted_data']
-    if extraction_data is None:
+    if "extracted_data" not in run_details:
         return None
+    extraction_data = run_details['extracted_data']
     for index, key in enumerate(extraction_data.keys()):
         if key not in current_high_level_assistant_analytics_data['extraction_details']:
             logger.info(f"current_high_level_assistant_analytics_data['extraction_details'] {current_high_level_assistant_analytics_data['extraction_details']} extraction_data[key] {extraction_data[key] }")
@@ -113,7 +113,7 @@ def update_cost_details(current_high_level_assistant_analytics_data, run_details
     if run_details['cost_breakdown']['transcriber'] > 0:
         current_high_level_assistant_analytics_data["cost_details"]["average_transcriber_cost_per_conversation"] = round(((current_high_level_assistant_analytics_data["cost_details"]["average_transcriber_cost_per_conversation"] * (current_high_level_assistant_analytics_data['execution_details']["total_conversations"] - 1) + run_details['cost_breakdown']['transcriber']) / current_high_level_assistant_analytics_data['execution_details']["total_conversations"]), 5)
     if run_details['cost_breakdown']['synthesizer'] > 0:
-            current_high_level_assistant_analytics_data["cost_details"]["average_synthesizer_cost_per_conversation"] = rount(((current_high_level_assistant_analytics_data["cost_details"]["average_synthesizer_cost_per_conversation"] * (current_high_level_assistant_analytics_data['execution_details']["total_conversations"] - 1) + run_details['cost_breakdown']['synthesizer']) / current_high_level_assistant_analytics_data['execution_details']["total_conversations"]), 5)
+            current_high_level_assistant_analytics_data["cost_details"]["average_synthesizer_cost_per_conversation"] = round(((current_high_level_assistant_analytics_data["cost_details"]["average_synthesizer_cost_per_conversation"] * (current_high_level_assistant_analytics_data['execution_details']["total_conversations"] - 1) + run_details['cost_breakdown']['synthesizer']) / current_high_level_assistant_analytics_data['execution_details']["total_conversations"]), 5)
     current_high_level_assistant_analytics_data["cost_details"]["average_llm_cost_per_conversation"] = round(((current_high_level_assistant_analytics_data["cost_details"]["average_llm_cost_per_conversation"] * (current_high_level_assistant_analytics_data['execution_details']["total_conversations"] - 1) + run_details['cost_breakdown']['llm']) / current_high_level_assistant_analytics_data['execution_details']["total_conversations"]), 5)
 
 def update_conversation_details(current_high_level_assistant_analytics_data, conversation_status = "finished"):
