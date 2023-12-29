@@ -54,6 +54,7 @@ class TaskManager(BaseManager):
             "llm": self.llm_queue,
             "synthesizer": self.synthesizer_queue
         }
+        
 
         if task_id == 0:
             if self.task_config["tools_config"]["input"]["provider"] in SUPPORTED_INPUT_HANDLERS.keys():
@@ -70,11 +71,11 @@ class TaskManager(BaseManager):
             else:
                 raise "Other input handlers not supported yet"
 
-        if self.task_config["tools_config"]["output"]["provider"] in SUPPORTED_OUTPUT_HANDLERS.keys():
+        if self.task_config["tools_config"]["output"] is None:
+            self.logger.info("Not setting up any output handler as it is none")
+        elif self.task_config["tools_config"]["output"]["provider"] in SUPPORTED_OUTPUT_HANDLERS.keys():
             if self.task_config["tools_config"]["output"]["provider"] == 'default':
                 self.tools["output"] = DefaultOutputHandler(self.websocket, self.log_dir_name)
-            elif self.task_config["tools_config"]["output"]["provider"] == "database":
-                self.tools["output"] = DatabaseOutputHandler(self.user_id, self.assistant_id, self.run_id)
             elif self.task_config["tools_config"]["output"]["provider"] == "twilio":
                 self.tools["output"] = TwilioOutputHandler(self.websocket, self.mark_set, self.log_dir_name)
         else:
@@ -101,9 +102,10 @@ class TaskManager(BaseManager):
         self.call_sid = None
         self.stream_sid = None
 
-        # chharacters
-        self.transcription_characters = 0
+        # metering
+        self.transcriber_duration = 0
         self.synthesizer_characters = 0
+        self.ended_by_assistant = False
 
         self.extracted_data = None
         self.summarized_data = None
@@ -154,11 +156,11 @@ class TaskManager(BaseManager):
 
         # setting synthesizer
         if self.task_config["tools_config"]["synthesizer"] is not None:
-            synthesizer_class = SUPPORTED_SYNTHESIZER_MODELS.get(
-                self.task_config["tools_config"]["synthesizer"]["model"])
-            self.tools["synthesizer"] = synthesizer_class(**self.task_config["tools_config"]["synthesizer"],
-                                                          log_dir_name=self.log_dir_name)
-
+            self.logger.info(f"Synthesizer config {self.task_config['tools_config']['synthesizer']}")
+            self.synthesizer_provider = self.task_config["tools_config"]["synthesizer"].pop("provider")
+            synthesizer_class = SUPPORTED_SYNTHESIZER_MODELS.get(self.synthesizer_provider)
+            provider_config = self.task_config["tools_config"]["synthesizer"].pop("provider_config")
+            self.tools["synthesizer"] = synthesizer_class(log_dir_name=self.log_dir_name, **self.task_config["tools_config"]["synthesizer"], **provider_config)
             llm_config["max_tokens"] = self.task_config["tools_config"]["synthesizer"].get('max_tokens')
             llm_config["buffer_size"] = self.task_config["tools_config"]["synthesizer"].get('buffer_size')
 
@@ -198,7 +200,7 @@ class TaskManager(BaseManager):
         if next_step == "synthesizer" and not should_bypass_synth:
             task = asyncio.gather(self._synthesize(create_ws_data_packet(text_chunk, meta_info)))
             self.synthesizer_tasks.append(asyncio.ensure_future(task))
-        else:
+        elif self.tools["output"] is not None:
             self.logger.info(f"Sending output text {text_chunk}")
             await self.tools["output"].handle(create_ws_data_packet(text_chunk, meta_info))
 
@@ -227,15 +229,11 @@ class TaskManager(BaseManager):
         })
 
         json_data = await self.tools["llm_agent"].generate(self.history)
-
-        # TODO validation if the required data is correct
-        if self.task_config["tools_config"]["output"]["provider"] == "database":
-            self.extracted_data = json.loads(json_data)
-            self.input_parameters = {**self.input_parameters, **self.extracted_data}
-            self.logger.info(f"Saving data in DB {json_data}")
-            await self.tools["output"].handle(self.input_parameters)
+        json_data = json.loads(json_data)
+        if "summary" in json_data:
+            self.summarized_data = json_data["summary"]
         else:
-            await self.tools["output"].handle(self.input_parameters)
+            self.extracted_data = json_data
 
     async def _process_conversation_preprocessed_task(self, message, sequence, meta_info):
         if self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "preprocessed":
@@ -280,7 +278,7 @@ class TaskManager(BaseManager):
                     self._synthesize(create_ws_data_packet(text_chunk, meta_info, is_md5_hash=True))))
             else:
                 # TODO Make it more modular
-                llm_response += " " + text_chunk
+                llm_response += " " +text_chunk
                 next_step = self._get_next_step(sequence, "llm")
                 if next_step == "synthesizer":
                     task = asyncio.gather(self._synthesize(create_ws_data_packet(text_chunk, meta_info)))
@@ -322,6 +320,7 @@ class TaskManager(BaseManager):
             if answer:
                 self.logger.info("Got end of conversation. I'm stopping now")
                 self.conversation_ended = True
+                self.ended_by_assistant = True
                 await self.tools["input"].stop_handler()
                 self.logger.info("Stopped input handler")
                 if "transcriber" in self.tools and not self.connected_through_dashboard:
@@ -451,6 +450,7 @@ class TaskManager(BaseManager):
             if self.stream:
                 async for message in self.tools["transcriber"].transcribe():
                     if message['data'] == "transcriber_connection_closed":
+                        self.transcriber_duration += message['meta_info']["transcriber_duration"]
                         self.logger.info("transcriber connection closed")
                         return
 
@@ -497,6 +497,7 @@ class TaskManager(BaseManager):
                     self.logger.info(f"message from transcriber {message}")
                     sequence = message["meta_info"]["sequence"]
                     next_task = self._get_next_step(sequence, "transcriber")
+                    self.transcriber_duration += message["meta_info"]["transcriber_duration"] if "transcriber_duration" in message["meta_info"] else 0
                     await self._handle_transcriber_output(next_task, message['data'], message["meta_info"])
 
         except Exception as e:
@@ -525,9 +526,9 @@ class TaskManager(BaseManager):
                                                                     assistant_id=self.assistant_id)
                 await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
 
-            elif self.task_config["tools_config"]["synthesizer"]["model"] in SUPPORTED_SYNTHESIZER_MODELS.keys():
+            elif self.synthesizer_provider in SUPPORTED_SYNTHESIZER_MODELS.keys():
                 self.logger.info(
-                    'Synthesizing chunk via {}'.format(self.task_config["tools_config"]["synthesizer"]["model"]))
+                    'Synthesizing chunk via {}'.format(self.synthesizer_provider))
                 self.synthesizer_characters += len(text)
                 async for audio_chunk in self.tools["synthesizer"].generate(text):
                     if not self.conversation_ended:
@@ -553,7 +554,7 @@ class TaskManager(BaseManager):
                 tasks = [asyncio.create_task(self.tools['input'].handle())]
                 if "transcriber" in self.tools:
                     tasks.append(asyncio.create_task(self._listen_transcriber()))
-                if "synthesizer" in self.tools and self.task_config["tools_config"]["synthesizer"]["model"] == "xtts":
+                if "synthesizer" in self.tools and self.synthesizer_provider== "xtts":
                     tasks.append(asyncio.create_task(self._receive_from_synthesizer()))
 
                 if self.connected_through_dashboard and self.task_config['task_type'] == "conversation":
@@ -595,14 +596,14 @@ class TaskManager(BaseManager):
             if self.task_id == 0:
                 output = {"messages": self.history, "conversation_time": time.time() - self.start_time,
                           "label_flow": self.label_flow, "call_sid": self.call_sid, "stream_sid": self.stream_sid,
-                          "transcriber_characters": self.transcription_characters,
-                          "synthesizer_characters": self.synthesizer_characters}
+                          "transcriber_duration": self.transcriber_duration,
+                          "synthesizer_characters": self.synthesizer_characters, "ended_by_assistant": self.ended_by_assistant}
             else:
                 output = self.input_parameters
                 if self.task_config["task_type"] == "extraction":
-                    output["extracted_data"] = self.extracted_data
-                elif self.task_config["task_type"] == "summarization":
-                    output["summarization"] = self.summarized_data
+                    output = { "extracted_data" : self.extracted_data, "task_type": "extraction"}
+                elif self.task_config["task_type"] == "summarization": 
+                    output = {"summary" : self.summarized_data, "task_type": "summarization"}
 
             return output
 

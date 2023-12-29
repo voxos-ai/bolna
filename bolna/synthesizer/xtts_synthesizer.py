@@ -14,6 +14,7 @@ class XTTSSynthesizer(BaseSynthesizer):
         self.buffered = False
         self.ws_url = os.getenv('TTS_WS')
         self.format = audio_format
+        self.stream = stream
 
     async def _connect(self):
         if self.websocket_connection is None:
@@ -58,10 +59,13 @@ class XTTSSynthesizer(BaseSynthesizer):
 
     async def generate(self, text):
         try:
-            async with self.get_websocket_connection() as xtts_ws:
-                sender_task = asyncio.create_task(self.sender(xtts_ws, text))
+            if self.stream:
+                async with self.get_websocket_connection() as xtts_ws:
+                    sender_task = asyncio.create_task(self.sender(xtts_ws, text))
 
-                async for message in self.receiver(xtts_ws):
-                    yield message
+                    async for message in self.receiver(xtts_ws):
+                        yield message
+            else:
+                logger.info("Generating via simple http post request")
         except Exception as e:
             self.logger.error(f"Error in xtts generate {e}")

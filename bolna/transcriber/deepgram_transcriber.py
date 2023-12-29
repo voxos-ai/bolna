@@ -60,6 +60,9 @@ class DeepgramTranscriber(BaseTranscriber):
         await self.sender_task.cancel()
 
     async def _get_http_transcription(self, audio_data):
+        if self.session is None or self.session.closed:
+            self.session = aiohttp.ClientSession()
+
         headers = {
         'Authorization': 'Token {}'.format(os.getenv('DEEPGRAM_AUTH_TOKEN')),
         'Content-Type': 'audio/webm' #Currently we are assuming this is via browser
@@ -68,8 +71,10 @@ class DeepgramTranscriber(BaseTranscriber):
         async with self.session as session:
             async with session.post(self.api_url, data=audio_data, headers=headers) as response:
                 response_data = await response.json()
+                self.logger.info(f"response_data {response_data} total time {time.time() - start_time}")
                 transcript = response_data["results"]["channels"][0]["alternatives"][0]["transcript"]
                 self.logger.info(f"transcript {transcript} total time {time.time() - start_time}")
+                self.meta_info['transcriber_duration'] =  response_data["metadata"]["duration"]
                 return create_ws_data_packet(transcript, self.meta_info)
 
     async def sender(self, ws=None):
@@ -84,9 +89,9 @@ class DeepgramTranscriber(BaseTranscriber):
                 self.meta_info = ws_data_packet.get('meta_info')
                 if self.stream:
                     await asyncio.gather(ws.send(audio_data))
-                # else:
-                #     transcription = await self._get_http_transcription(audio_data)
-                #     yield transcription
+                else:
+                    transcription = await self._get_http_transcription(audio_data)
+                    yield transcription
         except Exception as e:
             self.logger.error('Error while sending: ' + str(e))
             raise Exception("Something went wrong")
@@ -97,7 +102,8 @@ class DeepgramTranscriber(BaseTranscriber):
             try:
                 msg = json.loads(msg)
                 if msg['type'] == "Metadata":
-                    self.logger.info(f"Got a summary object")
+                    self.logger.info(f"Got a summary object {msg}")
+                    self.meta_info["transcriber_duration"] = msg["duration"]
                     yield create_ws_data_packet("transcriber_connection_closed", self.meta_info)
                     return
 

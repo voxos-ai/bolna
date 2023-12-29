@@ -38,7 +38,6 @@ class DefaultInputHandler:
 
                 if request['type'] == 'audio':
                     data = base64.b64decode(request['data'])
-                    self.logger.info(f"Got data {data}")
                     ws_data_packet = create_ws_data_packet(
                         data=data,
                         meta_info={
@@ -46,11 +45,6 @@ class DefaultInputHandler:
                             'type': request['type'],
                             'sequence': self.input_types['audio']
                         })
-
-                    file_path = "received_audio.webm"  # Replace with your desired file path
-                    with open(file_path, 'wb') as file:
-                        file.write(data)
-                    self.logger.info(f"Saved audio data to {file_path}")
 
                     self.queues['transcriber'].put_nowait(ws_data_packet)
 

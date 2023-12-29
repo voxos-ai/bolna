@@ -1,5 +1,5 @@
 import json
-from typing import Optional, List
+from typing import Optional, List, Union
 from pydantic import BaseModel, Field, validator, ValidationError, Json
 from .providers import *
 
@@ -9,6 +9,25 @@ def validate_attribute(value, allowed_values):
         raise ValidationError(f"Invalid provider. Supported values: {', '.join(allowed_values)}")
     return value
 
+class PollyConfig(BaseModel):
+    voice: str
+    engine: str
+    sampling_rate: Optional[str] = "22050"
+    language: str
+
+class TortoiseTTSConfig(BaseModel):
+    voice: str
+
+class MatchaTTSConfig(BaseModel):
+    voice: str
+
+class XTTSConfig(BaseModel):
+    voice: str
+
+class ElevenLabsConfig(BaseModel):
+    voice: str
+    voice_id: str
+    model: str
 
 class TranscriberModel(BaseModel):
     model: str
@@ -25,21 +44,19 @@ class TranscriberModel(BaseModel):
 
 
 class SynthesizerModel(BaseModel):
-    model: str
-    language: Optional[str] = None
-    voice: str
+    provider: str
+    provider_config: Union[PollyConfig, TortoiseTTSConfig, MatchaTTSConfig, XTTSConfig, ElevenLabsConfig]
     stream: bool = False
     buffer_size: Optional[int] = 40  # 40 characters in a buffer
     audio_format: Optional[str] = "mp3"
-    sampling_rate: Optional[str] = "24000"
-
-    @validator("model")
+    
+    @validator("provider")
     def validate_model(cls, value):
-        return validate_attribute(value, list(SUPPORTED_SYNTHESIZER_MODELS.keys()))
+        return validate_attribute(value, ["polly", "xtts"])
 
-    @validator("language")
-    def validate_language(cls, value):
-        return validate_attribute(value, ["en", "hi", "es", "fr"])
+    # @validator("language")
+    # def validate_language(cls, value):
+    #     return validate_attribute(value, ["en", "hi", "es", "fr"])
 
 
 class IOModel(BaseModel):
@@ -120,3 +137,4 @@ class CreateAssistantPayload(BaseModel):
     user_id: str
     assistant_config: AssistantModel
     assistant_prompts: AssistantPromptsModel
+
