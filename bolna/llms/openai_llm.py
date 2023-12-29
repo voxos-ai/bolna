@@ -10,7 +10,7 @@ openai.api_key = os.getenv('OPENAI_API_KEY')
 
 class OpenAiLLM(BaseLLM):
     def __init__(self, max_tokens=100, buffer_size=40, streaming_model="gpt-3.5-turbo-16k",
-                 classification_model="gpt-4", log_dir_name=None):
+                 classification_model="gpt-3.5-turbo-1106", log_dir_name=None):
         super().__init__(max_tokens, buffer_size, log_dir_name)
         self.model = streaming_model
         self.started_streaming = False
