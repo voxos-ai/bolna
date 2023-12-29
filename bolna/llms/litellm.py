@@ -2,13 +2,15 @@ import os
 import litellm
 from dotenv import load_dotenv
 from bolna.helpers.logger_config import configure_logger
+from bolna.helpers.utils import json_to_pydantic_schema
 from .llm import BaseLLM
-from bolna.models import ClassificationTaskResult
 
 logger = configure_logger(__name__)
 load_dotenv()
 litellm.set_verbose=True
 #litellm.drop_params=True
+
+
 
 class LiteLLM(BaseLLM):
     def __init__(self, streaming_model, api_key=None, api_base=None, max_tokens=100, buffer_size=40,
@@ -64,7 +66,7 @@ class LiteLLM(BaseLLM):
         if request_json == True:
             completion_args['response_format']= {
                 "type": "json_object",
-                "schema": ClassificationTaskResult.schema_json()
+                "schema": json_to_pydantic_schema('{"classification_label": "classification label goes here"}')
             }
         completion = await litellm.acompletion(**completion_args)
         text = completion.choices[0].message.content
