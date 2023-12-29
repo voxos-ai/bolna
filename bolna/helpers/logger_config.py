@@ -1,5 +1,4 @@
 import logging
-import sys
 import os
 
 VALID_LOGGING_LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
