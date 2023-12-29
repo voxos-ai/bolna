@@ -46,6 +46,7 @@ class PollySynthesizer(BaseSynthesizer):
                 yield await response["AudioStream"].read()
 
     async def generate(self, text):
+        self.logger.info('received text for audio generation: {}'.format(text))
         try:
             if text != "" and text != "LLM_END":
                 async for message in self.generate_tts_response(text):

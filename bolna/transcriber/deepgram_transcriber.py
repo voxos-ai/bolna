@@ -138,7 +138,6 @@ class DeepgramTranscriber(BaseTranscriber):
         }
         deepgram_ws = websockets.connect(websocket_url, extra_headers=extra_headers)
 
-        self.logger.info('got here')
         return deepgram_ws
 
     async def transcribe(self):
@@ -150,7 +149,7 @@ class DeepgramTranscriber(BaseTranscriber):
                     if self.connection_on:
                         yield message
                     else:
-                        self.logger.info("Closing the connection")
+                        self.logger.info("closing the deepgram connection")
                         await self._close(deepgram_ws, data={"type": "CloseStream"})
             else:
                 message = await self.sender()

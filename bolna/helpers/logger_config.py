@@ -25,7 +25,7 @@ class CustomLogger:
         logging_handlers = [logging.StreamHandler()]
         if self.log_dir:
             logging_handlers.append(logging.FileHandler('{}/{}.log'.format(self.log_dir, self.logger_name), mode='w'))
-            logger_format = FORMAT.format('{log_dir}', '%(log_dir)s')
+            logger_format = FORMAT.replace('{log_dir}', '%(log_dir)s')
 
         logger.handlers = []
         formatter = logging.Formatter(logger_format, datefmt="%Y-%m-%d %H:%M:%S")

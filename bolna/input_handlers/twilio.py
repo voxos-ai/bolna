@@ -33,9 +33,9 @@ class TwilioInputHandler(DefaultInputHandler):
             self.mark_set.remove(packet["mark"]["name"])
 
     async def stop_handler(self):
-        self.logger.info("Stopping handler")
+        self.logger.info("stopping handler")
         self.running = False
-        self.logger.info("Sleeping for 5 seconds so that whatever needs to pass is passed")
+        self.logger.info("sleeping for 5 seconds so that whatever needs to pass is passed")
         await asyncio.sleep(5)
         try:
             await self.websocket.close()
@@ -82,7 +82,7 @@ class TwilioInputHandler(DefaultInputHandler):
                     await self.process_mark_message(packet)
 
                 elif packet['event'] == 'stop':
-                    self.logger.info('Call stopping')
+                    self.logger.info('call stopping')
                     ws_data_packet = create_ws_data_packet(data=None, meta_info={'io': 'default', 'eos': True})
                     self.queues['transcriber'].put_nowait(ws_data_packet)
                     break

@@ -32,9 +32,10 @@ async def create_agent(agent_data: AssistantModel):
 async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket):
     log_dir_name = '{}-{}'.format(user_id, agent_id)
     logger = custom_logger.update_logger(log_dir_name=log_dir_name)
+    logger.info('ws connected with user_id: {} and agent_id: {}'.format(user_id, agent_id))
+
     await websocket.accept()
     active_websockets.append(websocket)
-    logger.info('ws connected')
 
     agent_config, context_data = None, None
     try:
