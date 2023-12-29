@@ -138,3 +138,5 @@ class CreateAssistantPayload(BaseModel):
     assistant_config: AssistantModel
     assistant_prompts: AssistantPromptsModel
 
+class ClassificationTaskResult(BaseModel):
+    classification_label: str

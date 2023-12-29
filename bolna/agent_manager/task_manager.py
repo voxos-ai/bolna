@@ -173,7 +173,7 @@ class TaskManager:
                 self.tools["llm_agent"] = StreamingContextualAgent(llm)
             elif self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] in ("preprocessed", "formulaic"):
                 preprocessed = self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "preprocessed"
-                # TODO START WITH LOOKING INTO PROMPTS
+                logger.info(f"LLM TYPE {type(llm)}")
                 self.tools["llm_agent"] = GraphBasedConversationAgent(llm, context_data=self.context_data,
                                                                       prompts=self.prompts,
                                                                       preprocessed=preprocessed)
@@ -243,6 +243,7 @@ class TaskManager:
                 if text_chunk == "<end_of_conversation>":
                     logger.info("Got end of conversation. I'm stopping now")
                     self.conversation_ended = True
+                    await asyncio.sleep(5) #Make sure that the message is passed over and complete before cutting the handler
                     await self.tools["input"].stop_handler()
                     logger.info("Stopped input handler")
                     if "transcriber" in self.tools and not self.connected_through_dashboard:
