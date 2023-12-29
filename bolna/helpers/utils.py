@@ -112,7 +112,7 @@ async def put_s3_file(bucket_name, file_key, file_data, content_type):
 async def get_raw_audio_bytes_from_base64(agent_name, b64_string, audio_format='mp3', user_id = None, assistant_id=None, local = False):
     # we are already storing pcm formatted audio in the filler config. No need to encode/decode them further
     audio_data = None
-    logger.info(f"getting audio from base64 string {b64_string}")
+    logger.info(f"getting audio from base64 string {b64_string} and local is {local}")
 
     if local:
         file_name = f"{PREPROCESS_DIR}/{agent_name}/{audio_format}/{b64_string}.{audio_format}"
