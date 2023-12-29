@@ -45,7 +45,7 @@ async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket):
         raise HTTPException(status_code=404, detail="Agent not found")
 
     is_local = True
-    agent_manager = AssistantManager(agent_config, websocket, context_data, user_id, agent_id)
+    agent_manager = AssistantManager(agent_config, websocket, context_data, user_id, agent_id, log_dir_name=log_dir_name)
 
     try:
         async for res in agent_manager.run(is_local):
@@ -54,4 +54,4 @@ async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket):
         active_websockets.remove(websocket)
     except Exception as e:
         traceback.print_exc()
-        custom_logger.logger.error(f"error in executing {e}")
+        logger.error(f"error in executing {e}")
