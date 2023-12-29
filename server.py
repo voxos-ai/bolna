@@ -16,7 +16,7 @@ from bolna.helpers.logger_config import configure_logger
 from bolna.models import *
 from litellm import token_counter
 from datetime import datetime, timezone
-from models import VoiceRequestModel, CreateAssistantPayload, CreateUserModel, AddVoiceModel, VoiceRequestModel, DEFAULT_VOICES
+from models import VoiceRequestModel, CreateUserModel, AddVoiceModel, VoiceRequestModel, DEFAULT_VOICES
 from bolna.agent_manager.assistant_manager import AssistantManager
 from database.dynamodb import DynamoDB
 import base64
@@ -337,7 +337,7 @@ async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket, 
                 }
             },
             "llmTokens": 0,
-            "synthesizerModel": agent_config["tasks"][0]["tools_config"]["synthesizer"]["model"],
+            "synthesizerModel": agent_config["tasks"][0]["tools_config"]["synthesizer"]["provider"],
             "synthesizerCharacters": 0
     }
 
