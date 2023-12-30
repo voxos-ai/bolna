@@ -1,8 +1,10 @@
 import openai
 from openai import AsyncOpenAI
 import os
+import json
 from dotenv import load_dotenv
 from .llm import BaseLLM
+import ast
 
 load_dotenv()
 openai.api_key = os.getenv('OPENAI_API_KEY')
@@ -54,12 +56,18 @@ class OpenAiLLM(BaseLLM):
 
         completion = await self.async_client.chat.completions.create(model=model, temperature=0.0, messages=messages,
                                                                      stream=False, response_format=response_format)
-        text = completion.choices[0].message.content
-        return text
+        res = completion.choices[0].message.content
+        self.logger.info('generate: {}'.format(res))
+        if response_format.get('type') == 'text':
+            try:
+                if isinstance(ast.literal_eval(res), dict):
+                    return json.dumps(ast.literal_eval(res))
+            except Exception as e:
+                return json.dumps({'answer': res.split(': ')[1]})
+        return res
 
-    @staticmethod
-    def get_response_format(is_json_format: bool):
-        if is_json_format:
+    def get_response_format(self, is_json_format: bool):
+        if is_json_format and self.classification_model in ('gpt-4-1106-preview', 'gpt-3.5-turbo-1106'):
             return {"type": "json_object"}
         else:
             return {"type": "text"}

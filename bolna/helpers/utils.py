@@ -165,7 +165,7 @@ def format_messages(messages):
 
 
 def update_prompt_with_context(prompt, context_data):
-    return prompt.format(**context_data.get('recipient_data', {}))
+    return prompt.format(**context_data)
 
 
 async def get_prompt_responses(agent_name, local=False, user_id=None, assistant_id = None):
