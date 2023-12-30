@@ -33,6 +33,9 @@ class TranscriberModel(BaseModel):
     model: str
     language: Optional[str] = None
     stream: bool = False
+    sampling_rate: Optional[int] = 16000
+    encoding: Optional[str] = "linear16"
+    endpointing: Optional[int] = 400
 
     @validator("model")
     def validate_model(cls, value):
@@ -75,6 +78,7 @@ class LLM_Model(BaseModel):
     agent_flow_type: Optional[str] = "streaming"
     use_fallback: Optional[bool] = False
     family: Optional[str] = "openai"
+    temperature: Optional[float] = 0.1
     request_json: Optional[bool] = False
     langchain_agent: Optional[bool] = False
     extraction_details: Optional[str] = None  # This is the english explaination for the same
@@ -107,7 +111,7 @@ class ToolsConfigModel(BaseModel):
     transcriber: Optional[TranscriberModel] = None
     input: Optional[IOModel] = None
     output: Optional[IOModel] = None
-    tools_config: Optional[ToolModel]
+    api_tools: Optional[ToolModel]
 
 
 class ToolsChainModel(BaseModel):
