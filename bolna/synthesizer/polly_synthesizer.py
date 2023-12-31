@@ -12,7 +12,7 @@ class PollySynthesizer(BaseSynthesizer):
                  buffer_size=400, log_dir_name=None):
         super().__init__(stream, buffer_size, log_dir_name)
         self.engine = engine
-        self.format = audio_format
+        self.format = audio_format.lower()
         self.voice = voice
         self.language = language
         self.sample_rate = sampling_rate

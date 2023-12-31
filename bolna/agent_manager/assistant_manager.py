@@ -29,7 +29,7 @@ class AssistantManager(BaseManager):
         self.task_states = [False] * len(self.tasks)
         self.user_id = user_id
         self.assistant_id = assistant_id
-        self.run_id = f"{self.assistant_id}#{str(int(time.time() * 1000))}"  # multiply by 1000 to get timestamp in nano seconds to reduce probability of collisions in simultaneously triggered runs.
+        self.run_id = f"{self.assistant_id}#{str(int(time.time() * 1000))}"
         self.connected_through_dashboard = connected_through_dashboard
 
     async def run(self, is_local=False):
