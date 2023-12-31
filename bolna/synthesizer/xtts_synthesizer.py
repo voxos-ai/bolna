@@ -5,12 +5,13 @@ import os
 from bolna.helpers.logger_config import configure_logger
 import audioop
 from .base_synthesizer import BaseSynthesizer
+import aiohttp
 
 logger = configure_logger(__name__, True)
 
 
 class XTTSSynthesizer(BaseSynthesizer):
-    def __init__(self, model, audio_format, stream, buffer_size=400):
+    def __init__(self, audio_format = "wav", stream = False, buffer_size=400, language = "en", voice = "rohan"):
         super().__init__(stream, buffer_size)
         self.websocket_connection = None
         self.buffer = []  # Initialize buffer to make sure we're sending chunks of words instead of token wise
@@ -18,6 +19,8 @@ class XTTSSynthesizer(BaseSynthesizer):
         self.ws_url = os.getenv('TTS_WS')
         self.format = audio_format
         self.stream = stream
+        self.language = language
+        self.voice = voice
 
     async def _connect(self):
         if self.websocket_connection is None:
@@ -60,15 +63,37 @@ class XTTSSynthesizer(BaseSynthesizer):
             except Exception as e:
                 logger.error(f"Error in receiving and processing audio bytes {e}")
 
+    async def _send_payload(self, payload):
+        url = f'http://localhost:8000/generate'
+
+        async with aiohttp.ClientSession() as session:
+            if payload is not None:
+                async with session.post(url, json=payload) as response:
+                    if response.status == 200:
+                        data = await response.read() 
+                        logger.info(f"Received audio chunk {data}")
+                        return data
+                    else:
+                        logger.error(f"Error: {response.status} - {await response.text()}")
+            else:
+                logger.info("Payload was null")
+
+
+    async def _http_tts(self, text):
+        payload = None
+        logger.info(f"text {text}")
+        payload = {
+            "text": text,
+            "model": "xtts",
+            "language": self.language,
+            "voice": self.voice
+        }
+        logger.info(f"Sending {payload}")
+        response = await self._send_payload(payload)
+        return response
+        
     async def generate(self, text):
         try:
-            if self.stream:
-                async with self.get_websocket_connection() as xtts_ws:
-                    sender_task = asyncio.create_task(self.sender(xtts_ws, text))
-
-                    async for message in self.receiver(xtts_ws):
-                        yield message
-            else:
-                logger.info("Generating via simple http post request")
+            yield await self._http_tts(text)
         except Exception as e:
             logger.error(f"Error in xtts generate {e}")

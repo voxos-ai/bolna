@@ -23,6 +23,7 @@ class MatchaTTSConfig(BaseModel):
 
 class XTTSConfig(BaseModel):
     voice: str
+    language: str
 
 class ElevenLabsConfig(BaseModel):
     voice: str
@@ -48,7 +49,7 @@ class TranscriberModel(BaseModel):
 
 class SynthesizerModel(BaseModel):
     provider: str
-    provider_config: Union[PollyConfig, TortoiseTTSConfig, MatchaTTSConfig, XTTSConfig, ElevenLabsConfig]
+    provider_config: Union[XTTSConfig, ElevenLabsConfig, PollyConfig ]
     stream: bool = False
     buffer_size: Optional[int] = 40  # 40 characters in a buffer
     audio_format: Optional[str] = "mp3"

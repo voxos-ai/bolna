@@ -150,7 +150,6 @@ class TaskManager:
                     self.task_config["tools_config"]["transcriber"]["model"])
                 self.tools["transcriber"] = transcriber_class(provider,
                                                               **self.task_config["tools_config"]["transcriber"])
-
         # setting synthesizer
         if self.task_config["tools_config"]["synthesizer"] is not None:
             logger.info(f"Synthesizer config {self.task_config['tools_config']['synthesizer']}")
