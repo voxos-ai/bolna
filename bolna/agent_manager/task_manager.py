@@ -549,8 +549,6 @@ class TaskManager(BaseManager):
                 tasks = [asyncio.create_task(self.tools['input'].handle())]
                 if "transcriber" in self.tools:
                     tasks.append(asyncio.create_task(self._listen_transcriber()))
-                # if "synthesizer" in self.tools and self.synthesizer_provider == "xtts":
-                #     tasks.append(asyncio.create_task(self._receive_from_synthesizer()))
 
                 if self.connected_through_dashboard and self.task_config['task_type'] == "conversation":
                     self.logger.info(
