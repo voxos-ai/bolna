@@ -9,11 +9,10 @@ import logging
 from .base_synthesizer import BaseSynthesizer
 
 
-logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)s %(message)s', datefmt='%Y-%m-%d,%H:%M:%S', level=logging.INFO)
-logger = logging.getLogger(__name__)
-
 class ElevenlabsSynthesizer(BaseSynthesizer):
-    def __init__(self, voice, voice_id, model="eleven_multilingual_v1", audio_format = "pcm", sampling_rate = "16000", stream=False):
+    def __init__(self, voice, voice_id, model="eleven_multilingual_v1", audio_format="pcm", sampling_rate="16000",
+                 stream=False, log_dir_name=None):
+        super().__init__(stream, log_dir_name=log_dir_name)
         self.api_key = os.environ["ELEVENLABS_API_KEY"]
         self.voice = voice_id
         self.model = model
@@ -22,7 +21,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         self.connection_open = False
 
 
-    async def _connect(self,ws):
+    async def _connect(self, ws):
         if self.websocket_connection is None:
             self.websocket_connection = websockets.connect('wss://api.elevenlabs.io/v1/text-to-speech/8NKMgvCBNI0jN8dVStjg/stream-input?model_id=eleven_multilingual_v1')
     
@@ -31,9 +30,8 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
             self.websocket_connection = websockets.connect('wss://api.elevenlabs.io/v1/text-to-speech/8NKMgvCBNI0jN8dVStjg/stream-input?model_id=eleven_multilingual_v1')
         return self.websocket_connection
         
-
     async def _stream_tts(self):
-        logger.info("Streaming TTS from eleven labs")
+        self.logger.info("Streaming TTS from eleven labs")
         async with self._get_websocket_connection() as ws:
             async def sender(ws): # sends text to websocket
                 while True:
@@ -61,7 +59,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                         "text": f"{text} ",
                         "try_trigger_generation": True
                         }
-                        logger.info(f"Got message {text}")
+                        self.logger.info(f"Got message {text}")
                         await ws.send(json.dumps(input_message))
 
                     if text == "EOS":
@@ -76,12 +74,12 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                     try:
                         response = await ws.recv()
                         data = json.loads(response)
-                        logger.info("Server response:")
+                        self.logger.info("Server response:")
                         if data["audio"]:
                             chunk = base64.b64decode(data["audio"])
                             self.output_queue.put_nowait(chunk)
                         else:
-                            logger.info("No audio data in the response")
+                            self.logger.info("No audio data in the response")
                     except websockets.exceptions.ConnectionClosed:
                         #logger.error("Connection closed")
                         break
@@ -101,17 +99,17 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                 async with session.post(url, headers=headers, json=payload) as response:
                     if response.status == 200:
                         data = await response.read()
-                        logger.info(f"Received audio chunk {data}")
+                        self.logger.info(f"Received audio chunk {data}")
                         return data
                     else:
                         logger.error(f"Error: {response.status} - {await response.text()}")
             else:
-                logger.info("Payload was null")
+                self.logger.info("Payload was null")
 
 
     async def _http_tts(self, text):
         payload = None
-        logger.info(f"text {text}")
+        self.logger.info(f"text {text}")
         payload = {
             "text": text,
             "model_id": self.model,
