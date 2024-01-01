@@ -1,23 +1,20 @@
-import asyncio
+import aiohttp
 import websockets
 import json
 import os
-from bolna.helpers.logger_config import configure_logger
 import audioop
 from .base_synthesizer import BaseSynthesizer
-import aiohttp
-
-logger = configure_logger(__name__, True)
 
 
 class XTTSSynthesizer(BaseSynthesizer):
-    def __init__(self, audio_format = "wav", stream = False, buffer_size=400, language = "en", voice = "rohan"):
-        super().__init__(stream, buffer_size)
+    def __init__(self, audio_format="wav", stream=False, buffer_size=400, language="en", voice="rohan",
+                 log_dir_name=None):
+        super().__init__(stream, buffer_size, log_dir_name)
         self.websocket_connection = None
         self.buffer = []  # Initialize buffer to make sure we're sending chunks of words instead of token wise
         self.buffered = False
         self.ws_url = os.getenv('TTS_WS')
-        self.format = audio_format
+        self.format = audio_format.lower()
         self.stream = stream
         self.language = language
         self.voice = voice
@@ -58,10 +55,10 @@ class XTTSSynthesizer(BaseSynthesizer):
                 yield chunk
 
             except websockets.exceptions.ConnectionClosed:
-                logger.error("Connection closed")
+                self.logger.error("Connection closed")
                 break
             except Exception as e:
-                logger.error(f"Error in receiving and processing audio bytes {e}")
+                self.logger.error(f"Error in receiving and processing audio bytes {e}")
 
     async def _send_payload(self, payload):
         url = f'http://localhost:8000/generate'
@@ -70,30 +67,28 @@ class XTTSSynthesizer(BaseSynthesizer):
             if payload is not None:
                 async with session.post(url, json=payload) as response:
                     if response.status == 200:
-                        data = await response.read() 
-                        logger.info(f"Received audio chunk {data}")
+                        data = await response.read()
+                        self.logger.info(f"Received audio chunk {data}")
                         return data
                     else:
-                        logger.error(f"Error: {response.status} - {await response.text()}")
+                        self.logger.error(f"Error: {response.status} - {await response.text()}")
             else:
-                logger.info("Payload was null")
-
+                self.logger.info("Payload was null")
 
     async def _http_tts(self, text):
-        payload = None
-        logger.info(f"text {text}")
+        self.logger.info(f"text {text}")
         payload = {
             "text": text,
             "model": "xtts",
             "language": self.language,
             "voice": self.voice
         }
-        logger.info(f"Sending {payload}")
+        self.logger.info(f"Sending {payload}")
         response = await self._send_payload(payload)
         return response
-        
+
     async def generate(self, text):
         try:
             yield await self._http_tts(text)
         except Exception as e:
-            logger.error(f"Error in xtts generate {e}")
+            self.logger.error(f"Error in xtts generate {e}")
