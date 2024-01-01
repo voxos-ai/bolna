@@ -10,6 +10,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from aiobotocore.session import AioSession
 from contextlib import AsyncExitStack
 from dotenv import load_dotenv
+from pydantic import BaseModel, create_model
 
 from .logger_config import CustomLogger
 from bolna.constants import PREPROCESS_DIR
@@ -204,3 +205,26 @@ async def execute_tasks_in_chunks(tasks, chunk_size=10):
 
 def has_placeholders(s):
     return bool(re.search(r'\{[^{}\s]*\}', s))
+
+
+def infer_type(value):
+    if isinstance(value, int):
+        return (int, ...)
+    elif isinstance(value, float):
+        return (float, ...)
+    elif isinstance(value, bool):
+        return (bool, ...)
+    elif isinstance(value, list):
+        return (list, ...)
+    elif isinstance(value, dict):
+        return (dict, ...)
+    else:
+        return (str, ...)
+
+def json_to_pydantic_schema(json_data):
+    parsed_json = json.loads(json_data)
+    
+    fields = {key: infer_type(value) for key, value in parsed_json.items()}
+    dynamic_model = create_model('DynamicModel', **fields)
+    
+    return dynamic_model.schema_json(indent=2)

@@ -1,4 +1,4 @@
-from .synthesizer import PollySynthesizer, XTTSSynthesizer
+from .synthesizer import PollySynthesizer, XTTSSynthesizer, ElevenlabsSynthesizer
 from .transcriber import DeepgramTranscriber
 from .input_handlers import DefaultInputHandler, TwilioInputHandler
 from .output_handlers import DefaultOutputHandler, TwilioOutputHandler
@@ -6,7 +6,8 @@ from .llms import OpenAiLLM, LiteLLM
 
 SUPPORTED_SYNTHESIZER_MODELS = {
     'polly': PollySynthesizer,
-    'xtts': XTTSSynthesizer
+    'xtts': XTTSSynthesizer,
+    "elevenlabs": ElevenlabsSynthesizer
 }
 SUPPORTED_TRANSCRIBER_MODELS = {
     'deepgram': DeepgramTranscriber

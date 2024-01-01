@@ -2,13 +2,18 @@ import os
 import litellm
 from dotenv import load_dotenv
 from .llm import BaseLLM
+from bolna.helpers.utils import json_to_pydantic_schema
 
 load_dotenv()
+litellm.set_verbose = True
+
+
+# litellm.drop_params=True
 
 
 class LiteLLM(BaseLLM):
     def __init__(self, streaming_model, api_key=None, api_base=None, max_tokens=100, buffer_size=40,
-                 classification_model=None, log_dir_name=None):
+                 classification_model=None, temperature=0.0, log_dir_name=None):
         super().__init__(max_tokens, buffer_size, log_dir_name)
         self.model = streaming_model
         self.api_key = api_key or os.getenv('LLM_MODEL_API_KEY')
@@ -16,6 +21,7 @@ class LiteLLM(BaseLLM):
         self.started_streaming = False
         self.max_tokens = max_tokens
         self.classification_model = classification_model
+        self.temperature = temperature
 
     async def generate_stream(self, messages, synthesize=True):
         answer, buffer = "", ""
@@ -46,8 +52,22 @@ class LiteLLM(BaseLLM):
 
     async def generate(self, messages, classification_task=False, stream=False, synthesize=True, request_json=False):
         model = self.classification_model if classification_task is True else self.model
+        self.logger.info(f'Request to litellm {messages}')
 
-        completion = await litellm.acompletion(model=model, messages=messages, api_key=self.api_key,
-                                               api_base=self.api_base, temperature=0.0, stream=stream)
+        completion_args = {
+            "model": model,
+            "messages": messages,
+            "api_key": self.api_key,
+            "api_base": self.api_base,
+            "temperature": self.temperature,
+            "stream": stream
+        }
+
+        if request_json is True:
+            completion_args['response_format'] = {
+                "type": "json_object",
+                "schema": json_to_pydantic_schema('{"classification_label": "classification label goes here"}')
+            }
+        completion = await litellm.acompletion(**completion_args)
         text = completion.choices[0].message.content
         return text

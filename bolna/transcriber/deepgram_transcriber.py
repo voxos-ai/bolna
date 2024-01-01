@@ -15,7 +15,7 @@ load_dotenv()
 
 class DeepgramTranscriber(BaseTranscriber):
     def __init__(self, provider, input_queue=None, model='deepgram', stream=True, language="en", endpointing="400",
-                 log_dir_name=None):
+                 sampling_rate="16000", encoding="linear16", log_dir_name=None):
         super().__init__(input_queue, log_dir_name)
         self.endpointing = endpointing
         self.language = language
@@ -24,7 +24,8 @@ class DeepgramTranscriber(BaseTranscriber):
         self.heartbeat_task = None
         self.sender_task = None
         self.model = 'deepgram'
-        self.audio_format = "audio/webm"
+        self.sampling_rate = sampling_rate
+        self.encoding = encoding
         if not self.stream:
             self.session = aiohttp.ClientSession()
             self.api_url = f"https://api.deepgram.com/v1/listen?model=nova-2&filler_words=true&language={self.language}"
@@ -154,5 +155,3 @@ class DeepgramTranscriber(BaseTranscriber):
             else:
                 message = await self.sender()
                 yield message
-                # async for message in self.sender():
-                #     yield message
