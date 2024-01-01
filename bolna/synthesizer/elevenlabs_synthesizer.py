@@ -81,10 +81,8 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                         else:
                             self.logger.info("No audio data in the response")
                     except websockets.exceptions.ConnectionClosed:
-                        #logger.error("Connection closed")
                         break
             await asyncio.gather(sender(ws), receiver(ws))
-
 
     async def _send_payload(self, payload):
         url = f'https://api.elevenlabs.io/v1/text-to-speech/{self.voice}'
@@ -105,7 +103,6 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                         logger.error(f"Error: {response.status} - {await response.text()}")
             else:
                 self.logger.info("Payload was null")
-
 
     async def _http_tts(self, text):
         payload = None
