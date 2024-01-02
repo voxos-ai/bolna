@@ -56,7 +56,7 @@ class SynthesizerModel(BaseModel):
     
     @validator("provider")
     def validate_model(cls, value):
-        return validate_attribute(value, ["polly", "xtts"])
+        return validate_attribute(value, ["polly", "xtts", "elevenlabs"])
 
     # @validator("language")
     # def validate_language(cls, value):
@@ -75,7 +75,7 @@ class IOModel(BaseModel):
 class LLM_Model(BaseModel):
     streaming_model: Optional[str] = "gpt-3.5-turbo-16k"
     classification_model: Optional[str] = "gpt-4"
-    max_tokens: Optional[int]
+    max_tokens: Optional[int] = 100
     agent_flow_type: Optional[str] = "streaming"
     use_fallback: Optional[bool] = False
     family: Optional[str] = "openai"
@@ -112,11 +112,11 @@ class ToolsConfigModel(BaseModel):
     transcriber: Optional[TranscriberModel] = None
     input: Optional[IOModel] = None
     output: Optional[IOModel] = None
-    api_tools: Optional[ToolModel]
+    api_tools: Optional[ToolModel] = None
 
 
 class ToolsChainModel(BaseModel):
-    execution: str = Field(..., regex="^(parallel|sequential)$")
+    execution: str = Field(..., pattern="^(parallel|sequential)$")
     pipelines: List[List[str]]
 
 
@@ -133,9 +133,9 @@ class AssistantModel(BaseModel):
 
 
 class AssistantPromptsModel(BaseModel):
-    deserialized_prompts: Optional[Json]
-    serialized_prompts: Optional[Json]
-    conversation_graph: Optional[Json]
+    deserialized_prompts: Optional[Json] = None
+    serialized_prompts: Optional[Json] = None
+    conversation_graph: Optional[Json] = None
 
 
 class CreateAssistantPayload(BaseModel):

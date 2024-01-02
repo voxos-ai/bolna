@@ -156,6 +156,8 @@ class TaskManager:
             self.synthesizer_provider = self.task_config["tools_config"]["synthesizer"].pop("provider")
             synthesizer_class = SUPPORTED_SYNTHESIZER_MODELS.get(self.synthesizer_provider)
             provider_config = self.task_config["tools_config"]["synthesizer"].pop("provider_config")
+            if self.connected_through_dashboard:
+                self.task_config["tools_config"]["synthesizer"]["audio_format"] = "mp3" # Hard code mp3 if we're connected through dashboard
             self.tools["synthesizer"] = synthesizer_class(**self.task_config["tools_config"]["synthesizer"], **provider_config)
             llm_config["max_tokens"] = self.task_config["tools_config"]["synthesizer"].get('max_tokens')
             llm_config["buffer_size"] = self.task_config["tools_config"]["synthesizer"].get('buffer_size')
@@ -310,7 +312,8 @@ class TaskManager:
             logger.info(f"Since we do not have to discard this response adding it {self.current_request_id}")
             self.history.append({"role": "assistant", "content": llm_response})
 
-            answer = await self.tools["llm_agent"].check_for_completion(self.history)
+            #answer = await self.tools["llm_agent"].check_for_completion(self.history)
+            answer = False
             if answer:
                 logger.info("Got end of conversation. I'm stopping now")
                 self.conversation_ended = True

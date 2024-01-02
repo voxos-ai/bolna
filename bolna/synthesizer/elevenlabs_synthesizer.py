@@ -13,7 +13,7 @@ logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)s %(message)s', 
 logger = logging.getLogger(__name__)
 
 class ElevenlabsSynthesizer(BaseSynthesizer):
-    def __init__(self, voice, voice_id, model="eleven_multilingual_v1", audio_format = "pcm", sampling_rate = "16000", stream=False):
+    def __init__(self, voice, voice_id, model="eleven_multilingual_v1", audio_format = "pcm", sampling_rate = "16000", stream=False, buffer_size=400):
         self.api_key = os.environ["ELEVENLABS_API_KEY"]
         self.voice = voice_id
         self.model = model
