@@ -99,8 +99,9 @@ async def put_s3_file(bucket_name, file_key, file_data, content_type):
         data = None
         if content_type == "json":
             data = json.dumps(file_data)
-        elif content_type == "mp3":
+        elif content_type in ["mp3", "wav", "pcm"]:
             data = file_data
+        
 
         try:
             await s3_client.put_object(Bucket=bucket_name, Key=file_key, Body=data)
