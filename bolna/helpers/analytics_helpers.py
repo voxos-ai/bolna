@@ -1,7 +1,7 @@
 from litellm import token_counter
 import os
 from .utils import format_messages
-from .logger_config import configure_logger
+from .logger_config import CustomLogger
 from bolna.prompts import CHECK_FOR_COMPLETION_PROMPT
 from bolna.constants import HIGH_LEVEL_ASSISTANT_ANALYTICS_DATA
 from collections import defaultdict
@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from dateutil import parser
 
 load_dotenv()
-logger = configure_logger(__name__)
+logger = CustomLogger(__name__)
 
 
 def calculate_total_cost_of_llm_from_transcript(messages, cost_per_input_token, cost_per_output_token, model="gpt-3.5-turbo", check_for_completion = False, ended_by_assistant = False, completion_input_token_cost = 0.000001, completion_output_token_cost = 0.000002):
