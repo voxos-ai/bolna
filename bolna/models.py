@@ -116,7 +116,7 @@ class ToolsConfigModel(BaseModel):
 
 
 class ToolsChainModel(BaseModel):
-    execution: str = Field(..., regex="^(parallel|sequential)$")
+    execution: str = Field(..., patern="^(parallel|sequential)$")
     pipelines: List[List[str]]
 
 
