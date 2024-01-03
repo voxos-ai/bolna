@@ -27,6 +27,34 @@
         "gpt-4-1106-vision-preview": {
             "input": 0.00001,
             "output": 0.00003
+        },
+        "Mistral-7B-OpenOrca": {
+            "input": 0.00000015,
+            "output": 0.00000015
+        },
+        "Mistral-7B-Instruct-v0.1": {
+            "input": 0.00000015,
+            "output": 0.00000015
+        },
+        "Zephyr-7b-beta": {
+            "input": 0.00000015,
+            "output": 0.00000015
+        },
+        "Llama-2-7b-chat-hf": {
+            "input": 0.00000015,
+            "output": 0.00000015
+        },
+        "Llama-2-13b-chat-hf": {
+            "input": 0.00000025,
+            "output": 0.00000025
+        },
+        "Llama-2-70b-chat-hf": {
+            "input": 0.0000001,
+            "output": 0.0000001
+        },
+        "Mixtral-8x7B-Instruct-v0.1": {
+            "input": 0.0000005,
+            "output": 0.0000005
         }
     },
     "tts": {
@@ -41,6 +69,7 @@
     },
     "asr": {
         "nova-2": 0.0043,
+        "nova2": 0.0043,
         "nova-1": 0.0043,
         "whisper-large": 0.0048,
         "whisper-medium": 0.0042,
