@@ -11,7 +11,7 @@ logger = configure_logger(__name__, True)
 
 
 class XTTSSynthesizer(BaseSynthesizer):
-    def __init__(self, audio_format = "wav", stream = False, buffer_size=400, language = "en", voice = "rohan"):
+    def __init__(self, audio_format = "wav", stream = False, sampling_rate="24000", buffer_size=400, language = "en", voice = "rohan"):
         super().__init__(stream, buffer_size)
         self.websocket_connection = None
         self.buffer = []  # Initialize buffer to make sure we're sending chunks of words instead of token wise

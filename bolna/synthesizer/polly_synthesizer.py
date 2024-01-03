@@ -11,7 +11,7 @@ load_dotenv()
 
 
 class PollySynthesizer(BaseSynthesizer):
-    def __init__(self, voice, language, audio_format = "mp3", sampling_rate = "16000", stream=False, engine = "neural", buffer_size=400):
+    def __init__(self, voice, language, audio_format = "mp3", sampling_rate = "8000", stream=False, engine = "neural", buffer_size=400):
         super().__init__(stream, buffer_size)
         self.engine = engine
         self.format = audio_format

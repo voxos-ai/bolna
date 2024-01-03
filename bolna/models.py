@@ -12,7 +12,7 @@ def validate_attribute(value, allowed_values):
 class PollyConfig(BaseModel):
     voice: str
     engine: str
-    sampling_rate: Optional[str] = "22050"
+    sampling_rate: str
     language: str
 
 class TortoiseTTSConfig(BaseModel):
@@ -53,7 +53,7 @@ class SynthesizerModel(BaseModel):
     stream: bool = False
     buffer_size: Optional[int] = 40  # 40 characters in a buffer
     audio_format: Optional[str] = "mp3"
-    
+
     @validator("provider")
     def validate_model(cls, value):
         return validate_attribute(value, ["polly", "xtts", "elevenlabs"])
