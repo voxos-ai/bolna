@@ -17,6 +17,7 @@ class XTTSSynthesizer(BaseSynthesizer):
         self.buffer = []  # Initialize buffer to make sure we're sending chunks of words instead of token wise
         self.buffered = False
         self.ws_url = os.getenv('TTS_WS')
+        self.api_url = os.getenv('TTS_API_URL')
         self.format = audio_format
         self.stream = stream
         self.language = language
@@ -64,7 +65,7 @@ class XTTSSynthesizer(BaseSynthesizer):
                 logger.error(f"Error in receiving and processing audio bytes {e}")
 
     async def _send_payload(self, payload):
-        url = f'http://localhost:8000/generate'
+        url = self.api_url
 
         async with aiohttp.ClientSession() as session:
             if payload is not None:
