@@ -12,14 +12,9 @@ def validate_attribute(value, allowed_values):
 class PollyConfig(BaseModel):
     voice: str
     engine: str
-    sampling_rate: str
+    sampling_rate: Optional[str] = "16000"
     language: str
 
-class TortoiseTTSConfig(BaseModel):
-    voice: str
-
-class MatchaTTSConfig(BaseModel):
-    voice: str
 
 class XTTSConfig(BaseModel):
     voice: str
@@ -49,7 +44,7 @@ class TranscriberModel(BaseModel):
 
 class SynthesizerModel(BaseModel):
     provider: str
-    provider_config: Union[XTTSConfig, ElevenLabsConfig, PollyConfig ]
+    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig]
     stream: bool = False
     buffer_size: Optional[int] = 40  # 40 characters in a buffer
     audio_format: Optional[str] = "mp3"
