@@ -473,7 +473,6 @@ class TaskManager:
                             self.synthesizer_tasks = []
                         continue
                     elif message['data'] == "TRANSCRIBER_END":
-                        self.transcription_characters += len(transcriber_message)
                         logger.info("END and gerring the next step")
                         next_task = self._get_next_step(sequence, "transcriber")
                         logger.info(f'got the next task {next_task}')
