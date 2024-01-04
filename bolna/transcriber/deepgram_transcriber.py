@@ -17,7 +17,6 @@ class DeepgramTranscriber(BaseTranscriber):
     def __init__(self, provider, input_queue=None, model='deepgram', stream=True, language="en", endpointing="400", sampling_rate = "16000", encoding = "linear16"):
         super().__init__(input_queue)
         self.endpointing = endpointing
-        logger.info(f"ENDPOINTNG {endpointing}")
         self.language = language
         self.stream = stream
         self.provider = provider
@@ -78,21 +77,39 @@ class DeepgramTranscriber(BaseTranscriber):
                 self.meta_info['transcriber_duration'] =  response_data["metadata"]["duration"]
                 return create_ws_data_packet(transcript, self.meta_info)
 
+    async def _handle_data_packet(self, ws_data_packet, ws):
+        if 'eos' in ws_data_packet['meta_info'] and ws_data_packet['meta_info']['eos'] is True:
+            await self._close(ws, data={"type": "CloseStream"})
+            return True  # Indicates end of processing
+
+        return False
+
     async def sender(self, ws=None):
         try:
             while True:
                 ws_data_packet = await self.input_queue.get()
-                if 'eos' in ws_data_packet['meta_info'] and ws_data_packet['meta_info']['eos'] == True:
-                    await self._close(ws, data={"type": "CloseStream"})
+                end_of_stream = await self._handle_data_packet(ws_data_packet, ws)
+                if end_of_stream:
                     break
 
-                audio_data = ws_data_packet.get('data')
                 self.meta_info = ws_data_packet.get('meta_info')
-                if self.stream:
-                    await asyncio.gather(ws.send(audio_data))
-                else:
-                    transcription = await self._get_http_transcription(audio_data)
-                    yield transcription
+                transcription = await self._get_http_transcription(ws_data_packet.get('data'))
+                yield transcription
+        except Exception as e:
+            logger.error('Error while sending: ' + str(e))
+            raise Exception("Something went wrong")
+
+    async def sender_stream(self, ws=None):
+        try:
+            while True:
+                ws_data_packet = await self.input_queue.get()
+                end_of_stream = await self._handle_data_packet(ws_data_packet, ws)
+                if end_of_stream:
+                    break
+
+                self.meta_info = ws_data_packet.get('meta_info')
+                await asyncio.gather(ws.send(ws_data_packet.get('data')))
+
         except Exception as e:
             logger.error('Error while sending: ' + str(e))
             raise Exception("Something went wrong")
@@ -143,7 +160,7 @@ class DeepgramTranscriber(BaseTranscriber):
     async def transcribe(self):
         async with self.deepgram_connect() as deepgram_ws:
             if self.stream:
-                self.sender_task = asyncio.create_task(self.sender(deepgram_ws))
+                self.sender_task = asyncio.create_task(self.sender_stream(deepgram_ws))
                 self.heartbeat_task = asyncio.create_task(self.send_heartbeat(deepgram_ws))
                 async for message in self.receiver(deepgram_ws):
                     if self.connection_on:
