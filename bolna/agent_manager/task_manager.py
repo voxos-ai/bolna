@@ -524,8 +524,7 @@ class TaskManager:
                 await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
 
             elif self.synthesizer_provider in SUPPORTED_SYNTHESIZER_MODELS.keys():
-                logger.info(
-                    'Synthesizing chunk via {}'.format(self.synthesizer_provider))
+                logger.info('Synthesizing chunk via {}'.format(self.synthesizer_provider))
                 self.synthesizer_characters += len(text)
                 async for audio_chunk in self.tools["synthesizer"].generate(text):
                     if not self.conversation_ended:

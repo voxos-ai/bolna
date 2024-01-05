@@ -72,7 +72,6 @@ class XTTSSynthesizer(BaseSynthesizer):
                 async with session.post(url, json=payload) as response:
                     if response.status == 200:
                         data = await response.read() 
-                        logger.info(f"Received audio chunk {data}")
                         return data
                     else:
                         logger.error(f"Error: {response.status} - {await response.text()}")

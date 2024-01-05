@@ -5,13 +5,13 @@ from contextlib import AsyncExitStack
 from bolna.helpers.logger_config import configure_logger
 from .base_synthesizer import BaseSynthesizer
 
-
 logger = configure_logger(__name__)
 load_dotenv()
 
 
 class PollySynthesizer(BaseSynthesizer):
-    def __init__(self, voice, language, audio_format = "mp3", sampling_rate = "8000", stream=False, engine = "neural", buffer_size=400):
+    def __init__(self, voice, language, audio_format="mp3", sampling_rate="8000", stream=False, engine="neural",
+                 buffer_size=400):
         super().__init__(stream, buffer_size)
         self.engine = engine
         self.format = audio_format
