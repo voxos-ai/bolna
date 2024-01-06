@@ -29,3 +29,20 @@ RULES:
 {}
 
 """.format(completion_json_format)
+
+EXTRACTION_PROMPT_GENERATION_PROMPT = """
+I've asked user to explain in English what data would they like to extract from the conversation. A user will write in points and your task is to form a JSON by converting every point into a respective key value pair.
+
+### Example input
+1. user intent - intent for the user to come back on app. Example cold, lukewarm, warm, hot.
+2. user pulse - Whether the user beleives India will win the world cup or not. Example Austrailia will win the cup, yields no, Rohit Sharma will finally get a world cup medal yields yes 
+
+### Example Output
+{
+"user_intent": "Classify user's intent to come back to app into cold, warm, lukewarm and hot",
+"user_pulse": "Classify user's opinion on who will win the worldcup as "Yes" if user thinks India will win the world cup. Or "No" if user thinks India will not win the worldcup.
+}
+
+### Rules
+{}
+"""
