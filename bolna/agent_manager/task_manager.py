@@ -13,7 +13,7 @@ logger = configure_logger(__name__, True)
 
 class TaskManager:
     def __init__(self, assistant_name, task_id, task, ws, input_parameters=None, context_data=None, user_id=None,
-                 assistant_id=None, run_id=None, connected_through_dashboard=False):
+                 assistant_id=None, run_id=None, connected_through_dashboard=False, cache =  None):
         logger.info(f"doing task {task}")
         self.task_id = task_id
         self.assistant_name = assistant_name
@@ -109,6 +109,9 @@ class TaskManager:
 
         self.stream = not connected_through_dashboard
         self.is_local = False
+
+        # Memory
+        self.cache = cache
 
     async def load_prompt(self, assistant_name, task_id, is_local):
         self.is_local = is_local
@@ -293,18 +296,29 @@ class TaskManager:
             'role': 'user',
             'content': message['data']
         })
+
+            
         start_time = time.time()
         should_bypass_synth = 'bypass_synth' in meta_info and meta_info['bypass_synth'] == True
+        next_step = self._get_next_step(sequence, "llm")
 
-        async for text_chunk in self.tools['llm_agent'].generate(self.history, synthesize=True):
-            logger.info(f"###### time to get the first chunk {time.time() - start_time} {text_chunk}")
-            llm_response += " " + text_chunk
-            next_step = self._get_next_step(sequence, "llm")
-            if self.stream:
-                await self._handle_llm_output(next_step, text_chunk, should_bypass_synth, meta_info)
+        cache_response =  self.cache.get(get_md5_hash(message['data'])) if self.cache is not None else None
+        if cache_response is not None:
+            logger.info("It was a cache hit and hence simply returning")
+            await self._handle_llm_output(next_step, cache_response, should_bypass_synth, meta_info)
+        else:
+            async for text_chunk in self.tools['llm_agent'].generate(self.history, synthesize=True):
+                logger.info(f"###### time to get the first chunk {time.time() - start_time} {text_chunk}")
+                llm_response += " " + text_chunk
+                if self.stream:
+                    await self._handle_llm_output(next_step, text_chunk, should_bypass_synth, meta_info)
 
-        if not self.stream:
-            await self._handle_llm_output(next_step, llm_response, should_bypass_synth, meta_info)
+            if not self.stream:
+                await self._handle_llm_output(next_step, llm_response, should_bypass_synth, meta_info)
+
+            #add to cache
+            if self.cache is not None:
+                self.cache.set(get_md5_hash(message['data']), llm_response)
 
         if self.current_request_id in self.llm_rejected_request_ids:
             logger.info("User spoke while LLM was generating response")
@@ -410,7 +424,6 @@ class TaskManager:
             self.llm_rejected_request_ids.add(self.previous_request_id)
         else:
             skip_append_to_data = False
-
         return sequence
 
     async def process_interruption(self):
@@ -612,4 +625,3 @@ def handle_cancellation(message):
         logger.info(message)
     except Exception as e:
         traceback.print_exc()
-        logger

@@ -4,11 +4,14 @@ from dotenv import load_dotenv
 from bolna.helpers.logger_config import configure_logger
 from bolna.helpers.utils import json_to_pydantic_schema
 from .llm import BaseLLM
-
+from litellm.caching import Cache
+import time
 logger = configure_logger(__name__)
 load_dotenv()
 litellm.set_verbose=True
 #litellm.drop_params=True
+litellm.cache = Cache()
+
 
 
 
@@ -24,13 +27,15 @@ class LiteLLM(BaseLLM):
         self.classification_model = classification_model
         self.temperature = temperature
 
+
     async def generate_stream(self, messages, synthesize=True):
         answer, buffer = "", ""
         logger.info(f"request to model: {self.model}: {messages}")
-
+        start_time = time.time()
         async for chunk in await litellm.acompletion(model=self.model, messages=messages, api_key=self.api_key,
                                                      api_base=self.api_base, temperature=0.2,
                                                      max_tokens=self.max_tokens, stream=True):
+            logger.info(f"Got chunk {chunk}")
             if (text_chunk := chunk['choices'][0]['delta'].content) and not chunk['choices'][0].finish_reason:
                 answer += text_chunk
                 buffer += text_chunk
@@ -50,7 +55,7 @@ class LiteLLM(BaseLLM):
         else:
             yield answer
         self.started_streaming = False
-
+        logger.info(f"Time to generate response {time.time() - start_time}")
     async def generate(self, messages, classification_task=False, stream=False, synthesize=True, request_json=False):
         model = self.classification_model if classification_task is True else self.model
         logger.info(f'Request to litellm {messages}')
