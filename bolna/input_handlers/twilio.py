@@ -8,7 +8,7 @@ import os
 from bolna.helpers.utils import create_ws_data_packet
 from bolna.helpers.logger_config import configure_logger
 
-logger = configure_logger(__name__, True)
+logger = configure_logger(__name__)
 load_dotenv()
 
 twilio_client = Client(os.getenv('TWILIO_ACCOUNT_SID'), os.getenv('TWILIO_AUTH_TOKEN'))
@@ -34,9 +34,9 @@ class TwilioInputHandler(DefaultInputHandler):
             self.mark_set.remove(packet["mark"]["name"])
 
     async def stop_handler(self):
-        logger.info("Stopping handler")
+        logger.info("stopping handler")
         self.running = False
-        logger.info("Sleeping for 5 seconds so that whatever needs to pass is passed")
+        logger.info("sleeping for 5 seconds so that whatever needs to pass is passed")
         await asyncio.sleep(5)
         try:
             await self.websocket.close()
@@ -83,7 +83,7 @@ class TwilioInputHandler(DefaultInputHandler):
                     await self.process_mark_message(packet)
 
                 elif packet['event'] == 'stop':
-                    logger.info('Call stopping')
+                    logger.info('call stopping')
                     ws_data_packet = create_ws_data_packet(data=None, meta_info={'io': 'default', 'eos': True})
                     self.queues['transcriber'].put_nowait(ws_data_packet)
                     break

@@ -7,13 +7,14 @@ import os
 import queue
 import logging
 from .base_synthesizer import BaseSynthesizer
+from bolna.helpers.logger_config import configure_logger
 
+logger = configure_logger(__name__)
 
-logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)s %(message)s', datefmt='%Y-%m-%d,%H:%M:%S', level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 class ElevenlabsSynthesizer(BaseSynthesizer):
     def __init__(self, voice, voice_id, model="eleven_multilingual_v1", audio_format = "pcm", sampling_rate = "16000", stream=False, buffer_size=400):
+        super().__init__(stream)
         self.api_key = os.environ["ELEVENLABS_API_KEY"]
         self.voice = voice_id
         self.model = model
@@ -21,8 +22,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         self.websocket_connection = None
         self.connection_open = False
 
-
-    async def _connect(self,ws):
+    async def _connect(self, ws):
         if self.websocket_connection is None:
             self.websocket_connection = websockets.connect('wss://api.elevenlabs.io/v1/text-to-speech/8NKMgvCBNI0jN8dVStjg/stream-input?model_id=eleven_multilingual_v1')
     
@@ -31,7 +31,6 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
             self.websocket_connection = websockets.connect('wss://api.elevenlabs.io/v1/text-to-speech/8NKMgvCBNI0jN8dVStjg/stream-input?model_id=eleven_multilingual_v1')
         return self.websocket_connection
         
-
     async def _stream_tts(self):
         logger.info("Streaming TTS from eleven labs")
         async with self._get_websocket_connection() as ws:
@@ -83,10 +82,8 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                         else:
                             logger.info("No audio data in the response")
                     except websockets.exceptions.ConnectionClosed:
-                        #logger.error("Connection closed")
                         break
             await asyncio.gather(sender(ws), receiver(ws))
-
 
     async def _send_payload(self, payload):
         url = f'https://api.elevenlabs.io/v1/text-to-speech/{self.voice}'
@@ -106,7 +103,6 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                         logger.error(f"Error: {response.status} - {await response.text()}")
             else:
                 logger.info("Payload was null")
-
 
     async def _http_tts(self, text):
         payload = None

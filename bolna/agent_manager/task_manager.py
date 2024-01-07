@@ -2,18 +2,20 @@ import asyncio
 import traceback
 import time
 import json
+from .base_manager import BaseManager
 from bolna.agent_types import *
-from bolna.helpers.logger_config import configure_logger
 from bolna.providers import *
 from bolna.helpers.utils import create_ws_data_packet, is_valid_md5, get_raw_audio_bytes_from_base64, \
     get_required_input_types, format_messages, get_prompt_responses, update_prompt_with_context
+from bolna.helpers.logger_config import configure_logger
 
-logger = configure_logger(__name__, True)
+logger = configure_logger(__name__)
 
 
-class TaskManager:
+class TaskManager(BaseManager):
     def __init__(self, assistant_name, task_id, task, ws, input_parameters=None, context_data=None, user_id=None,
                  assistant_id=None, run_id=None, connected_through_dashboard=False, cache =  None):
+        super().__init__()
         logger.info(f"doing task {task}")
         self.task_id = task_id
         self.assistant_name = assistant_name
@@ -30,7 +32,8 @@ class TaskManager:
 
         self.pipelines = task['toolchain']['pipelines']
         self.textual_chat_agent = False
-        if task['toolchain']['pipelines'][0] == "llm" and task["tools_config"]["llm_agent"]["agent_task"] == "conversation":
+        if task['toolchain']['pipelines'][0] == "llm" and task["tools_config"]["llm_agent"][
+            "agent_task"] == "conversation":
             self.textual_chat_agent = False
 
         self.start_time = time.time()
@@ -53,7 +56,6 @@ class TaskManager:
             "llm": self.llm_queue,
             "synthesizer": self.synthesizer_queue
         }
-        
 
         if task_id == 0:
             if self.task_config["tools_config"]["input"]["provider"] in SUPPORTED_INPUT_HANDLERS.keys():
@@ -62,7 +64,8 @@ class TaskManager:
                     # If connected through dashboard get basic dashboard class
                     input_handler_class = SUPPORTED_INPUT_HANDLERS.get("default")
                 else:
-                    input_handler_class = SUPPORTED_INPUT_HANDLERS.get(self.task_config["tools_config"]["input"]["provider"])
+                    input_handler_class = SUPPORTED_INPUT_HANDLERS.get(
+                        self.task_config["tools_config"]["input"]["provider"])
                 self.tools["input"] = input_handler_class(self.queues, self.websocket, get_required_input_types(task),
                                                           self.mark_set, self.connected_through_dashboard)
             else:
@@ -71,10 +74,8 @@ class TaskManager:
         if self.task_config["tools_config"]["output"] is None:
             logger.info("Not setting up any output handler as it is none")
         elif self.task_config["tools_config"]["output"]["provider"] in SUPPORTED_OUTPUT_HANDLERS.keys():
-            if self.task_config["tools_config"]["output"]["provider"] == 'default':
-                self.tools["output"] = DefaultOutputHandler(self.websocket)
-            elif self.task_config["tools_config"]["output"]["provider"] == "twilio":
-                self.tools["output"] = TwilioOutputHandler(self.websocket, self.mark_set)
+            output_handler_class = SUPPORTED_OUTPUT_HANDLERS.get(self.task_config["tools_config"]["output"]["provider"])
+            self.tools["output"] = output_handler_class(self.websocket, self.mark_set)
         else:
             raise "Other input handlers not supported yet"
 
@@ -112,8 +113,10 @@ class TaskManager:
 
         # Memory
         self.cache = cache
+        logger.info("task initialization completed")
 
     async def load_prompt(self, assistant_name, task_id, is_local):
+        logger.info("prompt and config setup started")
         self.is_local = is_local
         prompt_responses = await get_prompt_responses(assistant_name, assistant_id=self.assistant_id,
                                                       user_id=self.user_id, local=self.is_local)
@@ -136,10 +139,10 @@ class TaskManager:
 
         self.history = [self.system_prompt]
 
-        llm_config = {"streaming_model": self.task_config["tools_config"]["llm_agent"]["streaming_model"]}
-
-        if self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "preprocessed":
-            llm_config["classification_model"] = self.task_config["tools_config"]["llm_agent"]["classification_model"]
+        llm_config = {
+            "streaming_model": self.task_config["tools_config"]["llm_agent"]["streaming_model"],
+            "classification_model": self.task_config["tools_config"]["llm_agent"]["classification_model"]
+        }
 
         # setting transcriber
         if self.task_config["tools_config"]["transcriber"] is not None:
@@ -151,11 +154,10 @@ class TaskManager:
                     self.task_config["tools_config"]["transcriber"]["stream"] = False
                 transcriber_class = SUPPORTED_TRANSCRIBER_MODELS.get(
                     self.task_config["tools_config"]["transcriber"]["model"])
-                self.tools["transcriber"] = transcriber_class(provider,
-                                                              **self.task_config["tools_config"]["transcriber"])
+                self.tools["transcriber"] = transcriber_class(provider, **self.task_config["tools_config"]["transcriber"])
         # setting synthesizer
+        logger.info(f"Synthesizer config: {self.task_config['tools_config']['synthesizer']}")
         if self.task_config["tools_config"]["synthesizer"] is not None:
-            logger.info(f"Synthesizer config {self.task_config['tools_config']['synthesizer']}")
             self.synthesizer_provider = self.task_config["tools_config"]["synthesizer"].pop("provider")
             synthesizer_class = SUPPORTED_SYNTHESIZER_MODELS.get(self.synthesizer_provider)
             provider_config = self.task_config["tools_config"]["synthesizer"].pop("provider_config")
@@ -179,8 +181,7 @@ class TaskManager:
                 preprocessed = self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "preprocessed"
                 logger.info(f"LLM TYPE {type(llm)}")
                 self.tools["llm_agent"] = GraphBasedConversationAgent(llm, context_data=self.context_data,
-                                                                      prompts=self.prompts,
-                                                                      preprocessed=preprocessed)
+                                                                      prompts=self.prompts, preprocessed=preprocessed)
         elif self.task_config["task_type"] == "extraction":
             logger.info("Setting up extraction agent")
             self.tools["llm_agent"] = ExtractionContextualAgent(llm, prompt=self.system_prompt)
@@ -190,16 +191,17 @@ class TaskManager:
             self.tools["llm_agent"] = SummarizationContextualAgent(llm, prompt=self.system_prompt)
             self.summarized_data = None
 
+        logger.info("prompt and config setup completed")
     ########################
     # LLM task
     ########################
 
     async def _handle_llm_output(self, next_step, text_chunk, should_bypass_synth, meta_info):
+        logger.info("received text from LLM for output processing: {}".format(text_chunk))
         if next_step == "synthesizer" and not should_bypass_synth:
             task = asyncio.gather(self._synthesize(create_ws_data_packet(text_chunk, meta_info)))
             self.synthesizer_tasks.append(asyncio.ensure_future(task))
         elif self.tools["output"] is not None:
-            logger.info(f"Sending output text {text_chunk}")
             await self.tools["output"].handle(create_ws_data_packet(text_chunk, meta_info))
 
     def _get_next_step(self, sequence, origin):
@@ -210,8 +212,7 @@ class TaskManager:
             logger.error(f"Error getting next step: {e}")
 
     def _set_call_details(self, message):
-        if self.call_sid is not None and self.stream_sid is not None and "call_sid" not in message[
-            'meta_info'] and "stream_sid" not in message['meta_info']:
+        if self.call_sid is not None and self.stream_sid is not None and "call_sid" not in message['meta_info'] and "stream_sid" not in message['meta_info']:
             return
 
         if "call_sid" in message['meta_info']:
@@ -290,7 +291,7 @@ class TaskManager:
 
     async def _process_conversation_task(self, message, sequence, meta_info):
         next_step = None
-        logger.info("Agent flow is not preprocesessed and hence moving smoothly")
+        logger.info("agent flow is not preprocessed")
         llm_response = ""
         self.history.append({
             'role': 'user',
@@ -312,6 +313,12 @@ class TaskManager:
                 llm_response += " " + text_chunk
                 if self.stream:
                     await self._handle_llm_output(next_step, text_chunk, should_bypass_synth, meta_info)
+        async for text_chunk in self.tools['llm_agent'].generate(self.history, synthesize=True):
+            logger.info(f"received text from LLM: {text_chunk}")
+            llm_response += " " + text_chunk
+            next_step = self._get_next_step(sequence, "llm")
+            if self.stream:
+                await self._handle_llm_output(next_step, text_chunk, should_bypass_synth, meta_info)
 
             if not self.stream:
                 await self._handle_llm_output(next_step, llm_response, should_bypass_synth, meta_info)
@@ -323,7 +330,6 @@ class TaskManager:
         if self.current_request_id in self.llm_rejected_request_ids:
             logger.info("User spoke while LLM was generating response")
         else:
-            logger.info(f"Since we do not have to discard this response adding it {self.current_request_id}")
             self.history.append({"role": "assistant", "content": llm_response})
 
             #answer = await self.tools["llm_agent"].check_for_completion(self.history)
@@ -343,7 +349,6 @@ class TaskManager:
             self.llm_processed_request_ids.add(self.current_request_id)
             llm_response = ""
 
-        logger.info(f"time to get all the chunks {time.time() - start_time}")
 
     def _extract_sequence_and_meta(self, message):
         sequence, meta_info = None, None
@@ -389,9 +394,8 @@ class TaskManager:
                 break
 
     async def _run_llm_task(self, message):
+        logger.info("running llm based agent")
         sequence, meta_info = self._extract_sequence_and_meta(message)
-
-        logger.info("Running llm based agent")
 
         try:
             if self._is_extraction_task() or self._is_summarization_task():
@@ -405,7 +409,7 @@ class TaskManager:
                 else:
                     await self._process_conversation_task(message, sequence, meta_info)
             else:
-                logger.error("Unknown task type")
+                logger.error("unsupported task type: {}".format(self.task_config["task_type"]))
             self.llm_task = None
         except Exception as e:
             traceback.print_exc()
@@ -451,7 +455,7 @@ class TaskManager:
             self.synthesizer_tasks.append(asyncio.create_task(
                 self._synthesize(create_ws_data_packet(transcriber_message, meta_info))))
         else:
-            logger.info(f"Need to seperate out output task")
+            logger.info(f"Need to separate out output task")
 
     async def _listen_transcriber(self):
         transcriber_message = ""
@@ -459,7 +463,6 @@ class TaskManager:
         try:
             if self.stream:
                 async for message in self.tools["transcriber"].transcribe():
-
                     if message['data'] == "transcriber_connection_closed":
                         self.transcriber_duration += message['meta_info']["transcriber_duration"]
                         logger.info("transcriber connection closed")
@@ -470,7 +473,7 @@ class TaskManager:
                     sequence = await self.process_transcriber_request(meta_info)
 
                     if message['data'] == "TRANSCRIBER_BEGIN":
-                        logger.info("Starting transcriber stream")
+                        logger.info("starting transcriber stream")
                         start_time = time.time()
                         await self.tools["output"].handle_interruption()
                         if self.llm_task is not None:
@@ -486,20 +489,22 @@ class TaskManager:
                             self.synthesizer_tasks = []
                         continue
                     elif message['data'] == "TRANSCRIBER_END":
-                        logger.info("END and gerring the next step")
+                        logger.info("transcriber stream and preparing the next step")
                         next_task = self._get_next_step(sequence, "transcriber")
                         logger.info(f'got the next task {next_task}')
                         if self.was_long_pause:
                             logger.info(
-                                f"Seems like there was a long, long pause {self.history[-1]['content']} , {transcriber_message}")
+                                f"Seems like there was a long pause {self.history[-1]['content']} , {transcriber_message}")
                             message = self.history[-1]['content'] + " " + transcriber_message
                             self.history = self.history[:-1]
                             self.was_long_pause = False
+
+                        logger.info(f'invoking next_task {next_task} with transcriber_message: {transcriber_message}')
                         await self._handle_transcriber_output(next_task, transcriber_message, meta_info)
                         transcriber_message = ""
                         continue
                     else:
-                        logger.info("data")
+                        logger.info("processed text from transcriber: {}".format(message['data']))
                         transcriber_message += message['data']
             else:
                 logger.info("Not a streaming conversation. Hence getting a full blown transcript")
@@ -517,17 +522,13 @@ class TaskManager:
     async def _send_to_synthesizer(self):
         pass
 
-    async def _receive_from_synthesizer(self):
-        async for packet in self.tools["synthesizer"].receive():
-            await self.tools["output"].handle(packet)
-
     async def _synthesize(self, message):
         meta_info = message["meta_info"]
         text = message["data"]
         meta_info["type"] = "audio"
         try:
             if meta_info["is_md5_hash"]:
-                logger.info('Sending preprocessed audio response to {}'.format(
+                logger.info('sending preprocessed audio response to {}'.format(
                     self.task_config["tools_config"]["output"]["provider"]))
                 audio_chunk = await get_raw_audio_bytes_from_base64(self.assistant_name, text,
                                                                     self.task_config["tools_config"]["output"][
@@ -539,13 +540,15 @@ class TaskManager:
             elif self.synthesizer_provider in SUPPORTED_SYNTHESIZER_MODELS.keys():
                 logger.info('Synthesizing chunk via {}'.format(self.synthesizer_provider))
                 self.synthesizer_characters += len(text)
+                logger.info('sending text to {} for generation: {} '.format(self.synthesizer_provider, text))
+
+                logger.info('Sending synthesized audio chunk to {}'.format(
+                    self.task_config["tools_config"]["output"]["provider"]))
                 async for audio_chunk in self.tools["synthesizer"].generate(text):
                     if not self.conversation_ended:
-                        logger.info('Sending synthesized audio chunk to {}'.format(
-                            self.task_config["tools_config"]["output"]["provider"]))
                         await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
             else:
-                logger.info("other models haven't been done yet")
+                logger.info("other synthesizer models not supported yet")
         except Exception as e:
             logger.error(f"Error in synthesizer: {e}")
 
@@ -560,6 +563,7 @@ class TaskManager:
         try:
             if self.task_id == 0:
                 # Create transcriber and synthesizer tasks
+                logger.info("starting task_id {}".format(self.task_id))
                 tasks = [asyncio.create_task(self.tools['input'].handle())]
                 if "transcriber" in self.tools:
                     tasks.append(asyncio.create_task(self._listen_transcriber()))
@@ -590,11 +594,11 @@ class TaskManager:
         except asyncio.CancelledError as e:
             # Cancel all tasks on cancel
             traceback.print_exc()
-            handle_cancellation(f"Websocket got cancelled {self.task_id}")
+            self.handle_cancellation(f"Websocket got cancelled {self.task_id}")
 
         except Exception as e:
             # Cancel all tasks on error
-            handle_cancellation(f"Exception occurred {e}")
+            self.handle_cancellation(f"Exception occurred {e}")
             raise Exception(e)
 
         finally:
@@ -608,20 +612,20 @@ class TaskManager:
                 output = self.input_parameters
                 if self.task_config["task_type"] == "extraction":
                     output = { "extracted_data" : self.extracted_data, "task_type": "extraction"}
-                elif self.task_config["task_type"] == "summarization": 
+                elif self.task_config["task_type"] == "summarization":
                     output = {"summary" : self.summarized_data, "task_type": "summarization"}
 
             return output
 
-
-def handle_cancellation(message):
-    try:
-        # Cancel all tasks on cancellation
-        tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
-        logger.info(f"tasks {len(tasks)}")
-        for task in tasks:
-            logger.info(f"Cancelling task {task.get_name()}")
-            task.cancel()
-        logger.info(message)
-    except Exception as e:
-        traceback.print_exc()
+    def handle_cancellation(self, message):
+        try:
+            # Cancel all tasks on cancellation
+            tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+            logger.info(f"tasks {len(tasks)}")
+            for task in tasks:
+                logger.info(f"Cancelling task {task.get_name()}")
+                task.cancel()
+            logger.info(message)
+        except Exception as e:
+            traceback.print_exc()
+            logger.info(e)

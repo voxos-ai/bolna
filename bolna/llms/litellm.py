@@ -1,23 +1,17 @@
 import os
 import litellm
 from dotenv import load_dotenv
-from bolna.helpers.logger_config import configure_logger
-from bolna.helpers.utils import json_to_pydantic_schema
 from .llm import BaseLLM
-from litellm.caching import Cache
-import time
+from bolna.helpers.utils import json_to_pydantic_schema
+from bolna.helpers.logger_config import configure_logger
+
 logger = configure_logger(__name__)
 load_dotenv()
-litellm.set_verbose=True
-#litellm.drop_params=True
-litellm.cache = Cache()
-
-
 
 
 class LiteLLM(BaseLLM):
     def __init__(self, streaming_model, api_key=None, api_base=None, max_tokens=100, buffer_size=40,
-                 classification_model=None, temperature = 0.0):
+                 classification_model=None, temperature=0.0):
         super().__init__(max_tokens, buffer_size)
         self.model = streaming_model
         self.api_key = api_key or os.getenv('LLM_MODEL_API_KEY')
@@ -61,15 +55,16 @@ class LiteLLM(BaseLLM):
         logger.info(f'Request to litellm {messages}')
 
         completion_args = {
-            "model" : model,
-            "messages" :messages,
+            "model": model,
+            "messages": messages,
             "api_key": self.api_key,
-            "api_base": self.api_base, 
+            "api_base": self.api_base,
             "temperature": self.temperature,
             "stream": stream
         }
-        if request_json == True:
-            completion_args['response_format']= {
+
+        if request_json is True:
+            completion_args['response_format'] = {
                 "type": "json_object",
                 "schema": json_to_pydantic_schema('{"classification_label": "classification label goes here"}')
             }

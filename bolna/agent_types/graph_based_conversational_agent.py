@@ -2,11 +2,11 @@ import random
 import json
 import asyncio
 import traceback
-from bolna.helpers.logger_config import configure_logger
+from .base_agent import BaseAgent
 from bolna.constants import USERS_KEY_ORDER
+from bolna.helpers.logger_config import configure_logger
 
 logger = configure_logger(__name__)
-
 
 class Node:
     def __init__(self, node_id, node_label, content, classification_labels: list = None, prompt=None, milestone_check_prompt=None,
@@ -50,11 +50,11 @@ class Graph:
 
     # @TODO complete this function
     def remove_node(self, parent, node):
-        logger.info("Not yet implemented")
+        print("Not yet implemented")
 
 
-class GraphBasedConversationAgent:
-    def __init__(self, llm, prompts, context_data=None, preprocessed=True):
+class GraphBasedConversationAgent(BaseAgent):
+    def __init__(self, llm, prompts, context_data=None, preprocessed=True, log_dir_name=None):
         super().__init__()
         # Config
         self.brain = llm

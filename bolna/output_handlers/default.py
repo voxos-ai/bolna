@@ -7,7 +7,7 @@ load_dotenv()
 
 
 class DefaultOutputHandler:
-    def __init__(self, websocket=None):
+    def __init__(self, websocket=None, mark_set=None, log_dir_name=None):
         self.websocket = websocket
         self.is_interruption_task_on = False
 

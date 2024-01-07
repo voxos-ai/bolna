@@ -14,7 +14,7 @@ class PollySynthesizer(BaseSynthesizer):
                  buffer_size=400):
         super().__init__(stream, buffer_size)
         self.engine = engine
-        self.format = audio_format
+        self.format = audio_format.lower()
         self.voice = voice
         self.language = language
         self.sample_rate = sampling_rate
@@ -22,7 +22,6 @@ class PollySynthesizer(BaseSynthesizer):
         # @TODO: initialize client here
         self.client = None
 
-    # @TODO: remove AWS client passed as params
     @staticmethod
     async def create_client(service: str, session: AioSession, exit_stack: AsyncExitStack):
         # creates AWS session from system environment credentials & config
@@ -48,8 +47,8 @@ class PollySynthesizer(BaseSynthesizer):
             else:
                 yield await response["AudioStream"].read()
 
-
     async def generate(self, text):
+        logger.info('received text for audio generation: {}'.format(text))
         try:
             if text != "" and text != "LLM_END":
                 async for message in self.generate_tts_response(text):

@@ -1,7 +1,7 @@
 import json
-from dotenv import load_dotenv
 import time
 import uuid
+from dotenv import load_dotenv
 from bolna.helpers.logger_config import configure_logger
 
 load_dotenv()
@@ -52,8 +52,7 @@ class BaseTranscriber:
             logger.info(
                 f"No confidence for the last vocal timeframe. Over transcription time {transcription_completion_time - self.transcription_start_time}")
 
-    @staticmethod
-    async def _close(ws, data):
+    async def _close(self, ws, data):
         try:
             await ws.send(json.dumps(data))
         except Exception as e:
