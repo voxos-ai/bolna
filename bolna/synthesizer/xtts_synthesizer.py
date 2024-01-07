@@ -7,8 +7,8 @@ import os
 import audioop
 from .base_synthesizer import BaseSynthesizer
 
-
 class XTTSSynthesizer(BaseSynthesizer):
+#Loading...
     def __init__(self, audio_format = "wav", stream = False, sampling_rate="24000", buffer_size=400, language = "en", voice = "rohan"):
         super().__init__(stream, buffer_size)
         self.websocket_connection = None
@@ -20,6 +20,7 @@ class XTTSSynthesizer(BaseSynthesizer):
         self.stream = stream
         self.language = language
         self.voice = voice
+        self.sampling_rate = sampling_rate
 
     # async def _connect(self):
     #     if self.websocket_connection is None:
@@ -117,7 +118,7 @@ class XTTSSynthesizer(BaseSynthesizer):
                     self.buffered = True
 
                 if self.format == "pcm":
-                    chunk = audioop.ratecv(chunk, 2, 1, 24000, 8000, None)[0]
+                    chunk = audioop.ratecv(chunk, 2, 1, 24000, self.sampling_rate, None)[0]
 
                 yield chunk
 
