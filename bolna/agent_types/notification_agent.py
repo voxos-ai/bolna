@@ -1,9 +1,12 @@
 from .base_agent import BaseAgent
+from bolna.helpers.logger_config import configure_logger
+
+logger = configure_logger(__name__)
 
 
 class ExtractionContextualAgent(BaseAgent):
-    def __init__(self, llm, prompt=None, log_dir_name=None):
-        super().__init__(log_dir_name)
+    def __init__(self, llm, prompt=None):
+        super().__init__()
         self.brain = llm
 
         self.current_messages = 0

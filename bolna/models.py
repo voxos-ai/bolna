@@ -9,6 +9,7 @@ def validate_attribute(value, allowed_values):
         raise ValidationError(f"Invalid provider. Supported values: {', '.join(allowed_values)}")
     return value
 
+
 class PollyConfig(BaseModel):
     voice: str
     engine: str
@@ -20,10 +21,12 @@ class XTTSConfig(BaseModel):
     voice: str
     language: str
 
+
 class ElevenLabsConfig(BaseModel):
     voice: str
     voice_id: str
     model: str
+
 
 class TranscriberModel(BaseModel):
     model: str
@@ -52,11 +55,6 @@ class SynthesizerModel(BaseModel):
     @validator("provider")
     def validate_model(cls, value):
         return validate_attribute(value, ["polly", "xtts", "elevenlabs"])
-
-    # @validator("language")
-    # def validate_language(cls, value):
-    #     return validate_attribute(value, ["en", "hi", "es", "fr"])
-
 
 class IOModel(BaseModel):
     provider: str

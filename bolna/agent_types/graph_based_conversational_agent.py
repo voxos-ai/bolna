@@ -4,7 +4,9 @@ import asyncio
 import traceback
 from .base_agent import BaseAgent
 from bolna.constants import USERS_KEY_ORDER
+from bolna.helpers.logger_config import configure_logger
 
+logger = configure_logger(__name__)
 
 class Node:
     def __init__(self, node_id, node_label, content, classification_labels: list = None, prompt=None, milestone_check_prompt=None,
@@ -53,7 +55,7 @@ class Graph:
 
 class GraphBasedConversationAgent(BaseAgent):
     def __init__(self, llm, prompts, context_data=None, preprocessed=True, log_dir_name=None):
-        super().__init__(log_dir_name)
+        super().__init__()
         # Config
         self.brain = llm
         self.context_data = context_data
@@ -80,7 +82,7 @@ class GraphBasedConversationAgent(BaseAgent):
     def _handle_intro_message(self):
         audio_pair = self._get_audio_text_pair(self.current_node)
         self.conversation_intro_done = True
-        self.logger.info("Conversation intro done")
+        logger.info("Conversation intro done")
         if self.current_node.prompt == None:
             #These are convos with two step intros
             ind = random.randint(0, len(self.current_node.children) - 1)
@@ -88,11 +90,11 @@ class GraphBasedConversationAgent(BaseAgent):
         return audio_pair
 
     async def _get_next_preprocessed_step(self, history):
-        self.logger.info(f"current node {self.current_node.node_label}, self.current_node == self.graph.root {self.current_node == self.graph.root}, and self.conversation_intro_done {self.conversation_intro_done}")
+        logger.info(f"current node {self.current_node.node_label}, self.current_node == self.graph.root {self.current_node == self.graph.root}, and self.conversation_intro_done {self.conversation_intro_done}")
         if self.current_node == self.graph.root and not self.conversation_intro_done:
             return self._handle_intro_message()
 
-        self.logger.info(f"Conversation intro was done and hence moving forward")
+        logger.info(f"Conversation intro was done and hence moving forward")
         if len(history) > 7:
             # @TODO: Add summary of left out messages
             prev_messages = history[-6:]
@@ -115,11 +117,11 @@ class GraphBasedConversationAgent(BaseAgent):
                 if len(self.current_node.children) == 0:
                     ind = random.randint(0, len(self.current_node.content) - 1)
                     audio_pair = self.current_node.content[ind]
-                    self.logger.info('Agent: {}'.format(audio_pair.get('text')))
+                    logger.info('Agent: {}'.format(audio_pair.get('text')))
                     yield audio_pair["audio"]
                 else:
                     next_state = await self._get_next_preprocessed_step(history)
-                    self.logger.info('Agent: {}'.format(next_state.get('text')))
+                    logger.info('Agent: {}'.format(next_state.get('text')))
                     history.append({'role': 'assistant', 'content': next_state['text']})
                     yield next_state["audio"]
                 
@@ -133,4 +135,4 @@ class GraphBasedConversationAgent(BaseAgent):
 
         except Exception as e:
             traceback.print_exc()
-            self.logger.error(f"Error sending intro text: {e}")
+            logger.error(f"Error sending intro text: {e}")
