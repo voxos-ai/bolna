@@ -83,7 +83,6 @@ class XTTSSynthesizer(BaseSynthesizer):
                 logger.info("Payload was null")
 
     async def _http_tts(self, text):
-        payload = None
         logger.info(f"text {text}")
         payload = {
             "text": text,
@@ -94,7 +93,7 @@ class XTTSSynthesizer(BaseSynthesizer):
         logger.info(f"Sending {payload}")
         response = await self._send_payload(payload)
         return response
-        
+
     async def _generate(self, text):
         try:
             yield await self._http_tts(text)
@@ -125,7 +124,8 @@ class XTTSSynthesizer(BaseSynthesizer):
                     self.buffered = True
 
                 if self.format == "pcm":
-                    chunk = audioop.ratecv(chunk, 2, 1, 24000, int(self.sampling_rate), None)[0]
+                    # for pcm audio
+                    chunk = audioop.ratecv(chunk, 2, 1, 24000, 8000, None)[0]
 
                 yield chunk
 
