@@ -12,11 +12,10 @@ from contextlib import AsyncExitStack
 from dotenv import load_dotenv
 from pydantic import BaseModel, create_model
 
-from .logger_config import CustomLogger
+from .logger_config import configure_logger
 from bolna.constants import PREPROCESS_DIR
 
-custom_logger = CustomLogger(__name__)
-logger = custom_logger.update_logger()
+logger = configure_logger(__name__)
 load_dotenv()
 BUCKET_NAME = os.getenv('BUCKET_NAME')
 
@@ -100,8 +99,9 @@ async def put_s3_file(bucket_name, file_key, file_data, content_type):
         data = None
         if content_type == "json":
             data = json.dumps(file_data)
-        elif content_type == "mp3":
+        elif content_type in ["mp3", "wav", "pcm"]:
             data = file_data
+        
 
         try:
             await s3_client.put_object(Bucket=bucket_name, Key=file_key, Body=data)
@@ -166,7 +166,9 @@ def format_messages(messages):
 
 
 def update_prompt_with_context(prompt, context_data):
-    return prompt.format(**context_data)
+    if not isinstance(context_data.get('recipient_data'), dict):
+        return prompt
+    return prompt.format(**context_data.get('recipient_data', {}))
 
 
 async def get_prompt_responses(agent_name, local=False, user_id=None, assistant_id = None):

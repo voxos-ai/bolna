@@ -6,16 +6,17 @@ from twilio.rest import Client
 from dotenv import load_dotenv
 import os
 from bolna.helpers.utils import create_ws_data_packet
+from bolna.helpers.logger_config import configure_logger
 
-
+logger = configure_logger(__name__)
 load_dotenv()
 
 twilio_client = Client(os.getenv('TWILIO_ACCOUNT_SID'), os.getenv('TWILIO_AUTH_TOKEN'))
 
 
 class TwilioInputHandler(DefaultInputHandler):
-    def __init__(self, queues, websocket=None, input_types=None, mark_set=None, connected_through_dashboard=False, log_dir_name=None):
-        super().__init__(queues, websocket, input_types, connected_through_dashboard, log_dir_name)
+    def __init__(self, queues, websocket=None, input_types=None, mark_set=None, connected_through_dashboard=False):
+        super().__init__(queues, websocket, input_types, connected_through_dashboard)
         self.stream_sid = None
         self.call_sid = None
         self.buffer = []
@@ -33,15 +34,15 @@ class TwilioInputHandler(DefaultInputHandler):
             self.mark_set.remove(packet["mark"]["name"])
 
     async def stop_handler(self):
-        self.logger.info("stopping handler")
+        logger.info("stopping handler")
         self.running = False
-        self.logger.info("sleeping for 5 seconds so that whatever needs to pass is passed")
+        logger.info("sleeping for 5 seconds so that whatever needs to pass is passed")
         await asyncio.sleep(5)
         try:
             await self.websocket.close()
-            self.logger.info("WebSocket connection closed")
+            logger.info("WebSocket connection closed")
         except Exception as e:
-            self.logger.error(f"Error closing WebSocket: {e}")
+            logger.error(f"Error closing WebSocket: {e}")
 
     async def ingest_audio(self, audio_data, meta_info):
         ws_data_packet = create_ws_data_packet(data=audio_data, meta_info=meta_info)
@@ -70,19 +71,19 @@ class TwilioInputHandler(DefaultInputHandler):
 
                         if self.last_media_received + 20 < media_ts:
                             bytes_to_fill = 8 * (media_ts - (self.last_media_received + 20))
-                            self.logger.info(f"Filling {bytes_to_fill} bytes of silence")
+                            logger.info(f"Filling {bytes_to_fill} bytes of silence")
                             await self.ingest_audio(b"\xff" * bytes_to_fill, meta_info)
 
                         self.last_media_received = media_ts
                         await self.ingest_audio(media_audio, meta_info)
                     else:
-                        self.logger.info("Getting media elements but not inbound media")
+                        logger.info("Getting media elements but not inbound media")
 
                 elif packet['event'] == 'mark':
                     await self.process_mark_message(packet)
 
                 elif packet['event'] == 'stop':
-                    self.logger.info('call stopping')
+                    logger.info('call stopping')
                     ws_data_packet = create_ws_data_packet(data=None, meta_info={'io': 'default', 'eos': True})
                     self.queues['transcriber'].put_nowait(ws_data_packet)
                     break
@@ -95,7 +96,7 @@ class TwilioInputHandler(DefaultInputHandler):
                         'eos': True
                     })
                 self.queues['transcriber'].put_nowait(ws_data_packet)
-                self.logger.error('Exception in twilio_receiver reading events: {}'.format(e))
+                logger.error('Exception in twilio_receiver reading events: {}'.format(e))
                 break
 
     async def handle(self):

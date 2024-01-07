@@ -1,19 +1,19 @@
-import openai
-from openai import AsyncOpenAI
 import os
-import json
+import openai
 from dotenv import load_dotenv
+from openai import AsyncOpenAI
 from .llm import BaseLLM
-import ast
+from bolna.helpers.logger_config import configure_logger
 
+logger = configure_logger(__name__)
 load_dotenv()
 openai.api_key = os.getenv('OPENAI_API_KEY')
 
 
 class OpenAiLLM(BaseLLM):
     def __init__(self, max_tokens=100, buffer_size=40, streaming_model="gpt-3.5-turbo-16k",
-                 classification_model="gpt-3.5-turbo-1106", temperature= 0.1, log_dir_name=None):
-        super().__init__(max_tokens, buffer_size, log_dir_name)
+                 classification_model="gpt-3.5-turbo-1106", temperature= 0.1):
+        super().__init__(max_tokens, buffer_size)
         self.model = streaming_model
         self.started_streaming = False
         self.async_client = AsyncOpenAI()
@@ -26,7 +26,7 @@ class OpenAiLLM(BaseLLM):
 
         answer, buffer = "", ""
         model = self.classification_model if classification_task is True else self.model
-        self.logger.info(f"request to open ai {messages}")
+        logger.info(f"request to open ai {messages}")
         async for chunk in await self.async_client.chat.completions.create(model=model, temperature=self.temperature,
                                                                            messages=messages, stream=True,
                                                                            max_tokens=self.max_tokens,
@@ -58,13 +58,6 @@ class OpenAiLLM(BaseLLM):
         completion = await self.async_client.chat.completions.create(model=model, temperature=0.0, messages=messages,
                                                                      stream=False, response_format=response_format)
         res = completion.choices[0].message.content
-        self.logger.info('generate: {}'.format(res))
-        if response_format.get('type') == 'text':
-            try:
-                if isinstance(ast.literal_eval(res), dict):
-                    return json.dumps(ast.literal_eval(res))
-            except Exception as e:
-                return json.dumps({'answer': res.split(': ')[1]})
         return res
 
     def get_response_format(self, is_json_format: bool):

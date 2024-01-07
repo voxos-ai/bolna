@@ -7,6 +7,9 @@ import requests
 import tiktoken
 from .base_manager import BaseManager
 from .task_manager import TaskManager
+from bolna.helpers.logger_config import configure_logger
+
+logger = configure_logger(__name__)
 
 # Find your Account SID and Auth Token at twilio.com/console
 # and set the environment variables. See http://twil.io/secure
@@ -18,9 +21,8 @@ enc = tiktoken.get_encoding("cl100k_base")
 
 class AssistantManager(BaseManager):
     def __init__(self, agent_config, ws, context_data=None, user_id=None, assistant_id=None,
-                 connected_through_dashboard=None, log_dir_name=None):
-        super().__init__(log_dir_name=log_dir_name)
-        self.log_dir_name = log_dir_name
+                 connected_through_dashboard=None):
+        super().__init__()
         self.tools = {}
         self.websocket = ws
         self.agent_config = agent_config
@@ -42,12 +44,11 @@ class AssistantManager(BaseManager):
             task_manager = TaskManager(self.agent_config["assistant_name"], task_id, task, self.websocket,
                                        context_data=self.context_data, input_parameters=input_parameters,
                                        user_id=self.user_id, assistant_id=self.assistant_id, run_id=self.run_id,
-                                       connected_through_dashboard=self.connected_through_dashboard,
-                                       log_dir_name=self.log_dir_name)
+                                       connected_through_dashboard=self.connected_through_dashboard)
             await task_manager.load_prompt(self.agent_config["assistant_name"], task_id, is_local=is_local)
             task_output = await task_manager.run()
             task_output['run_id'] = self.run_id
             yield task_id, task_output
             self.task_states[task_id] = True
             input_parameters = task_output
-        self.logger.info("Done with execution of the agent")
+        logger.info("Done with execution of the agent")

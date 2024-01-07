@@ -1,15 +1,15 @@
 import json
-from dotenv import load_dotenv
 import time
 import uuid
-from bolna.helpers.logger_config import CustomLogger
+from dotenv import load_dotenv
+from bolna.helpers.logger_config import configure_logger
 
 load_dotenv()
-custom_logger = CustomLogger(__name__)
+logger = configure_logger(__name__)
 
 
 class BaseTranscriber:
-    def __init__(self, input_queue=None, log_dir_name=None):
+    def __init__(self, input_queue=None):
         self.input_queue = input_queue
         self.connection_on = True
         self.callee_speaking = False
@@ -19,8 +19,6 @@ class BaseTranscriber:
         self.last_vocal_frame_time = None
         self.previous_request_id = None
         self.current_request_id = None
-
-        self.logger = custom_logger.update_logger(log_dir_name=log_dir_name)
 
     def update_meta_info(self):
         self.meta_info['request_id'] = self.current_request_id if self.current_request_id else None
@@ -39,7 +37,7 @@ class BaseTranscriber:
 
         if not self.callee_speaking:
             self.callee_speaking = True
-            self.logger.debug("Making callee speaking true")
+            logger.debug("Making callee speaking true")
             self.transcription_start_time = time.time() - msg['duration']
             send_begin_packet = True
 
@@ -48,14 +46,14 @@ class BaseTranscriber:
     async def log_latency_info(self):
         transcription_completion_time = time.time()
         if self.last_vocal_frame_time:
-            self.logger.info(
+            logger.info(
                 f"################ Time latency: For request {self.meta_info['request_id']}, user started speaking at {self.transcription_start_time}, last audio frame received at {self.last_vocal_frame_time} transcription_completed_at {transcription_completion_time} overall latency {transcription_completion_time - self.last_vocal_frame_time}")
         else:
-            self.logger.info(
+            logger.info(
                 f"No confidence for the last vocal timeframe. Over transcription time {transcription_completion_time - self.transcription_start_time}")
 
     async def _close(self, ws, data):
         try:
             await ws.send(json.dumps(data))
         except Exception as e:
-            self.logger.error(f"Error while closing transcriber stream {e}")
+            logger.error(f"Error while closing transcriber stream {e}")
