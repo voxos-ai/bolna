@@ -12,10 +12,11 @@ from contextlib import AsyncExitStack
 from dotenv import load_dotenv
 from pydantic import BaseModel, create_model
 
-from .logger_config import configure_logger
+from .logger_config import CustomLogger
 from bolna.constants import PREPROCESS_DIR
 
-logger = configure_logger(__name__)
+custom_logger = CustomLogger(__name__)
+logger = custom_logger.update_logger()
 load_dotenv()
 BUCKET_NAME = os.getenv('BUCKET_NAME')
 
@@ -114,8 +115,6 @@ async def put_s3_file(bucket_name, file_key, file_data, content_type):
 async def get_raw_audio_bytes_from_base64(agent_name, b64_string, audio_format='mp3', user_id = None, assistant_id=None, local = False):
     # we are already storing pcm formatted audio in the filler config. No need to encode/decode them further
     audio_data = None
-    logger.info(f"getting audio from base64 string {b64_string} and local is {local}")
-
     if local:
         file_name = f"{PREPROCESS_DIR}/{agent_name}/{audio_format}/{b64_string}.{audio_format}"
         with open(file_name, 'rb') as file:
@@ -123,7 +122,6 @@ async def get_raw_audio_bytes_from_base64(agent_name, b64_string, audio_format='
             audio_data = file.read()
     else:
         object_key = f"{user_id}/{assistant_id}/audio/{b64_string}.{audio_format}"
-        logger.info(f"Reading {object_key}")
         audio_data = await get_s3_file(BUCKET_NAME, object_key)
 
     return audio_data

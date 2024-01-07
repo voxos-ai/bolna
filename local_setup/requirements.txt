@@ -1,4 +1,5 @@
-git+https://github.com/bolna-ai/bolna@master
 python-dotenv==1.0.0
 fastapi==0.95.1
 redis==5.0.1
+twilio==8.9.0
+uvicorn==0.22.0

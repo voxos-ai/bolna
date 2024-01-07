@@ -14,7 +14,7 @@ class PollySynthesizer(BaseSynthesizer):
                  buffer_size=400):
         super().__init__(stream, buffer_size)
         self.engine = engine
-        self.format = audio_format
+        self.format = audio_format.lower()
         self.voice = voice
         self.language = language
         self.sample_rate = sampling_rate
@@ -22,7 +22,6 @@ class PollySynthesizer(BaseSynthesizer):
         # @TODO: initialize client here
         self.client = None
 
-    # @TODO: remove AWS client passed as params
     @staticmethod
     async def create_client(service: str, session: AioSession, exit_stack: AsyncExitStack):
         # creates AWS session from system environment credentials & config
@@ -33,7 +32,7 @@ class PollySynthesizer(BaseSynthesizer):
 
         async with AsyncExitStack() as exit_stack:
             polly = await self.create_client("polly", session, exit_stack)
-            logger.info(f"Generating TTS response for text: {text}, SampleRate {self.sample_rate}")
+            self.logger.info(f"Generating TTS response for text: {text}, SampleRate {self.sample_rate}")
             try:
                 response = await polly.synthesize_speech(
                     Engine=self.engine,
@@ -44,15 +43,15 @@ class PollySynthesizer(BaseSynthesizer):
                     SampleRate=self.sample_rate
                 )
             except (BotoCoreError, ClientError) as error:
-                logger.error(error)
+                self.logger.error(error)
             else:
                 yield await response["AudioStream"].read()
 
-
     async def generate(self, text):
+        self.logger.info('received text for audio generation: {}'.format(text))
         try:
             if text != "" and text != "LLM_END":
                 async for message in self.generate_tts_response(text):
                     yield message
         except Exception as e:
-            logger.error(f"Error in polly generate {e}")
+            self.logger.error(f"Error in polly generate {e}")

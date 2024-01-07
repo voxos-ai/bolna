@@ -7,27 +7,25 @@ import audioop
 import uuid
 import redis.asyncio as redis
 from .default import DefaultOutputHandler
-from bolna.helpers.logger_config import configure_logger
 
-logger = configure_logger(__name__, True)
 load_dotenv()
 
 twilio_client = Client(os.getenv('TWILIO_ACCOUNT_SID'), os.getenv('TWILIO_AUTH_TOKEN'))
-
 redis_pool = redis.ConnectionPool.from_url(os.getenv('REDIS_URL'), decode_responses=True)
 redis_client = redis.Redis.from_pool(redis_pool)
 
 
 class TwilioOutputHandler(DefaultOutputHandler):
-    def __init__(self, websocket=None, mark_set=None):
-        super().__init__(websocket)
+    def __init__(self, websocket=None, mark_set=None, log_dir_name=None):
+        super().__init__(websocket, log_dir_name)
+        self.mark_set = mark_set
+
         self.stream_sid = None
         self.current_request_id = None
         self.rejected_request_ids = set()
-        self.mark_set = mark_set
 
     async def handle_interruption(self):
-        logger.info("Interrupting because user spoke in between")
+        self.logger.info("interrupting because user spoke in between")
         if len(self.mark_set) > 0:
             message_clear = {
                 "event": "clear",
@@ -36,22 +34,20 @@ class TwilioOutputHandler(DefaultOutputHandler):
             await self.websocket.send_text(json.dumps(message_clear))
             self.mark_set = set()
 
-    @staticmethod
-    async def send_sms(message_text, call_number):
+    async def send_sms(self, message_text, call_number):
         message = twilio_client.messages.create(
             to='{}'.format(call_number),
             from_='{}'.format(os.getenv('TWILIO_PHONE_NUMBER')),
             body=message_text)
-        logger.info(f'Sent whatsapp message: {message_text}')
+        self.logger.info(f'Sent whatsapp message: {message_text}')
         return message.sid
-    
-    @staticmethod
-    async def send_whatsapp(message_text, call_number):
+
+    async def send_whatsapp(self, message_text, call_number):
         message = twilio_client.messages.create(
             to='whatsapp:{}'.format(call_number),
             from_='whatsapp:{}'.format(os.getenv('TWILIO_PHONE_NUMBER')),
             body=message_text)
-        logger.info(f'Sent whatsapp message: {message_text}')
+        self.logger.info(f'Sent whatsapp message: {message_text}')
         return message.sid
 
     async def handle(self, ws_data_packet):
@@ -90,7 +86,7 @@ class TwilioOutputHandler(DefaultOutputHandler):
                     }
                     await self.websocket.send_text(json.dumps(mark_message))
             except Exception as e:
-                logger.error(f'something went wrong while sending message to twilio {e}')
+                self.logger.error(f'something went wrong while sending message to twilio {e}')
 
         except Exception as e:
-            logger.error(f'something went wrong while handling twilio {e}')
+            self.logger.error(f'something went wrong while handling twilio {e}')

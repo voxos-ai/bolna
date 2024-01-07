@@ -14,7 +14,8 @@ load_dotenv()
 
 
 class DeepgramTranscriber(BaseTranscriber):
-    def __init__(self, provider, input_queue=None, model='deepgram', stream=True, language="en", endpointing="400", sampling_rate = "16000", encoding = "linear16"):
+    def __init__(self, provider, input_queue=None, model='deepgram', stream=True, language="en", endpointing="400",
+                 sampling_rate="16000", encoding="linear16"):
         super().__init__(input_queue)
         self.endpointing = endpointing
         self.language = language
@@ -24,6 +25,7 @@ class DeepgramTranscriber(BaseTranscriber):
         self.sender_task = None
         self.model = 'deepgram'
         self.sampling_rate = sampling_rate
+        self.encoding = encoding
         if not self.stream:
             self.session = aiohttp.ClientSession()
             self.api_url = f"https://api.deepgram.com/v1/listen?model=nova-2&filler_words=true&language={self.language}"
@@ -64,8 +66,8 @@ class DeepgramTranscriber(BaseTranscriber):
             self.session = aiohttp.ClientSession()
 
         headers = {
-        'Authorization': 'Token {}'.format(os.getenv('DEEPGRAM_AUTH_TOKEN')),
-        'Content-Type': 'audio/webm' #Currently we are assuming this is via browser
+            'Authorization': 'Token {}'.format(os.getenv('DEEPGRAM_AUTH_TOKEN')),
+            'Content-Type': 'audio/webm'  # Currently we are assuming this is via browser
         }
         start_time = time.time()
         async with self.session as session:
@@ -74,7 +76,7 @@ class DeepgramTranscriber(BaseTranscriber):
                 logger.info(f"response_data {response_data} total time {time.time() - start_time}")
                 transcript = response_data["results"]["channels"][0]["alternatives"][0]["transcript"]
                 logger.info(f"transcript {transcript} total time {time.time() - start_time}")
-                self.meta_info['transcriber_duration'] =  response_data["metadata"]["duration"]
+                self.meta_info['transcriber_duration'] = response_data["metadata"]["duration"]
                 return create_ws_data_packet(transcript, self.meta_info)
 
     async def _handle_data_packet(self, ws_data_packet, ws):
@@ -166,7 +168,7 @@ class DeepgramTranscriber(BaseTranscriber):
                     if self.connection_on:
                         yield message
                     else:
-                        logger.info("Closing the connection")
+                        logger.info("closing the deepgram connection")
                         await self._close(deepgram_ws, data={"type": "CloseStream"})
             else:
                 async for message in self.sender():

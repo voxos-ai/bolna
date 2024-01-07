@@ -1,14 +1,11 @@
 import asyncio
+import aiohttp
 import websockets
 from websockets.exceptions import ConnectionClosed
 import json
 import os
-from bolna.helpers.logger_config import configure_logger
 import audioop
 from .base_synthesizer import BaseSynthesizer
-import aiohttp
-
-logger = configure_logger(__name__, True)
 
 
 class XTTSSynthesizer(BaseSynthesizer):
@@ -128,7 +125,7 @@ class XTTSSynthesizer(BaseSynthesizer):
                 logger.error("Connection closed")
                 break
             except Exception as e:
-                logger.error(f"Error in receiving and processing audio bytes {e}")
+                self.logger.error(f"Error in receiving and processing audio bytes {e}")
 
     async def generate_stream_response(self, text):
         async with self.get_websocket_connection() as ws:
@@ -143,4 +140,4 @@ class XTTSSynthesizer(BaseSynthesizer):
                     logger.info('yielding for {}'.format(text))
                     yield message
         except Exception as e:
-            logger.error(f"Error in xtts generate {e}")
+            self.logger.error(f"Error in xtts generate {e}")
