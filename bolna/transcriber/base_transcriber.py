@@ -1,7 +1,7 @@
 import json
-from dotenv import load_dotenv
 import time
 import uuid
+from dotenv import load_dotenv
 from bolna.helpers.logger_config import configure_logger
 
 load_dotenv()

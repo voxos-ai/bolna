@@ -32,7 +32,7 @@ class PollySynthesizer(BaseSynthesizer):
 
         async with AsyncExitStack() as exit_stack:
             polly = await self.create_client("polly", session, exit_stack)
-            self.logger.info(f"Generating TTS response for text: {text}, SampleRate {self.sample_rate}")
+            logger.info(f"Generating TTS response for text: {text}, SampleRate {self.sample_rate}")
             try:
                 response = await polly.synthesize_speech(
                     Engine=self.engine,
@@ -43,15 +43,15 @@ class PollySynthesizer(BaseSynthesizer):
                     SampleRate=self.sample_rate
                 )
             except (BotoCoreError, ClientError) as error:
-                self.logger.error(error)
+                logger.error(error)
             else:
                 yield await response["AudioStream"].read()
 
     async def generate(self, text):
-        self.logger.info('received text for audio generation: {}'.format(text))
+        logger.info('received text for audio generation: {}'.format(text))
         try:
             if text != "" and text != "LLM_END":
                 async for message in self.generate_tts_response(text):
                     yield message
         except Exception as e:
-            self.logger.error(f"Error in polly generate {e}")
+            logger.error(f"Error in polly generate {e}")

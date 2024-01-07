@@ -5,10 +5,15 @@ from websockets.exceptions import ConnectionClosed
 import json
 import os
 import audioop
+from dotenv import load_dotenv
 from .base_synthesizer import BaseSynthesizer
+from bolna.helpers.logger_config import configure_logger
+
+logger = configure_logger(__name__)
+load_dotenv()
+
 
 class XTTSSynthesizer(BaseSynthesizer):
-#Loading...
     def __init__(self, audio_format = "wav", stream = False, sampling_rate="24000", buffer_size=400, language = "en", voice = "rohan"):
         super().__init__(stream, buffer_size)
         self.websocket_connection = None
@@ -126,7 +131,7 @@ class XTTSSynthesizer(BaseSynthesizer):
                 logger.error("Connection closed")
                 break
             except Exception as e:
-                self.logger.error(f"Error in receiving and processing audio bytes {e}")
+                logger.error(f"Error in receiving and processing audio bytes {e}")
 
     async def generate_stream_response(self, text):
         async with self.get_websocket_connection() as ws:
@@ -141,4 +146,4 @@ class XTTSSynthesizer(BaseSynthesizer):
                     logger.info('yielding for {}'.format(text))
                     yield message
         except Exception as e:
-            self.logger.error(f"Error in xtts generate {e}")
+            logger.error(f"Error in xtts generate {e}")

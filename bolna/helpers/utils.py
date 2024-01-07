@@ -12,11 +12,10 @@ from contextlib import AsyncExitStack
 from dotenv import load_dotenv
 from pydantic import BaseModel, create_model
 
-from .logger_config import CustomLogger
+from .logger_config import configure_logger
 from bolna.constants import PREPROCESS_DIR
 
-custom_logger = CustomLogger(__name__)
-logger = custom_logger.update_logger()
+logger = configure_logger(__name__)
 load_dotenv()
 BUCKET_NAME = os.getenv('BUCKET_NAME')
 
