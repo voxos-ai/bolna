@@ -105,7 +105,9 @@ class XTTSSynthesizer(BaseSynthesizer):
         if text != "" and text != "LLM_END":
             input_message = {
                 "text": text,
-                "model": "xtts"
+                "model": "xtts",
+                "language": self.language,
+                "voice": self.voice
             }
 
             await asyncio.gather(ws.send(json.dumps(input_message)))
@@ -123,7 +125,7 @@ class XTTSSynthesizer(BaseSynthesizer):
                     self.buffered = True
 
                 if self.format == "pcm":
-                    chunk = audioop.ratecv(chunk, 2, 1, 24000, self.sampling_rate, None)[0]
+                    chunk = audioop.ratecv(chunk, 2, 1, 24000, int(self.sampling_rate), None)[0]
 
                 yield chunk
 
