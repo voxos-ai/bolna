@@ -1,13 +1,15 @@
 import base64
 import json
-from twilio.rest import Client
-from dotenv import load_dotenv
 import os
 import audioop
 import uuid
+from twilio.rest import Client
+from dotenv import load_dotenv
 import redis.asyncio as redis
 from .default import DefaultOutputHandler
+from bolna.helpers.logger_config import configure_logger
 
+logger = configure_logger(__name__)
 load_dotenv()
 
 twilio_client = Client(os.getenv('TWILIO_ACCOUNT_SID'), os.getenv('TWILIO_AUTH_TOKEN'))
@@ -25,7 +27,7 @@ class TwilioOutputHandler(DefaultOutputHandler):
         self.rejected_request_ids = set()
 
     async def handle_interruption(self):
-        self.logger.info("interrupting because user spoke in between")
+        logger.info("interrupting because user spoke in between")
         if len(self.mark_set) > 0:
             message_clear = {
                 "event": "clear",
@@ -39,7 +41,7 @@ class TwilioOutputHandler(DefaultOutputHandler):
             to='{}'.format(call_number),
             from_='{}'.format(os.getenv('TWILIO_PHONE_NUMBER')),
             body=message_text)
-        self.logger.info(f'Sent whatsapp message: {message_text}')
+        logger.info(f'Sent whatsapp message: {message_text}')
         return message.sid
 
     async def send_whatsapp(self, message_text, call_number):
@@ -47,7 +49,7 @@ class TwilioOutputHandler(DefaultOutputHandler):
             to='whatsapp:{}'.format(call_number),
             from_='whatsapp:{}'.format(os.getenv('TWILIO_PHONE_NUMBER')),
             body=message_text)
-        self.logger.info(f'Sent whatsapp message: {message_text}')
+        logger.info(f'Sent whatsapp message: {message_text}')
         return message.sid
 
     async def handle(self, ws_data_packet):
@@ -86,7 +88,7 @@ class TwilioOutputHandler(DefaultOutputHandler):
                     }
                     await self.websocket.send_text(json.dumps(mark_message))
             except Exception as e:
-                self.logger.error(f'something went wrong while sending message to twilio {e}')
+                logger.error(f'something went wrong while sending message to twilio {e}')
 
         except Exception as e:
-            self.logger.error(f'something went wrong while handling twilio {e}')
+            logger.error(f'something went wrong while handling twilio {e}')

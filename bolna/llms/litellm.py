@@ -3,18 +3,16 @@ import litellm
 from dotenv import load_dotenv
 from .llm import BaseLLM
 from bolna.helpers.utils import json_to_pydantic_schema
+from bolna.helpers.logger_config import configure_logger
 
+logger = configure_logger(__name__)
 load_dotenv()
-litellm.set_verbose = True
-
-
-# litellm.drop_params=True
 
 
 class LiteLLM(BaseLLM):
     def __init__(self, streaming_model, api_key=None, api_base=None, max_tokens=100, buffer_size=40,
-                 classification_model=None, temperature=0.0, log_dir_name=None):
-        super().__init__(max_tokens, buffer_size, log_dir_name)
+                 classification_model=None, temperature=0.0):
+        super().__init__(max_tokens, buffer_size)
         self.model = streaming_model
         self.api_key = api_key or os.getenv('LLM_MODEL_API_KEY')
         self.api_base = api_base or os.getenv('LLM_MODEL_API_BASE')
@@ -25,7 +23,7 @@ class LiteLLM(BaseLLM):
 
     async def generate_stream(self, messages, synthesize=True):
         answer, buffer = "", ""
-        self.logger.info(f"request to model: {self.model}: {messages}")
+        logger.info(f"request to model: {self.model}: {messages}")
 
         async for chunk in await litellm.acompletion(model=self.model, messages=messages, api_key=self.api_key,
                                                      api_base=self.api_base, temperature=0.2,
@@ -52,7 +50,7 @@ class LiteLLM(BaseLLM):
 
     async def generate(self, messages, classification_task=False, stream=False, synthesize=True, request_json=False):
         model = self.classification_model if classification_task is True else self.model
-        self.logger.info(f'Request to litellm {messages}')
+        logger.info(f'Request to litellm {messages}')
 
         completion_args = {
             "model": model,
