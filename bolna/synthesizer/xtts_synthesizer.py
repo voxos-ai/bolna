@@ -8,7 +8,7 @@ import audioop
 from dotenv import load_dotenv
 from .base_synthesizer import BaseSynthesizer
 from bolna.helpers.logger_config import configure_logger
-
+from bolna.helpers.utils import create_ws_data_packet
 logger = configure_logger(__name__)
 load_dotenv()
 
@@ -22,7 +22,7 @@ class XTTSSynthesizer(BaseSynthesizer):
         self.ws_url = os.getenv('TTS_WS')
         self.api_url = os.getenv('TTS_API_URL')
         self.format = audio_format
-        self.stream = stream
+        self.stream = False
         self.language = language
         self.voice = voice
         self.sampling_rate = sampling_rate
@@ -52,7 +52,7 @@ class XTTSSynthesizer(BaseSynthesizer):
             else:
                 logger.info("Payload was null")
 
-    async def _http_tts(self, text):
+    async def _generate_http(self, text):
         payload = None
         logger.info(f"text {text}")
         payload = {
@@ -94,8 +94,8 @@ class XTTSSynthesizer(BaseSynthesizer):
                     self.buffer = []
                     self.buffered = True
 
-                if self.format == "pcm":
-                    chunk = audioop.ratecv(chunk, 2, 1, 24000, int(self.sampling_rate), None)[0]
+                # if self.format == "pcm":
+                #     chunk = audioop.ratecv(chunk, 2, 1, 24000, int(self.sampling_rate), None)[0]
                 yield chunk
 
             except ConnectionClosed:
@@ -110,15 +110,27 @@ class XTTSSynthesizer(BaseSynthesizer):
             self.sender_task = asyncio.create_task(self.sender(ws, text))
             async for message in self.receiver(ws):
                 yield message
+    
 
-    async def generate(self, text):
-        
-        try:
-            if self.stream:
-                async for message in self._generate_stream_response(text):
-                    yield message
-            else:
-                async for message in self._generate(text):
-                    yield message
-        except Exception as e:
-            logger.error(f"Error in xtts generate {e}")
+    async def generate(self):
+        while True:
+            message = await self.internal_queue.get()
+            logger.info(f"Generating TTS response for message: {message}")
+            meta_info, text = message.get("meta_info"), message.get("data")
+            try:
+                if self.stream:
+                    async for message in self._generate_stream_response(text):
+                        if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
+                            meta_info["end_of_synthesizer_stream"] = True
+                        yield create_ws_data_packet(message, meta_info)
+                else:
+                    audio = await self._generate_http(text)
+                    if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
+                        meta_info["end_of_synthesizer_stream"] = True
+                    yield create_ws_data_packet(audio, meta_info)
+            except Exception as e:
+                logger.error(f"Error in xtts generate {e}")
+
+    def push(self, message):
+        logger.info("Pushed message to internal queue")
+        self.internal_queue.put_nowait(message)

@@ -560,7 +560,7 @@ class TaskManager(BaseManager):
                 logger.info(f"After adding into sequence id {self.sequence_ids}")
                 logger.info('sending text to {} for generation: {} '.format(self.synthesizer_provider, text))
                 self.synthesizer_characters += len(text)
-                await self.tools["synthesizer"].push(message)
+                self.tools["synthesizer"].push(message)
             else:
                 logger.info("other synthesizer models not supported yet")
         except Exception as e:
