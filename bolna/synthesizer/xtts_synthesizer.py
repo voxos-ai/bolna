@@ -33,40 +33,10 @@ class XTTSSynthesizer(BaseSynthesizer):
 
     def get_websocket_connection(self):
         if self.websocket_connection is None:
+            logger.info(f"Getting websocket connection ")
             self.websocket_connection = websockets.connect(self.ws_url)
         return self.websocket_connection
 
-    # @staticmethod
-    # async def sender(ws, text):
-    #     if text != "" and text != "LLM_END":
-    #         input_message = {
-    #             "text": text,
-    #             "model": "xtts"
-    #         }
-    #         await ws.send(json.dumps(input_message))
-    #
-    # async def receiver(self, ws):
-    #     while True:
-    #         try:
-    #             chunk = await ws.recv()
-    #             if not self.buffered and len(self.buffer) < 3:
-    #                 self.buffer.append(chunk)
-    #                 continue
-    #             if len(self.buffer) == 3:
-    #                 chunk = b''.join(self.buffer)
-    #                 self.buffer = []
-    #                 self.buffered = True
-    #
-    #             if self.format == "pcm":
-    #                 chunk = audioop.ratecv(chunk, 2, 1, 24000, 8000, None)[0]
-    #
-    #             yield chunk
-    #
-    #         except websockets.exceptions.ConnectionClosed:
-    #             logger.error("Connection closed")
-    #             break
-    #         except Exception as e:
-    #             logger.error(f"Error in receiving and processing audio bytes {e}")
 
     async def _send_payload(self, payload):
         url = self.api_url
@@ -102,15 +72,15 @@ class XTTSSynthesizer(BaseSynthesizer):
             logger.error(f"Error in xtts generate {e}")
 
     async def sender(self, ws, text):
-        if text != "" and text != "LLM_END":
-            input_message = {
-                "text": text,
-                "model": "xtts",
-                "language": self.language,
-                "voice": self.voice
-            }
+        input_message = {
+            "text": text,
+            "model": "xtts",
+            "language": self.language,
+            "voice": self.voice
+        }
 
-            await asyncio.gather(ws.send(json.dumps(input_message)))
+        await ws.send(json.dumps(input_message))
+        logger.info("Sent to the server")
 
     async def receiver(self, ws):
         while True:
@@ -126,7 +96,6 @@ class XTTSSynthesizer(BaseSynthesizer):
 
                 if self.format == "pcm":
                     chunk = audioop.ratecv(chunk, 2, 1, 24000, int(self.sampling_rate), None)[0]
-
                 yield chunk
 
             except ConnectionClosed:
@@ -135,17 +104,21 @@ class XTTSSynthesizer(BaseSynthesizer):
             except Exception as e:
                 logger.error(f"Error in receiving and processing audio bytes {e}")
 
-    async def generate_stream_response(self, text):
+    async def _generate_stream_response(self, text):
         async with self.get_websocket_connection() as ws:
+            logger.info(f"Generating task for  {text}")
             self.sender_task = asyncio.create_task(self.sender(ws, text))
             async for message in self.receiver(ws):
                 yield message
 
     async def generate(self, text):
+        
         try:
-            if text != "" and text != "LLM_END":
-                async for message in self.generate_stream_response(text):
-                    logger.info('yielding for {}'.format(text))
+            if self.stream:
+                async for message in self._generate_stream_response(text):
+                    yield message
+            else:
+                async for message in self._generate(text):
                     yield message
         except Exception as e:
             logger.error(f"Error in xtts generate {e}")

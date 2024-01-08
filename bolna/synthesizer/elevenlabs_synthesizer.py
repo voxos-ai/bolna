@@ -22,16 +22,16 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         self.websocket_connection = None
         self.connection_open = False
 
-    async def _connect(self, ws):
+    async def __connect(self, ws):
         if self.websocket_connection is None:
             self.websocket_connection = websockets.connect('wss://api.elevenlabs.io/v1/text-to-speech/8NKMgvCBNI0jN8dVStjg/stream-input?model_id=eleven_multilingual_v1')
     
-    def _get_websocket_connection(self):
+    def __get_websocket_connection(self):
         if self.websocket_connection is None:
             self.websocket_connection = websockets.connect('wss://api.elevenlabs.io/v1/text-to-speech/8NKMgvCBNI0jN8dVStjg/stream-input?model_id=eleven_multilingual_v1')
         return self.websocket_connection
         
-    async def _stream_tts(self):
+    async def __stream_tts(self):
         logger.info("Streaming TTS from eleven labs")
         async with self._get_websocket_connection() as ws:
             async def sender(ws): # sends text to websocket
@@ -85,7 +85,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                         break
             await asyncio.gather(sender(ws), receiver(ws))
 
-    async def _send_payload(self, payload):
+    async def __send_payload(self, payload):
         url = f'https://api.elevenlabs.io/v1/text-to-speech/{self.voice}'
 
         headers = {
@@ -104,7 +104,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
             else:
                 logger.info("Payload was null")
 
-    async def _http_tts(self, text):
+    async def __http_tts(self, text):
         payload = None
         logger.info(f"text {text}")
         payload = {

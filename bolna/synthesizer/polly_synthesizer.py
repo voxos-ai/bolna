@@ -3,6 +3,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from aiobotocore.session import AioSession
 from contextlib import AsyncExitStack
 from bolna.helpers.logger_config import configure_logger
+from bolna.helpers.utils import create_ws_data_packet
 from .base_synthesizer import BaseSynthesizer
 
 logger = configure_logger(__name__)
@@ -26,13 +27,11 @@ class PollySynthesizer(BaseSynthesizer):
     async def create_client(service: str, session: AioSession, exit_stack: AsyncExitStack):
         # creates AWS session from system environment credentials & config
         return await exit_stack.enter_async_context(session.create_client(service))
-
-    async def generate_tts_response(self, text):
+    async def __generate_http(self, text):
         session = AioSession()
-
         async with AsyncExitStack() as exit_stack:
             polly = await self.create_client("polly", session, exit_stack)
-            logger.info(f"Generating TTS response for text: {text}, SampleRate {self.sample_rate}")
+            logger.info(f"Generating TTS response for text: {text}, SampleRate {self.sample_rate} format {self.format}")
             try:
                 response = await polly.synthesize_speech(
                     Engine=self.engine,
@@ -46,12 +45,18 @@ class PollySynthesizer(BaseSynthesizer):
                 logger.error(error)
             else:
                 yield await response["AudioStream"].read()
+    
+    async def generate(self):
+        while True:
+            logger.info("Generating TTS response")
+            message = await self.internal_queue.get()
+            logger.info(f"Generating TTS response for message: {message}")
+            meta_info, text = message.get("meta_info"), message.get("data")
+            async for message in self.__generate_http(text):
+                if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
+                    meta_info["end_of_synthesizer_stream"] = True
+                yield create_ws_data_packet(message, meta_info)
 
-    async def generate(self, text):
-        logger.info('received text for audio generation: {}'.format(text))
-        try:
-            if text != "" and text != "LLM_END":
-                async for message in self.generate_tts_response(text):
-                    yield message
-        except Exception as e:
-            logger.error(f"Error in polly generate {e}")
+    async def push(self, message):
+        logger.info("Pushed message to internal queue")
+        self.internal_queue.put_nowait(message)

@@ -41,14 +41,13 @@ class OpenAiLLM(BaseLLM):
                     if synthesize:
                         if not self.started_streaming:
                             self.started_streaming = True
-                        yield text
+                        yield text,False
                     buffer = buffer.split(" ")[-1]
 
-        if synthesize:
-            if buffer != "":
-                yield buffer
+        if synthesize: #This is used only in streaming sense 
+                yield buffer, True
         else:
-            yield answer
+            yield answer, True
         self.started_streaming = False
 
     async def generate(self, messages, classification_task=False, stream=False, synthesize=True, request_json=False):
