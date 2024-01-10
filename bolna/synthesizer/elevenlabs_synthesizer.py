@@ -74,7 +74,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                 logger.info("Server response:")
                 if data["audio"]:
                     chunk = base64.b64decode(data["audio"])
-                    if self.sampling_rate != 8000
+                    if self.sampling_rate != 8000:
                         chunk = audioop.ratecv(chunk, 2, 1, 24000, int(self.sampling_rate), None)[0]
 
                     yield chunk
