@@ -167,7 +167,7 @@ class TaskManager(BaseManager):
             synthesizer_class = SUPPORTED_SYNTHESIZER_MODELS.get(self.synthesizer_provider)
             provider_config = self.task_config["tools_config"]["synthesizer"].pop("provider_config")
             if self.connected_through_dashboard:
-                self.task_config["tools_config"]["synthesizer"]["audio_format"] = "mp3" # Hard code mp3 if we're connected through dashboard
+                #self.task_config["tools_config"]["synthesizer"]["audio_format"] = "mp3" # Hard code mp3 if we're connected through dashboard
                 self.task_config["tools_config"]["synthesizer"]["stream"] = False #Hardcode stream to be False as we don't want to get blocked by a __listen_synthesizer co-routine
             self.tools["synthesizer"] = synthesizer_class(**self.task_config["tools_config"]["synthesizer"], **provider_config)
             llm_config["max_tokens"] = self.task_config["tools_config"]["synthesizer"].get('max_tokens')
@@ -234,12 +234,13 @@ class TaskManager(BaseManager):
         })
 
         json_data = await self.tools["llm_agent"].generate(self.history)
-        json_data = clean_json_string(json_data)
-        logger.info(f"After replacing {json_data}")
-        json_data = json.loads(json_data)
         if "summary" in json_data:
+            logger.info(f'Summary {json_data["summary"]}')
             self.summarized_data = json_data["summary"]
         else:
+            json_data = clean_json_string(json_data)
+            logger.info(f"After replacing {json_data}")
+            json_data = json.loads(json_data)
             self.extracted_data = json_data
         logger.info("Done")
 

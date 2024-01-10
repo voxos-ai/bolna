@@ -23,11 +23,24 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         self.stream = stream #Issue with elevenlabs streaming that we need to always send the text quickly
         self.websocket_connection = None
         self.connection_open = False
-        self.sampling_rate = 16000
+        self.sampling_rate = sampling_rate
         self.audio_format = audio_format
         self.ws_url = f"wss://api.elevenlabs.io/v1/text-to-speech/{self.voice}/stream-input?model_id=eleven_multilingual_v1&optimize_streaming_latency=2&output_format={self.audio_format}_{self.sampling_rate}"
-        self.api_url = f"https://api.elevenlabs.io/v1/text-to-speech/{self.voice}?optimize_streaming_latency=3&output_format={self.audio_format}_{self.sampling_rate}"
+        self.api_url = f"https://api.elevenlabs.io/v1/text-to-speech/{self.voice}?optimize_streaming_latency=3&output_format={self.get_format(self.audio_format, self.sampling_rate)}"
+        logger.info(f"OUTPUT FORMAT {self.audio_format}_{self.sampling_rate}")
+   
+    def get_format(self, format, sampling_rate):    
+        #mp3_44100_64, mp3_44100_96, mp3_44100_128, mp3_44100_192, pcm_16000, pcm_22050, pcm_24000, ulaw_8000
+        if format == "pcm":
+            return f"{format}_{sampling_rate}"
+        if format == "mp3":
+            return f"mp3_44100_128"
+        if format == "ulaw":
+            return "ulaw_8000"
+        else:
+            return "mp3_44100_128"
             
+
     async def sender(self, text, end_of_llm_stream = False): # sends text to websocket
         if not self.connection_open:
             logger.info("Connecting to elevenlabs websocket...")
@@ -74,6 +87,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                 logger.info("Server response:")
                 if data["audio"]:
                     chunk = base64.b64decode(data["audio"])
+                    # @TODO make it better - for example sample rate changing for mp3 and other formats  
                     if self.sampling_rate != 8000:
                         chunk = audioop.ratecv(chunk, 2, 1, 24000, int(self.sampling_rate), None)[0]
 

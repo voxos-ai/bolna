@@ -9,12 +9,7 @@ SUMMARY_JSON_STRUCTURE = {"summary": "Summary of the conversation goes here"}
 
 SUMMARIZATION_PROMPT = """
 Given this transcript from the communication between user and an agent your task is to summarize the conversation.
-
-Always respond in given json format
-
-###JSON Structure
-{}
-""".format(SUMMARY_JSON_STRUCTURE)
+"""
 
 completion_json_format = {"answer": "A simple Yes or No based on if you should cut the phone or not"}
 
