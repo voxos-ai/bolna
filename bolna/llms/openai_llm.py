@@ -52,6 +52,7 @@ class OpenAiLLM(BaseLLM):
 
     async def generate(self, messages, classification_task=False, stream=False, synthesize=True, request_json=False):
         response_format = self.get_response_format(request_json)
+        logger.info(f"request to open ai {messages}")
         model = self.classification_model if classification_task is True else self.model
 
         completion = await self.async_client.chat.completions.create(model=model, temperature=0.0, messages=messages,

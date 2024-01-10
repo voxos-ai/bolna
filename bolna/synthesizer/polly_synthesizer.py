@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 from botocore.exceptions import BotoCoreError, ClientError
 from aiobotocore.session import AioSession
 from contextlib import AsyncExitStack
+import audioop
 from bolna.helpers.logger_config import configure_logger
 from bolna.helpers.utils import create_ws_data_packet
 from .base_synthesizer import BaseSynthesizer
@@ -46,6 +47,8 @@ class PollySynthesizer(BaseSynthesizer):
             else:
                 yield await response["AudioStream"].read()
     
+    async def open_connection(self):
+        pass
     async def generate(self):
         while True:
             logger.info("Generating TTS response")

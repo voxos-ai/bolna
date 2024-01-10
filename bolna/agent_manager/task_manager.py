@@ -6,7 +6,7 @@ from .base_manager import BaseManager
 from bolna.agent_types import *
 from bolna.providers import *
 from bolna.helpers.utils import create_ws_data_packet, is_valid_md5, get_raw_audio_bytes_from_base64, \
-    get_required_input_types, format_messages, get_prompt_responses, update_prompt_with_context, get_md5_hash
+    get_required_input_types, format_messages, get_prompt_responses, update_prompt_with_context, get_md5_hash, clean_json_string
 from bolna.helpers.logger_config import configure_logger
 
 logger = configure_logger(__name__)
@@ -108,7 +108,8 @@ class TaskManager(BaseManager):
         self.extracted_data = None
         self.summarized_data = None
 
-        self.stream = not connected_through_dashboard
+        #self.stream = not connected_through_dashboard and "synthesizer" in self.task_config["tools_config"] and self.task_config["tools_config"]["synthesizer"]["stream"]
+        self.stream = not connected_through_dashboard #Currently we are allowing only realtime conversation based usecases. Hence it'll always be true unless connected through dashboard
         self.is_local = False
 
         # Memory
@@ -167,6 +168,7 @@ class TaskManager(BaseManager):
             provider_config = self.task_config["tools_config"]["synthesizer"].pop("provider_config")
             if self.connected_through_dashboard:
                 self.task_config["tools_config"]["synthesizer"]["audio_format"] = "mp3" # Hard code mp3 if we're connected through dashboard
+                self.task_config["tools_config"]["synthesizer"]["stream"] = False #Hardcode stream to be False as we don't want to get blocked by a __listen_synthesizer co-routine
             self.tools["synthesizer"] = synthesizer_class(**self.task_config["tools_config"]["synthesizer"], **provider_config)
             llm_config["max_tokens"] = self.task_config["tools_config"]["synthesizer"].get('max_tokens')
             llm_config["buffer_size"] = self.task_config["tools_config"]["synthesizer"].get('buffer_size')
@@ -232,11 +234,14 @@ class TaskManager(BaseManager):
         })
 
         json_data = await self.tools["llm_agent"].generate(self.history)
+        json_data = clean_json_string(json_data)
+        logger.info(f"After replacing {json_data}")
         json_data = json.loads(json_data)
         if "summary" in json_data:
             self.summarized_data = json_data["summary"]
         else:
             self.extracted_data = json_data
+        logger.info("Done")
 
     async def _process_conversation_preprocessed_task(self, message, sequence, meta_info):
         if self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "preprocessed":
@@ -443,10 +448,10 @@ class TaskManager(BaseManager):
             self.llm_task = None
             self.was_long_pause = True
 
-        if len(self.synthesizer_tasks) > 0:
-            for synth_task in self.synthesizer_tasks:
-                synth_task.cancel()
-            self.synthesizer_tasks = []
+        # if len(self.synthesizer_tasks) > 0:
+        #     for synth_task in self.synthesizer_tasks:
+        #         synth_task.cancel()
+        #     self.synthesizer_tasks = []
         
 
     ########################
@@ -529,16 +534,24 @@ class TaskManager(BaseManager):
     
 
     async def __listen_synthesizer(self):
-        while True:
-            logger.info("Listening to synthesizer")
-            async for message in self.tools["synthesizer"].generate():
-                if not self.conversation_ended and message["meta_info"]["sequence_id"] in self.sequence_ids:
-                    await self.tools["output"].handle(message)
-                
-                if "end_of_synthesizer_stream" in message["meta_info"] and message["meta_info"]["end_of_synthesizer_stream"]:
-                    logger.info(f"Got End of stream and hence removing from sequence ids {self.sequence_ids}  {message['meta_info']['sequence_id']}")
-                    self.sequence_ids.remove(message["meta_info"]["sequence_id"])
-        logger.info("Done with synthesizer task ^^^^^^^^^^^^")
+        try:
+            if self.stream and self.synthesizer_provider != "polly":
+                logger.info("Opening websocket connection to synthesizer")
+                await self.tools["synthesizer"].open_connection()
+
+            while True:
+                logger.info("Listening to synthesizer")
+                async for message in self.tools["synthesizer"].generate():
+                    if not self.conversation_ended and message["meta_info"]["sequence_id"] in self.sequence_ids:
+                        await self.tools["output"].handle(message)
+                    
+                    if "end_of_synthesizer_stream" in message["meta_info"] and message["meta_info"]["end_of_synthesizer_stream"]:
+                        logger.info(f"Got End of stream and hence removing from sequence ids {self.sequence_ids}  {message['meta_info']['sequence_id']}")
+                        self.sequence_ids.remove(message["meta_info"]["sequence_id"])
+                await asyncio.sleep(1)
+            logger.info("Done with synthesizer task ^^^^^^^^^^^^")
+        except Exception as e:
+            logger.error(f"Error in synthesizer {e}")
 
     async def _synthesize(self, message):
         meta_info = message["meta_info"]
@@ -560,7 +573,7 @@ class TaskManager(BaseManager):
                 logger.info(f"After adding into sequence id {self.sequence_ids}")
                 logger.info('sending text to {} for generation: {} '.format(self.synthesizer_provider, text))
                 self.synthesizer_characters += len(text)
-                self.tools["synthesizer"].push(message)
+                await self.tools["synthesizer"].push(message)
             else:
                 logger.info("other synthesizer models not supported yet")
         except Exception as e:

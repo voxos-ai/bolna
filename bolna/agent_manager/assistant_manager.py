@@ -110,5 +110,6 @@ class AssistantManager(BaseManager):
             task_output['run_id'] = self.run_id
             yield task_id, task_output
             self.task_states[task_id] = True
-            input_parameters = task_output
+            if task_id == 0:
+                input_parameters = task_output
         logger.info("Done with execution of the agent")
