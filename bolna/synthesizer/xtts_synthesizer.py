@@ -42,7 +42,7 @@ class XTTSSynthesizer(BaseSynthesizer):
             else:
                 logger.info("Payload was null")
 
-    async def _generate_http(self, text):
+    async def __generate_http(self, text):
         payload = None
         logger.info(f"text {text}")
         payload = {
@@ -99,6 +99,11 @@ class XTTSSynthesizer(BaseSynthesizer):
             except Exception as e:
                 logger.error(f"Error in receiving and processing audio bytes {e}")
 
+    async def synthesize(self, text):
+        #This is used for one off synthesis mainly for use cases like voice lab and IVR
+        audio = await self.__generate_http(text)
+        return audio
+
     async def open_connection(self):
         if self.websocket_connection is None:
                 self.websocket_connection = await websockets.connect(self.ws_url)
@@ -118,7 +123,7 @@ class XTTSSynthesizer(BaseSynthesizer):
                     message = await self.internal_queue.get()
                     logger.info(f"Generating TTS response for message: {message}")
                     meta_info, text = message.get("meta_info"), message.get("data")
-                    audio = await self._generate_http(text)
+                    audio = await self.__generate_http(text)
                     if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
                         meta_info["end_of_synthesizer_stream"] = True
                     yield create_ws_data_packet(audio, meta_info)

@@ -45,10 +45,16 @@ class PollySynthesizer(BaseSynthesizer):
             except (BotoCoreError, ClientError) as error:
                 logger.error(error)
             else:
-                yield await response["AudioStream"].read()
+                return await response["AudioStream"].read()
     
     async def open_connection(self):
         pass
+    
+    async def synthesize(self, text):
+        #This is used for one off synthesis mainly for use cases like voice lab and IVR
+        audio = await self.__generate_http(text)
+        return audio
+
     async def generate(self):
         while True:
             logger.info("Generating TTS response")

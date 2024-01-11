@@ -25,9 +25,8 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         self.connection_open = False
         self.sampling_rate = sampling_rate
         self.audio_format = audio_format
-        self.ws_url = f"wss://api.elevenlabs.io/v1/text-to-speech/{self.voice}/stream-input?model_id=eleven_multilingual_v1&optimize_streaming_latency=2&output_format={self.audio_format}_{self.sampling_rate}"
-        self.api_url = f"https://api.elevenlabs.io/v1/text-to-speech/{self.voice}?optimize_streaming_latency=3&output_format={self.get_format(self.audio_format, self.sampling_rate)}"
-        logger.info(f"OUTPUT FORMAT {self.audio_format}_{self.sampling_rate}")
+        self.ws_url = f"wss://api.elevenlabs.io/v1/text-to-speech/{self.voice}/stream-input?model_id=eleven_multilingual_v1&optimize_streaming_latency=2&output_format={self.get_format(self.audio_format, self.sampling_rate)}"
+        self.api_url = f"https://api.elevenlabs.io/v1/text-to-speech/{self.voice}?optimize_streaming_latency=3&output_format="
    
     def get_format(self, format, sampling_rate):    
         #mp3_44100_64, mp3_44100_96, mp3_44100_128, mp3_44100_192, pcm_16000, pcm_22050, pcm_24000, ulaw_8000
@@ -101,15 +100,17 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
             except websockets.exceptions.ConnectionClosed:
                 break
 
-    async def __send_payload(self, payload):
+    async def __send_payload(self, payload, format = None):
         headers = {
             'xi-api-key': self.api_key,
             'accept':"application/mpeg+base64"
         }
 
+        url = f"{self.api_url}{self.get_format(self.audio_format, self.sampling_rate)}" if format is None else f"{self.api_url}{format}"
+
         async with aiohttp.ClientSession() as session:
             if payload is not None:
-                async with session.post(self.api_url, headers=headers, json=payload) as response:
+                async with session.post(url, headers=headers, json=payload) as response:
                     if response.status == 200:
                         data = await response.read()
                         return data
@@ -118,7 +119,11 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
             else:
                 logger.info("Payload was null")
 
-    async def _generate_http(self, text):
+    async def synthesize(self, text):
+        audio = await self.__generate_http(text, format = "mp3_44100_128")
+        return audio
+
+    async def __generate_http(self, text, format = None):
         payload = None
         logger.info(f"text {text}")
         payload = {
@@ -130,28 +135,8 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                 "optimize_streaming_latency": 3
             }
         }
-        response = await self.__send_payload(payload)
+        response = await self.__send_payload(payload, format = format)
         return response
-
-    # async def generate(self):
-    #     while True:
-    #         message = await self.internal_queue.get()
-    #         logger.info(f"Generating TTS response for message: {message} and generating response for {self.audio_format} afor {self.sampling_rate}" )
-    #         meta_info, text = message.get("meta_info"), message.get("data")
-    #         end_of_llm_stream =  "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]
-    #         try:
-    #             if self.stream:
-    #                 async for message in self._generate_stream_response(text, end_of_llm_stream):
-    #                     if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
-    #                         meta_info["end_of_synthesizer_stream"] = True
-    #                     yield create_ws_data_packet(message, meta_info)
-    #             else:
-    #                 audio = await self._generate_http(text)
-    #                 if end_of_llm_stream:
-    #                     meta_info["end_of_synthesizer_stream"] = True
-    #                 yield create_ws_data_packet(audio, meta_info)
-    #         except Exception as e:
-    #             logger.error(f"Error in xtts generate {e}")
 
     async def generate(self):
         try:
@@ -168,7 +153,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                     message = await self.internal_queue.get()
                     logger.info(f"Generating TTS response for message: {message}")
                     meta_info, text = message.get("meta_info"), message.get("data")
-                    audio = await self._generate_http(text)
+                    audio = await self.__generate_http(text)
                     if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
                         meta_info["end_of_synthesizer_stream"] = True
                     yield create_ws_data_packet(audio, meta_info)

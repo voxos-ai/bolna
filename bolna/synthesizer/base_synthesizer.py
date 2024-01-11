@@ -14,3 +14,6 @@ class BaseSynthesizer:
 
     def push(self, text):
         pass
+    
+    def synthesize(self, text):
+        pass
