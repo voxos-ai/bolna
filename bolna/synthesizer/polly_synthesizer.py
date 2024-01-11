@@ -12,7 +12,7 @@ load_dotenv()
 
 
 class PollySynthesizer(BaseSynthesizer):
-    def __init__(self, voice, language, audio_format="mp3", sampling_rate="8000", stream=False, engine="neural",
+    def __init__(self, voice, language, audio_format="pcm", sampling_rate="8000", stream=False, engine="neural",
                  buffer_size=400):
         super().__init__(stream, buffer_size)
         self.engine = engine
@@ -61,10 +61,10 @@ class PollySynthesizer(BaseSynthesizer):
             message = await self.internal_queue.get()
             logger.info(f"Generating TTS response for message: {message}")
             meta_info, text = message.get("meta_info"), message.get("data")
-            async for message in self.__generate_http(text):
-                if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
-                    meta_info["end_of_synthesizer_stream"] = True
-                yield create_ws_data_packet(message, meta_info)
+            message = await self.__generate_http(text)
+            if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
+                meta_info["end_of_synthesizer_stream"] = True
+            yield create_ws_data_packet(message, meta_info)
 
     async def push(self, message):
         logger.info("Pushed message to internal queue")
