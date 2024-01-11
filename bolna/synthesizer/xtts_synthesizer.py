@@ -54,7 +54,7 @@ class XTTSSynthesizer(BaseSynthesizer):
         logger.info(f"Sending {payload}")
         response = await self._send_payload(payload)
         return response
-        
+
     async def _generate(self, text):
         try:
             yield await self._http_tts(text)
@@ -91,6 +91,7 @@ class XTTSSynthesizer(BaseSynthesizer):
                         chunk = audioop.ratecv(chunk, 2, 1, 24000, int(self.sampling_rate), None)[0]
                         
                     yield chunk
+
 
             except ConnectionClosed:
                 logger.error("Connection closed")

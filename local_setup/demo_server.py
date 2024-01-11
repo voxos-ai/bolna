@@ -8,10 +8,10 @@ from typing import List
 import redis.asyncio as redis
 from dotenv import load_dotenv
 from bolna.agent_manager import AssistantManager
-from bolna.helpers.logger_config import CustomLogger
+from bolna.helpers.logger_config import configure_logger
 from bolna.models import AssistantModel
 
-custom_logger = CustomLogger(__name__)
+logger = configure_logger(__name__)
 load_dotenv()
 redis_pool = redis.ConnectionPool.from_url(os.getenv('REDIS_URL'), decode_responses=True)
 redis_client = redis.Redis.from_pool(redis_pool)
@@ -30,8 +30,6 @@ async def create_agent(agent_data: AssistantModel):
 
 @app.websocket("/chat/v1/{user_id}/{agent_id}")
 async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket):
-    log_dir_name = '{}-{}'.format(user_id, agent_id)
-    logger = custom_logger.update_logger(log_dir_name=log_dir_name)
     logger.info('ws connected with user_id: {} and agent_id: {}'.format(user_id, agent_id))
 
     await websocket.accept()
@@ -45,7 +43,7 @@ async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket):
         raise HTTPException(status_code=404, detail="Agent not found")
 
     is_local = True
-    agent_manager = AssistantManager(agent_config, websocket, context_data, user_id, agent_id, log_dir_name=log_dir_name)
+    agent_manager = AssistantManager(agent_config, websocket, context_data, user_id, agent_id)
 
     try:
         async for res in agent_manager.run(is_local):

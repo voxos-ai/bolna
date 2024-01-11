@@ -55,7 +55,7 @@ A basic local setup uses Twilio for telephony. We have dockerized the setup in `
 
 The setup consists of four containers:
 
-1. Twilio web server: for initiating the calls one will need to set up a [Twilio account](https://www.twilio.com/docs/usage/tutorials/how-to-use-your-free-trial-account)
+1. Twilio web server: for initiating the calls one will need to set up a [Twilio account]([https://www.twilio.com/docs/usage/tutorials/how-to-use-your-free-trial-account](https://www.twilio.com/docs/messaging/guides/how-to-use-your-free-trial-account))
 2. Bolna server: for creating and handling agents 
 3. `ngrok`: for tunneling. One will need to add the `authtoken` to `ngrok-config.yml`
 4. `redis`: for persisting agents & users contextual data
