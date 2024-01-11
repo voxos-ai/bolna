@@ -50,7 +50,7 @@ class SynthesizerModel(BaseModel):
     provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig]
     stream: bool = False
     buffer_size: Optional[int] = 40  # 40 characters in a buffer
-    audio_format: Optional[str] = "mp3"
+    audio_format: Optional[str] = "pcm"
 
     @validator("provider")
     def validate_model(cls, value):

@@ -9,7 +9,6 @@ logger = configure_logger(__name__)
 load_dotenv()
 openai.api_key = os.getenv('OPENAI_API_KEY')
 
-
 class OpenAiLLM(BaseLLM):
     def __init__(self, max_tokens=100, buffer_size=40, streaming_model="gpt-3.5-turbo-16k",
                  classification_model="gpt-3.5-turbo-1106", temperature= 0.1):
@@ -27,6 +26,7 @@ class OpenAiLLM(BaseLLM):
         answer, buffer = "", ""
         model = self.classification_model if classification_task is True else self.model
         logger.info(f"request to open ai {messages}")
+        #message_hash = get_md5_hash(messages[-1].content)            
         async for chunk in await self.async_client.chat.completions.create(model=model, temperature=self.temperature,
                                                                            messages=messages, stream=True,
                                                                            max_tokens=self.max_tokens,
@@ -41,18 +41,18 @@ class OpenAiLLM(BaseLLM):
                     if synthesize:
                         if not self.started_streaming:
                             self.started_streaming = True
-                        yield text
+                        yield text,False
                     buffer = buffer.split(" ")[-1]
 
-        if synthesize:
-            if buffer != "":
-                yield buffer
+        if synthesize: #This is used only in streaming sense 
+                yield buffer, True
         else:
-            yield answer
+            yield answer, True
         self.started_streaming = False
 
     async def generate(self, messages, classification_task=False, stream=False, synthesize=True, request_json=False):
         response_format = self.get_response_format(request_json)
+        logger.info(f"request to open ai {messages}")
         model = self.classification_model if classification_task is True else self.model
 
         completion = await self.async_client.chat.completions.create(model=model, temperature=0.0, messages=messages,

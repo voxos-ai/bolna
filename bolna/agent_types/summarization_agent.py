@@ -16,10 +16,10 @@ class SummarizationContextualAgent(BaseAgent):
         logger.info("extracting json from the previous conversation data")
         json_data = {}
         try:
-            json_data = await self.brain.generate(history, stream=False, synthesize=False, request_json=True)
-            logger.info(f"summary {json_data}")
+            summary = await self.brain.generate(history, stream=False, synthesize=False, request_json=False)
+            logger.info(f"summary {summary}")
         except Exception as e:
             import traceback
             traceback.print_exc()
             logger.error(f"error in generating summary: {e}")
-        return json_data
+        return {"summary": summary}

@@ -11,6 +11,7 @@ from aiobotocore.session import AioSession
 from contextlib import AsyncExitStack
 from dotenv import load_dotenv
 from pydantic import BaseModel, create_model
+import ast
 
 from .logger_config import configure_logger
 from bolna.constants import PREPROCESS_DIR
@@ -230,3 +231,8 @@ def json_to_pydantic_schema(json_data):
     dynamic_model = create_model('DynamicModel', **fields)
     
     return dynamic_model.schema_json(indent=2)
+
+def clean_json_string(json_str):
+    if json_str.startswith("```json") and json_str.endswith("```"):
+        json_str = json_str[7:-3].strip()
+    return json_str
