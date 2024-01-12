@@ -19,7 +19,7 @@ class PollySynthesizer(BaseSynthesizer):
         self.format = audio_format.lower()
         self.voice = voice
         self.language = language
-        self.sample_rate = sampling_rate
+        self.sample_rate = str(sampling_rate)
 
         # @TODO: initialize client here
         self.client = None

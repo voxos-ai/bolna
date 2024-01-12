@@ -75,6 +75,9 @@ class TaskManager(BaseManager):
             logger.info("Not setting up any output handler as it is none")
         elif self.task_config["tools_config"]["output"]["provider"] in SUPPORTED_OUTPUT_HANDLERS.keys():
             output_handler_class = SUPPORTED_OUTPUT_HANDLERS.get(self.task_config["tools_config"]["output"]["provider"])
+            if self.task_config["tools_config"]["output"]["provider"] == "twilio":
+                logger.info(f"Making sure that the sampling rate for output handler is 8000")
+                self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 8000
             self.tools["output"] = output_handler_class(self.websocket, self.mark_set)
         else:
             raise "Other input handlers not supported yet"
@@ -550,7 +553,7 @@ class TaskManager(BaseManager):
                         logger.info(f"Got End of stream and hence removing from sequence ids {self.sequence_ids}  {message['meta_info']['sequence_id']}")
                         self.sequence_ids.remove(message["meta_info"]["sequence_id"])
                 await asyncio.sleep(1)
-            logger.info("Done with synthesizer task ^^^^^^^^^^^^")
+
         except Exception as e:
             logger.error(f"Error in synthesizer {e}")
 
@@ -567,8 +570,12 @@ class TaskManager(BaseManager):
                                                                         "format"], local=self.is_local,
                                                                     user_id=self.user_id,
                                                                     assistant_id=self.assistant_id)
-                await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
 
+                #TODO: Either load IVR audio into memory before call or user s3 iter_cunks
+                # This will help with interruption in IVR
+                for chunk in  yield_chunks_from_memory(audio_chunk):
+                    await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
+                                                                        
             elif self.synthesizer_provider in SUPPORTED_SYNTHESIZER_MODELS.keys():
                 self.sequence_ids.add(meta_info["sequence_id"])
                 logger.info(f"After adding into sequence id {self.sequence_ids}")

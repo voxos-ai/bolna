@@ -29,9 +29,9 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         self.api_url = f"https://api.elevenlabs.io/v1/text-to-speech/{self.voice}?optimize_streaming_latency=3&output_format="
    
     def get_format(self, format, sampling_rate):    
-        #mp3_44100_64, mp3_44100_96, mp3_44100_128, mp3_44100_192, pcm_16000, pcm_22050, pcm_24000, ulaw_8000
+        #Eleven labs only allow mp3_44100_64, mp3_44100_96, mp3_44100_128, mp3_44100_192, pcm_16000, pcm_22050, pcm_24000, ulaw_8000
         if format == "pcm":
-            return f"{format}_{sampling_rate}"
+            return f"pcm_16000"
         if format == "mp3":
             return f"mp3_44100_128"
         if format == "ulaw":
@@ -87,9 +87,10 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                 if data["audio"]:
                     chunk = base64.b64decode(data["audio"])
                     # @TODO make it better - for example sample rate changing for mp3 and other formats  
-                    if self.sampling_rate != 8000:
-                        chunk = audioop.ratecv(chunk, 2, 1, 24000, int(self.sampling_rate), None)[0]
-
+                    if self.audio_format == "pcm" and self.sampling_rate != 16000:
+                        chunk = audioop.ratecv(chunk, 2, 1,16000 , int(self.sampling_rate), None)[0]
+                    elif self.audio_format == "mp3" and self.sampling_rate != 44100:
+                        chunk = audioop.ratecv(chunk, 2, 1, 44100 , int(self.sampling_rate), None)[0]
                     yield chunk
                 
                 if data["isFinal"]:
@@ -158,7 +159,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                         meta_info["end_of_synthesizer_stream"] = True
                     yield create_ws_data_packet(audio, meta_info)
         except Exception as e:
-                logger.error(f"Error in xtts generate {e}")
+                logger.error(f"Error in eleven labs generate {e}")
 
     async def open_connection(self):
         if self.websocket_connection is None or self.connection_open is False:

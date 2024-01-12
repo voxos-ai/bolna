@@ -87,7 +87,8 @@ class XTTSSynthesizer(BaseSynthesizer):
                         self.buffer = []
                         self.buffered = True
 
-                    if self.sampling_rate != 8000:
+                    if int(self.sampling_rate) != 24000:
+                        logger.info(f"Changing the sampling rate to {int(self.sampling_rate)}")
                         chunk = audioop.ratecv(chunk, 2, 1, 24000, int(self.sampling_rate), None)[0]
                         
                     yield chunk

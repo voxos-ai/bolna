@@ -236,3 +236,8 @@ def clean_json_string(json_str):
     if json_str.startswith("```json") and json_str.endswith("```"):
         json_str = json_str[7:-3].strip()
     return json_str
+
+def yield_chunks_from_memory(audio_bytes, chunk_size=512):
+    total_length = len(file_in_memory)
+    for i in range(0, total_length, chunk_size):
+        yield file_in_memory[i:i + chunk_size]
