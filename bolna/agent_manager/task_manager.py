@@ -78,6 +78,7 @@ class TaskManager(BaseManager):
             if self.task_config["tools_config"]["output"]["provider"] == "twilio":
                 logger.info(f"Making sure that the sampling rate for output handler is 8000")
                 self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 8000
+                self.task_config['tools_config']['synthesizer']['audio_format'] = 'pcm'
             self.tools["output"] = output_handler_class(self.websocket, self.mark_set)
         else:
             raise "Other input handlers not supported yet"
@@ -661,7 +662,7 @@ class TaskManager(BaseManager):
             # Cancel all tasks on cancellation
             tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
             if self.synthesizer_task:
-                self.synthsizer_task.cancel()
+                self.synthesizer_task.cancel()
             logger.info(f"tasks {len(tasks)}")
             for task in tasks:
                 logger.info(f"Cancelling task {task.get_name()}")
