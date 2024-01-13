@@ -5,7 +5,7 @@
 </p>
 
 <h4 align="center">
-  <a href="https://discord.gg/HKxea8dF">Discord</a> |
+  <a href="https://discord.gg/yDfcqreByj">Discord</a> |
   <a href="https://docs.bolna.dev">Docs</a> |
   <a href="https://bolna.dev">Website</a>
 </h4>
@@ -22,7 +22,7 @@
 
 ## Introduction
 
-**[Bolna](https://bolna.dev)** is the end--to-end open source production ready framework for quickly building LLM based voice driven conversational applications.
+**[Bolna](https://bolna.dev)** is the end-to-end open source production ready framework for quickly building LLM based voice driven conversational applications.
 
 
 ## Demo
