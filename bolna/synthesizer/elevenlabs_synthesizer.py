@@ -39,8 +39,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         else:
             return "mp3_44100_128"
             
-
-    async def sender(self, text, end_of_llm_stream = False): # sends text to websocket
+    async def sender(self, text, end_of_llm_stream=False): # sends text to websocket
         if not self.connection_open:
             logger.info("Connecting to elevenlabs websocket...")
             bos_message = {
@@ -54,15 +53,14 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
             await self.websocket_connection.send(json.dumps(bos_message))
             self.connection_open = True
 
-        if text != "" and end_of_llm_stream == False:
+        if text != "":
             logger.info(f"Sending message {text}")
 
             input_message = {
-            "text": f"{text} ",
-            "try_trigger_generation": True,
-            "flush": True
+                "text": f"{text} ",
+                "try_trigger_generation": True,
+                "flush": True
             }
-            logger.info(f"Got message {text}")
             await self.websocket_connection.send(json.dumps(input_message))
 
         if end_of_llm_stream:
@@ -71,7 +69,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                 "text": ""
             }
             await self.websocket_connection.send(json.dumps(eos_message))
-            self.connection_open = False
+            # self.connection_open = False
 
     async def receiver(self):
         while True:
@@ -81,10 +79,9 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
             try:
                 response = await self.websocket_connection.recv()
                 data = json.loads(response)
-                logger.info(f"################### received from synth. IsFinal? {data['isFinal']}")
 
-                logger.info("Server response:")
-                if data["audio"]:
+                logger.info("response for isFinal: {}".format(data.get('isFinal', False)))
+                if "audio" in data and data["audio"]:
                     chunk = base64.b64decode(data["audio"])
                     # @TODO make it better - for example sample rate changing for mp3 and other formats  
                     if self.audio_format == "pcm" and self.sampling_rate != 16000:
@@ -93,7 +90,8 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                         chunk = audioop.ratecv(chunk, 2, 1, 44100 , int(self.sampling_rate), None)[0]
                     yield chunk
                 
-                if data["isFinal"]:
+                if "isFinal" in data and data["isFinal"]:
+                    self.connection_open = False
                     yield b'\x00'
 
                 else:
@@ -103,8 +101,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
 
     async def __send_payload(self, payload, format = None):
         headers = {
-            'xi-api-key': self.api_key,
-            'accept':"application/mpeg+base64"
+            'xi-api-key': self.api_key
         }
 
         url = f"{self.api_url}{self.get_format(self.audio_format, self.sampling_rate)}" if format is None else f"{self.api_url}{format}"
@@ -170,7 +167,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         logger.info(f"Pushed message to internal queue {message}")
         if self.stream:
             meta_info, text = message.get("meta_info"), message.get("data")
-            end_of_llm_stream =  "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]
+            end_of_llm_stream = "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]
             self.meta_info = meta_info
             self.sender_task = asyncio.create_task(self.sender(text, end_of_llm_stream))
         else:

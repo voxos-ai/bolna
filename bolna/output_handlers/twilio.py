@@ -64,8 +64,9 @@ class TwilioOutputHandler(DefaultOutputHandler):
                         audio_chunk += b'\x00'
 
                 if audio_chunk and self.stream_sid and len(audio_chunk) != 1:
-
-                    audio = audioop.lin2ulaw(audio_chunk, 2)
+                    # Convert from 16-bit PCM to ULAW, resampling from 16000 Hz to 8000 Hz
+                    audio_resampled = audioop.ratecv(audio_chunk, 2, 1, 16000, 8000, None)
+                    audio = audioop.lin2ulaw(audio_resampled[0], 2)
                     base64_audio = base64.b64encode(audio).decode("utf-8")
                     message = {
                         'event': 'media',
