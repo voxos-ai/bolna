@@ -103,8 +103,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
 
     async def __send_payload(self, payload, format = None):
         headers = {
-            'xi-api-key': self.api_key,
-            'accept':"application/mpeg+base64"
+            'xi-api-key': self.api_key
         }
 
         url = f"{self.api_url}{self.get_format(self.audio_format, self.sampling_rate)}" if format is None else f"{self.api_url}{format}"
