@@ -13,9 +13,10 @@ class DefaultOutputHandler:
 
     # @TODO Figure out the best way to handle this
     async def handle_interruption(self):
-        message_clear = {
-            "event": "clear"
-        }
+        logger.info("#######   Sending interruption message ####################")
+        response = {"data": None, "type": "clear"}
+        await self.websocket.send_json(response)
+
 
     async def handle(self, packet):
         try:

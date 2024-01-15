@@ -13,7 +13,7 @@ logger = configure_logger(__name__)
 
 
 class TaskManager(BaseManager):
-    def __init__(self, assistant_name, task_id, task, ws, input_parameters=None, context_data=None, user_id=None,
+    def __init__(self, assistant_name, task_id, task, ws, input_parameters=None, context_data=None,
                  assistant_id=None, run_id=None, connected_through_dashboard=False, cache =  None):
         super().__init__()
         logger.info(f"doing task {task}")
@@ -39,7 +39,6 @@ class TaskManager(BaseManager):
         self.start_time = time.time()
 
         # Assistant persistance stuff
-        self.user_id = user_id
         self.assistant_id = assistant_id
         self.run_id = run_id
         self.mark_set = set()
@@ -123,12 +122,17 @@ class TaskManager(BaseManager):
         self.curr_sequence_id = 0
         self.sequence_ids = set()
 
-    async def load_prompt(self, assistant_name, task_id, is_local):
+    async def load_prompt(self, assistant_name, task_id, local):
         logger.info("prompt and config setup started")
-        self.is_local = is_local
-        prompt_responses = await get_prompt_responses(assistant_name, assistant_id=self.assistant_id,
-                                                      user_id=self.user_id, local=self.is_local)
-        self.prompts = prompt_responses["task_{}".format(task_id + 1)]
+        self.is_local = local
+        if "prompt" in self.task_config["tools_config"]["llm_agent"]:
+            self.prompts = {
+                "system_prompt": self.task_config["tools_config"]["llm_agent"]["prompt"]
+            }
+            logger.info(f"Prompt given in llm_agent and hence storing the prompt")
+        else:
+            prompt_responses = await get_prompt_responses(assistant_id=self.assistant_id,local=self.is_local)
+            self.prompts = prompt_responses["task_{}".format(task_id + 1)]
 
         if "system_prompt" in self.prompts:
             # This isn't a graph based agent
@@ -315,8 +319,8 @@ class TaskManager(BaseManager):
         start_time = time.time()
         should_bypass_synth = 'bypass_synth' in meta_info and meta_info['bypass_synth'] == True
         next_step = self._get_next_step(sequence, "llm")
-        curr_sequence_id = self.curr_sequence_id + 1
-        meta_info["sequence_id"] = curr_sequence_id
+        self.curr_sequence_id +=1
+        meta_info["sequence_id"] = self.curr_sequence_id
         cache_response =  self.cache.get(get_md5_hash(message['data'])) if self.cache is not None else None
         
         if cache_response is not None:
@@ -445,13 +449,13 @@ class TaskManager(BaseManager):
         return sequence
 
     async def process_interruption(self):
+        logger.info("Handling interruption")
         await self.tools["output"].handle_interruption()
         self.sequence_ids = set() #Remove all the sequence ids so subsequent won't be processed
         if self.llm_task is not None:
             self.llm_task.cancel()
             self.llm_task = None
             self.was_long_pause = True
-
         # if len(self.synthesizer_tasks) > 0:
         #     for synth_task in self.synthesizer_tasks:
         #         synth_task.cancel()
@@ -491,18 +495,7 @@ class TaskManager(BaseManager):
                     if message['data'] == "TRANSCRIBER_BEGIN":
                         logger.info("starting transcriber stream")
                         start_time = time.time()
-                        await self.tools["output"].handle_interruption()
-                        if self.llm_task is not None:
-                            logger.info("Cancelling LLM Task as it's on")
-                            self.llm_task.cancel()
-                            self.llm_task = None
-                            self.was_long_pause = True
-
-                        if len(self.synthesizer_tasks) > 0:
-                            logger.info("Cancelling Synthesizer tasks")
-                            for synth_task in self.synthesizer_tasks:
-                                synth_task.cancel()
-                            self.synthesizer_tasks = []
+                        await self.process_interruption()
                         continue
                     elif message['data'] == "TRANSCRIBER_END":
                         logger.info("transcriber stream and preparing the next step")
@@ -547,14 +540,18 @@ class TaskManager(BaseManager):
                 logger.info("Listening to synthesizer")
                 async for message in self.tools["synthesizer"].generate():
                     if not self.conversation_ended and message["meta_info"]["sequence_id"] in self.sequence_ids:
+                        logger.info(f"{message['meta_info']['sequence_id'] } is in sequence ids  {self.sequence_ids} and hence removing the sequence ids ")
                         await self.tools["output"].handle(message)
+                    else:
+                        logger.info(f"{message['meta_info']['sequence_id']} is not in sequence ids  {self.sequence_ids} and hence not sending to output")
                     
                     if "end_of_synthesizer_stream" in message["meta_info"] and message["meta_info"]["end_of_synthesizer_stream"]:
                         logger.info(f"Got End of stream and hence removing from sequence ids {self.sequence_ids}  {message['meta_info']['sequence_id']}")
                         self.sequence_ids.remove(message["meta_info"]["sequence_id"])
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
 
         except Exception as e:
+            traceback.print_exc()
             logger.error(f"Error in synthesizer {e}")
 
     async def _synthesize(self, message):
@@ -568,7 +565,6 @@ class TaskManager(BaseManager):
                 audio_chunk = await get_raw_audio_bytes_from_base64(self.assistant_name, text,
                                                                     self.task_config["tools_config"]["output"][
                                                                         "format"], local=self.is_local,
-                                                                    user_id=self.user_id,
                                                                     assistant_id=self.assistant_id)
 
                 #TODO: Either load IVR audio into memory before call or user s3 iter_cunks

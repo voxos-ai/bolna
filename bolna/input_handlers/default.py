@@ -24,47 +24,37 @@ class DefaultInputHandler:
         except Exception as e:
             logger.error(f"Error closing WebSocket: {e}")
 
+    def __process_audio(self, audio):
+        data = base64.b64decode(audio)
+        ws_data_packet = create_ws_data_packet(
+            data=data,
+            meta_info={
+                'io': 'default',
+                'type': 'audio',
+                'sequence': self.input_types['audio']
+            })
+
+        self.queues['transcriber'].put_nowait(ws_data_packet)
+    
+    def __process_text(self, text):
+        logger.info(f"Sequences {self.input_types}")
+        ws_data_packet = create_ws_data_packet(
+            data=data,
+            meta_info={
+                'io': 'default',
+                'type': 'text',
+                'sequence': self.input_types['audio']
+            })
+
+        if self.connected_through_dashboard:
+            ws_data_packet["meta_info"]["bypass_synth"] = True
+        self.queues['llm'].put_nowait(ws_data_packet)
+
     async def _listen(self):
         try:
             while self.running:
                 request = await self.websocket.receive_json()
-
-                if request['type'] not in self.input_types.keys() and not self.connected_through_dashboard:
-                    logger.info(f"straight away returning")
-                    return {"message": "invalid input type"}
-
-                if request['type'] == 'audio':
-                    data = base64.b64decode(request['data'])
-                    ws_data_packet = create_ws_data_packet(
-                        data=data,
-                        meta_info={
-                            'io': 'default',
-                            'type': request['type'],
-                            'sequence': self.input_types['audio']
-                        })
-
-                    self.queues['transcriber'].put_nowait(ws_data_packet)
-
-                elif request["type"] == "text":
-                    logger.info(f"Received text: {request['data']}")
-                    data = request['data']
-                    logger.info(f"Sequences {self.input_types}")
-                    ws_data_packet = create_ws_data_packet(
-                        data=data,
-                        meta_info={
-                            'io': 'default',
-                            'type': request['type'],
-                            'sequence': self.input_types['audio']
-
-                        })
-
-                    if self.connected_through_dashboard:
-                        ws_data_packet["meta_info"]["bypass_synth"] = True
-
-                    self.queues['llm'].put_nowait(ws_data_packet)
-                    logger.info(f"Put into llm queue")
-                else:
-                    return {"message": "Other modalities not implemented yet"}
+                await self.process_message(request)
         except Exception as e:
             # Send EOS message to transcriber to shut the connection
             ws_data_packet = create_ws_data_packet(
@@ -73,9 +63,26 @@ class DefaultInputHandler:
                     'io': 'default',
                     'eos': True
                 })
+            import traceback
+            traceback.print_exc()
             self.queues['transcriber'].put_nowait(ws_data_packet)
             logger.info(f"Error while handling websocket message: {e}")
             return
 
+    async def process_message(self, message):
+        if message['type'] not in self.input_types.keys() and not self.connected_through_dashboard:
+            logger.info(f"straight away returning")
+            return {"message": "invalid input type"}
+
+        if message['type'] == 'audio':
+            self.__process_audio(message['data'])
+
+        elif message["type"] == "text":
+            logger.info(f"Received text: {message['data']}")
+            data = message['data']
+            self.__process_text(data)
+        else:
+            return {"message": "Other modalities not implemented yet"}
+            
     async def handle(self):
         self.websocket_listen_task = asyncio.create_task(self._listen())
