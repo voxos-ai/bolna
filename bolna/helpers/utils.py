@@ -21,6 +21,11 @@ load_dotenv()
 BUCKET_NAME = os.getenv('BUCKET_NAME')
 
 
+class DictWithMissing(dict):
+    def __missing__(self, key):
+        return ''
+
+
 def load_file(file_path, is_json=False):
     data = None
     with open(file_path, "r") as f:
@@ -100,7 +105,7 @@ async def put_s3_file(bucket_name, file_key, file_data, content_type):
         data = None
         if content_type == "json":
             data = json.dumps(file_data)
-        elif content_type in ["mp3", "wav", "pcm"]:
+        elif content_type in ["mp3", "wav", "pcm", "csv"]:
             data = file_data
         
 
@@ -169,7 +174,7 @@ def format_messages(messages):
 def update_prompt_with_context(prompt, context_data):
     if not isinstance(context_data.get('recipient_data'), dict):
         return prompt
-    return prompt.format(**context_data.get('recipient_data', {}))
+    return prompt.format_map(DictWithMissing(context_data.get('recipient_dataa', {})))
 
 
 async def get_prompt_responses(agent_name, local=False, user_id=None, assistant_id = None):
