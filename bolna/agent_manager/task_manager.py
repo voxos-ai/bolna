@@ -78,6 +78,7 @@ class TaskManager(BaseManager):
                 logger.info(f"Making sure that the sampling rate for output handler is 8000")
                 self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 8000
                 self.task_config['tools_config']['synthesizer']['audio_format'] = 'pcm'
+
             self.tools["output"] = output_handler_class(self.websocket, self.mark_set)
         else:
             raise "Other input handlers not supported yet"
@@ -451,8 +452,9 @@ class TaskManager(BaseManager):
 
     async def process_interruption(self):
         logger.info("Handling interruption")
-        await self.tools["output"].handle_interruption()
         self.sequence_ids = set() #Remove all the sequence ids so subsequent won't be processed
+        await self.tools["output"].handle_interruption()
+        
         if self.llm_task is not None:
             self.llm_task.cancel()
             self.llm_task = None
@@ -570,9 +572,11 @@ class TaskManager(BaseManager):
 
                 #TODO: Either load IVR audio into memory before call or user s3 iter_cunks
                 # This will help with interruption in IVR
-                for chunk in  yield_chunks_from_memory(audio_chunk):
+                if self.connected_through_dashboard:
                     await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
-                                                                        
+                else:
+                    for chunk in  yield_chunks_from_memory(audio_chunk):
+                        await self.tools["output"].handle(create_ws_data_packet(chunk, meta_info))
             elif self.synthesizer_provider in SUPPORTED_SYNTHESIZER_MODELS.keys():
                 self.sequence_ids.add(meta_info["sequence_id"])
                 logger.info(f"After adding into sequence id {self.sequence_ids}")
@@ -658,7 +662,7 @@ class TaskManager(BaseManager):
             # Cancel all tasks on cancellation
             tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
             if self.synthesizer_task:
-                self.synthesizer_task.cancel()
+                self.synthsizer_task.cancel()
             logger.info(f"tasks {len(tasks)}")
             for task in tasks:
                 logger.info(f"Cancelling task {task.get_name()}")

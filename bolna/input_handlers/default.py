@@ -39,7 +39,7 @@ class DefaultInputHandler:
     def __process_text(self, text):
         logger.info(f"Sequences {self.input_types}")
         ws_data_packet = create_ws_data_packet(
-            data=data,
+            data=text,
             meta_info={
                 'io': 'default',
                 'type': 'text',
@@ -79,8 +79,7 @@ class DefaultInputHandler:
 
         elif message["type"] == "text":
             logger.info(f"Received text: {message['data']}")
-            data = message['data']
-            self.__process_text(data)
+            self.__process_text(message['data'])
         else:
             return {"message": "Other modalities not implemented yet"}
             
