@@ -46,7 +46,7 @@ async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket):
     agent_manager = AssistantManager(agent_config, websocket, context_data, user_id, agent_id)
 
     try:
-        async for res in agent_manager.run(is_local):
+        async for res in agent_manager.run(is_local = True):
             print(res)
     except WebSocketDisconnect:
         active_websockets.remove(websocket)

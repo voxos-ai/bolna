@@ -10,6 +10,8 @@ def validate_attribute(value, allowed_values):
     return value
 
 
+
+
 class PollyConfig(BaseModel):
     voice: str
     engine: str
@@ -25,6 +27,10 @@ class XTTSConfig(BaseModel):
 class ElevenLabsConfig(BaseModel):
     voice: str
     voice_id: str
+    model: str
+
+class OpenAIConfig(BaseModel):
+    voice: str
     model: str
 
 
@@ -47,14 +53,14 @@ class Transcriber(BaseModel):
 
 class Synthesizer(BaseModel):
     provider: str
-    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig]
+    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig]
     stream: bool = False
     buffer_size: Optional[int] = 40  # 40 characters in a buffer
     audio_format: Optional[str] = "pcm"
 
     @validator("provider")
     def validate_model(cls, value):
-        return validate_attribute(value, ["polly", "xtts", "elevenlabs"])
+        return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai"])
 
 class IOModel(BaseModel):
     provider: str
@@ -74,6 +80,7 @@ class LLM(BaseModel):
     family: Optional[str] = "openai"
     temperature: Optional[float] = 0.1
     request_json: Optional[bool] = False
+
 
 class MessagingModel(BaseModel):
     provider: str
@@ -115,18 +122,8 @@ class Task(BaseModel):
     task_type: Optional[str] = "conversation"  # extraction, summarization, notification
 
 
-class AssistantModel(BaseModel):
-    assistant_name: str
-    assistant_type: str = "other"
+class AgentModel(BaseModel):
+    agent_name: str
+    agent_type: str = "other"
     tasks: List[Task]
-
-
-class AssistantPromptsModel(BaseModel):
-    deserialized_prompts: Optional[Json] = None
-    serialized_prompts: Optional[Json] = None
-    conversation_graph: Optional[Json] = None
-
-class CreateAssistantPayload(BaseModel):
-    assistant_config: AssistantModel
-    assistant_prompts: Optional[Dict[str, Dict[str, str]]]
- # Usually of the format task_1: { "system_prompt" : "helpful assistant" } #For IVR type it should be a basic graph
+ # Usually of the format task_1: { "system_prompt" : "helpful agent" } #For IVR type it should be a basic graph
