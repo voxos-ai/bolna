@@ -9,7 +9,7 @@ import logging
 import audioop
 from .base_synthesizer import BaseSynthesizer
 from bolna.helpers.logger_config import configure_logger
-from bolna.helpers.utils import create_ws_data_packet
+from bolna.helpers.utils import create_ws_data_packet, pcm_to_wav_bytes
 
 logger = configure_logger(__name__)
 
@@ -28,16 +28,18 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         self.ws_url = f"wss://api.elevenlabs.io/v1/text-to-speech/{self.voice}/stream-input?model_id=eleven_multilingual_v1&optimize_streaming_latency=2&output_format={self.get_format(self.audio_format, self.sampling_rate)}"
         self.api_url = f"https://api.elevenlabs.io/v1/text-to-speech/{self.voice}?optimize_streaming_latency=3&output_format="
    
+    #Ensuring we only do wav output for now
     def get_format(self, format, sampling_rate):    
         #Eleven labs only allow mp3_44100_64, mp3_44100_96, mp3_44100_128, mp3_44100_192, pcm_16000, pcm_22050, pcm_24000, ulaw_8000
-        if format == "pcm":
-            return f"pcm_16000"
-        if format == "mp3":
-            return f"mp3_44100_128"
-        if format == "ulaw":
-            return "ulaw_8000"
-        else:
-            return "mp3_44100_128"
+        return f"pcm_16000"
+        # if format == "pcm":
+        #     return f"pcm_16000"
+        # if format == "mp3":
+        #     return f"mp3_44100_128"
+        # if format == "ulaw":
+        #     return "ulaw_8000"
+        # else:
+        #     return "mp3_44100_128"
             
     async def sender(self, text, end_of_llm_stream=False): # sends text to websocket
         if not self.connection_open:
@@ -136,12 +138,13 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         response = await self.__send_payload(payload, format = format)
         return response
 
+    #Currently we are only supporting wav output butn soon we will incorporate conversion
     async def generate(self):
         try:
             if self.stream:
                 async for message in self.receiver():
                     logger.info(f"Received message friom server")
-                    yield create_ws_data_packet(message, self.meta_info)
+                    yield create_ws_data_packet(pcm_to_wav_bytes(message), self.meta_info)
                     if message == b'\x00':
                         logger.info("received null byte and hence end of stream")
                         self.meta_info["end_of_synthesizer_stream"] = True
@@ -154,7 +157,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                     audio = await self.__generate_http(text)
                     if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
                         meta_info["end_of_synthesizer_stream"] = True
-                    yield create_ws_data_packet(audio, meta_info)
+                    yield create_ws_data_packet(pcm_to_wav_bytes(audio), meta_info)
         except Exception as e:
                 logger.error(f"Error in eleven labs generate {e}")
 

@@ -11,10 +11,11 @@ from aiobotocore.session import AioSession
 from contextlib import AsyncExitStack
 from dotenv import load_dotenv
 from pydantic import BaseModel, create_model
-import ast
-
+import wave
+import io
 from .logger_config import configure_logger
 from bolna.constants import PREPROCESS_DIR
+from pydub import AudioSegment
 
 logger = configure_logger(__name__)
 load_dotenv()
@@ -136,6 +137,7 @@ async def get_raw_audio_bytes_from_base64(agent_name, b64_string, audio_format='
             audio_data = file.read()
     else:
         object_key = f"{assistant_id}/audio/{b64_string}.{audio_format}"
+        logger.info(f"Reading {object_key}")
         audio_data = await get_s3_file(BUCKET_NAME, object_key)
 
     return audio_data
@@ -252,6 +254,22 @@ def clean_json_string(json_str):
     return json_str
 
 def yield_chunks_from_memory(audio_bytes, chunk_size=512):
-    total_length = len(file_in_memory)
+    total_length = len(audio_bytes)
     for i in range(0, total_length, chunk_size):
-        yield file_in_memory[i:i + chunk_size]
+        yield audio_bytes[i:i + chunk_size]
+
+def pcm_to_wav_bytes(pcm_data, sample_rate = 16000, num_channels = 1, sample_width = 2):
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav_file:
+        wav_file.setframerate(sample_rate)
+        wav_file.setnchannels(num_channels)
+        wav_file.setsampwidth(sample_width)
+        wav_file.writeframes(pcm_data)
+
+    return buffer.getvalue()
+
+def convert_audio_to_wav(audio_bytes, source_format = 'flac'):
+    audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format=source_format)
+    buffer = io.BytesIO()
+    audio.export(buffer, format="wav")
+    return buffer.getvalue()
