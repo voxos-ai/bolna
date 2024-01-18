@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 import redis.asyncio as redis
 from .default import DefaultOutputHandler
 from bolna.helpers.logger_config import configure_logger
-
+import traceback
 logger = configure_logger(__name__)
 load_dotenv()
 
@@ -64,7 +64,7 @@ class TwilioOutputHandler(DefaultOutputHandler):
                         audio_chunk += b'\x00'
 
                 if audio_chunk and self.stream_sid and len(audio_chunk) != 1:
-                    audio = audioop.lin2ulaw(audio_chunk[0], 2)
+                    audio = audioop.lin2ulaw(audio_chunk, 2)
                     base64_audio = base64.b64encode(audio).decode("utf-8")
                     message = {
                         'event': 'media',
@@ -87,7 +87,8 @@ class TwilioOutputHandler(DefaultOutputHandler):
                     }
                     await self.websocket.send_text(json.dumps(mark_message))
             except Exception as e:
+                traceback.print_exc()
                 logger.error(f'something went wrong while sending message to twilio {e}')
 
-        except Exception as e:
+        except Exception as e:  
             logger.error(f'something went wrong while handling twilio {e}')

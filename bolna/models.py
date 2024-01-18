@@ -22,16 +22,19 @@ class PollyConfig(BaseModel):
 class XTTSConfig(BaseModel):
     voice: str
     language: str
+    sampling_rate: Optional[str] ="24000"
 
 
 class ElevenLabsConfig(BaseModel):
     voice: str
     voice_id: str
     model: str
+    sampling_rate: Optional[str] = "16000"
 
 class OpenAIConfig(BaseModel):
     voice: str
     model: str
+    sampling_rate: Optional[str] ="24000"
 
 
 class Transcriber(BaseModel):

@@ -131,7 +131,7 @@ async def store_file(bucket_name = None, file_key = None, file_data = None, cont
                 data = file_data
                 f.write(data)
 
-                async def get_raw_audio_bytes_from_base64(agent_name, b64_string, audio_format='mp3', assistant_id=None, local = False):
+async def get_raw_audio_bytes_from_base64(agent_name, b64_string, audio_format='mp3', assistant_id=None, local = False):
     # we are already storing pcm formatted audio in the filler config. No need to encode/decode them further
     audio_data = None
     if local:

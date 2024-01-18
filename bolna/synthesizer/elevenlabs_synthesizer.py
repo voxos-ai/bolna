@@ -92,10 +92,9 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                         chunk = audioop.ratecv(chunk, 2, 1, 44100 , int(self.sampling_rate), None)[0]
                     yield chunk
                 
-                if "isFinal" in data and data["isFinal"]:
-                    self.connection_open = False
-                    yield b'\x00'
-
+                    if "isFinal" in data and data["isFinal"]:
+                        self.connection_open = False
+                        yield b'\x00'
                 else:
                     logger.info("No audio data in the response")
             except websockets.exceptions.ConnectionClosed:
