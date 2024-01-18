@@ -1,5 +1,5 @@
 import json
-from typing import Optional, List, Union
+from typing import Optional, List, Union, Dict
 from pydantic import BaseModel, Field, validator, ValidationError, Json
 from .providers import *
 
@@ -8,6 +8,8 @@ def validate_attribute(value, allowed_values):
     if value not in allowed_values:
         raise ValidationError(f"Invalid provider. Supported values: {', '.join(allowed_values)}")
     return value
+
+
 
 
 class PollyConfig(BaseModel):
@@ -27,8 +29,12 @@ class ElevenLabsConfig(BaseModel):
     voice_id: str
     model: str
 
+class OpenAIConfig(BaseModel):
+    voice: str
+    model: str
 
-class TranscriberModel(BaseModel):
+
+class Transcriber(BaseModel):
     model: str
     language: Optional[str] = None
     stream: bool = False
@@ -45,16 +51,16 @@ class TranscriberModel(BaseModel):
         return validate_attribute(value, ["en", "hi", "es", "fr", "pt", "ko", "ja", "zh", "de", "it"])
 
 
-class SynthesizerModel(BaseModel):
+class Synthesizer(BaseModel):
     provider: str
-    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig]
+    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig]
     stream: bool = False
     buffer_size: Optional[int] = 40  # 40 characters in a buffer
     audio_format: Optional[str] = "pcm"
 
     @validator("provider")
     def validate_model(cls, value):
-        return validate_attribute(value, ["polly", "xtts", "elevenlabs"])
+        return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai"])
 
 class IOModel(BaseModel):
     provider: str
@@ -65,7 +71,7 @@ class IOModel(BaseModel):
         return validate_attribute(value, ["twilio", "default", "database"])
 
 
-class LLM_Model(BaseModel):
+class LLM(BaseModel):
     streaming_model: Optional[str] = "gpt-3.5-turbo-16k"
     classification_model: Optional[str] = "gpt-4"
     max_tokens: Optional[int] = 100
@@ -74,9 +80,6 @@ class LLM_Model(BaseModel):
     family: Optional[str] = "openai"
     temperature: Optional[float] = 0.1
     request_json: Optional[bool] = False
-    langchain_agent: Optional[bool] = False
-    extraction_details: Optional[str] = None  # This is the english explaination for the same
-    extraction_json: Optional[str] = None  # This is the json required for the same
 
 
 class MessagingModel(BaseModel):
@@ -99,10 +102,10 @@ class ToolModel(BaseModel):
     email: Optional[MessagingModel] = None
 
 
-class ToolsConfigModel(BaseModel):
-    llm_agent: Optional[LLM_Model] = None
-    synthesizer: Optional[SynthesizerModel] = None
-    transcriber: Optional[TranscriberModel] = None
+class ToolsConfig(BaseModel):
+    llm_agent: Optional[LLM] = None
+    synthesizer: Optional[Synthesizer] = None
+    transcriber: Optional[Transcriber] = None
     input: Optional[IOModel] = None
     output: Optional[IOModel] = None
     api_tools: Optional[ToolModel] = None
@@ -113,25 +116,14 @@ class ToolsChainModel(BaseModel):
     pipelines: List[List[str]]
 
 
-class TaskConfigModel(BaseModel):
-    tools_config: ToolsConfigModel
+class Task(BaseModel):
+    tools_config: ToolsConfig
     toolchain: ToolsChainModel
     task_type: Optional[str] = "conversation"  # extraction, summarization, notification
 
 
-class AssistantModel(BaseModel):
-    assistant_name: str
-    assistant_type: str = "other"
-    tasks: List[TaskConfigModel]
-
-
-class AssistantPromptsModel(BaseModel):
-    deserialized_prompts: Optional[Json] = None
-    serialized_prompts: Optional[Json] = None
-    conversation_graph: Optional[Json] = None
-
-
-class CreateAssistantPayload(BaseModel):
-    user_id: str
-    assistant_config: AssistantModel
-    assistant_prompts: AssistantPromptsModel
+class AgentModel(BaseModel):
+    agent_name: str
+    agent_type: str = "other"
+    tasks: List[Task]
+ # Usually of the format task_1: { "system_prompt" : "helpful agent" } #For IVR type it should be a basic graph

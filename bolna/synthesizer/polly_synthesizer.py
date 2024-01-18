@@ -16,13 +16,20 @@ class PollySynthesizer(BaseSynthesizer):
                  buffer_size=400):
         super().__init__(stream, buffer_size)
         self.engine = engine
-        self.format = audio_format.lower()
+        self.format = self.get_format(audio_format.lower())
         self.voice = voice
         self.language = language
         self.sample_rate = str(sampling_rate)
 
         # @TODO: initialize client here
         self.client = None
+
+
+    def get_format(self, format):
+        if format == "pcm":
+            return "pcm"
+        else:
+            return "mp3"
 
     @staticmethod
     async def create_client(service: str, session: AioSession, exit_stack: AsyncExitStack):
@@ -53,6 +60,7 @@ class PollySynthesizer(BaseSynthesizer):
     async def synthesize(self, text):
         #This is used for one off synthesis mainly for use cases like voice lab and IVR
         audio = await self.__generate_http(text)
+        
         return audio
 
     async def generate(self):

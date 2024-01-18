@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from .llm import BaseLLM
 from bolna.helpers.utils import json_to_pydantic_schema
 from bolna.helpers.logger_config import configure_logger
-
+import time
 logger = configure_logger(__name__)
 load_dotenv()
 
@@ -40,14 +40,14 @@ class LiteLLM(BaseLLM):
                     if synthesize:
                         if not self.started_streaming:
                             self.started_streaming = True
-                        yield text
+                        yield text, False
                     buffer = buffer.split(" ")[-1]
 
         if synthesize:
             if buffer != "":
-                yield buffer
+                yield buffer, True
         else:
-            yield answer
+            yield answer, True
         self.started_streaming = False
         logger.info(f"Time to generate response {time.time() - start_time}")
     async def generate(self, messages, classification_task=False, stream=False, synthesize=True, request_json=False):

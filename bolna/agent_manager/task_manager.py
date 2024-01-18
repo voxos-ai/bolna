@@ -13,7 +13,7 @@ logger = configure_logger(__name__)
 
 
 class TaskManager(BaseManager):
-    def __init__(self, assistant_name, task_id, task, ws, input_parameters=None, context_data=None, user_id=None,
+    def __init__(self, assistant_name, task_id, task, ws, input_parameters=None, context_data=None,
                  assistant_id=None, run_id=None, connected_through_dashboard=False, cache =  None):
         super().__init__()
         logger.info(f"doing task {task}")
@@ -39,7 +39,6 @@ class TaskManager(BaseManager):
         self.start_time = time.time()
 
         # Assistant persistance stuff
-        self.user_id = user_id
         self.assistant_id = assistant_id
         self.run_id = run_id
         self.mark_set = set()
@@ -79,6 +78,7 @@ class TaskManager(BaseManager):
                 logger.info(f"Making sure that the sampling rate for output handler is 8000")
                 self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 8000
                 self.task_config['tools_config']['synthesizer']['audio_format'] = 'pcm'
+
             self.tools["output"] = output_handler_class(self.websocket, self.mark_set)
         else:
             raise "Other input handlers not supported yet"
@@ -112,7 +112,7 @@ class TaskManager(BaseManager):
         self.extracted_data = None
         self.summarized_data = None
 
-        #self.stream = not connected_through_dashboard and "synthesizer" in self.task_config["tools_config"] and self.task_config["tools_config"]["synthesizer"]["stream"]
+        #self.stream = "synthesizer" in self.task_config["tools_config"] and self.task_config["tools_config"]["synthesizer"]["stream"]
         self.stream = not connected_through_dashboard #Currently we are allowing only realtime conversation based usecases. Hence it'll always be true unless connected through dashboard
         self.is_local = False
 
@@ -124,12 +124,17 @@ class TaskManager(BaseManager):
         self.curr_sequence_id = 0
         self.sequence_ids = set()
 
-    async def load_prompt(self, assistant_name, task_id, is_local):
+    async def load_prompt(self, assistant_name, task_id, local):
         logger.info("prompt and config setup started")
-        self.is_local = is_local
-        prompt_responses = await get_prompt_responses(assistant_name, assistant_id=self.assistant_id,
-                                                      user_id=self.user_id, local=self.is_local)
-        self.prompts = prompt_responses["task_{}".format(task_id + 1)]
+        self.is_local = local
+        if "prompt" in self.task_config["tools_config"]["llm_agent"]:
+            self.prompts = {
+                "system_prompt": self.task_config["tools_config"]["llm_agent"]["prompt"]
+            }
+            logger.info(f"Prompt given in llm_agent and hence storing the prompt")
+        else:
+            prompt_responses = await get_prompt_responses(assistant_id=self.assistant_id,local=self.is_local)
+            self.prompts = prompt_responses["task_{}".format(task_id + 1)]
 
         if "system_prompt" in self.prompts:
             # This isn't a graph based agent
@@ -316,8 +321,8 @@ class TaskManager(BaseManager):
         start_time = time.time()
         should_bypass_synth = 'bypass_synth' in meta_info and meta_info['bypass_synth'] == True
         next_step = self._get_next_step(sequence, "llm")
-        curr_sequence_id = self.curr_sequence_id + 1
-        meta_info["sequence_id"] = curr_sequence_id
+        self.curr_sequence_id +=1
+        meta_info["sequence_id"] = self.curr_sequence_id
         cache_response =  self.cache.get(get_md5_hash(message['data'])) if self.cache is not None else None
         
         if cache_response is not None:
@@ -446,13 +451,14 @@ class TaskManager(BaseManager):
         return sequence
 
     async def process_interruption(self):
-        await self.tools["output"].handle_interruption()
+        logger.info("Handling interruption")
         self.sequence_ids = set() #Remove all the sequence ids so subsequent won't be processed
+        await self.tools["output"].handle_interruption()
+        
         if self.llm_task is not None:
             self.llm_task.cancel()
             self.llm_task = None
             self.was_long_pause = True
-
         # if len(self.synthesizer_tasks) > 0:
         #     for synth_task in self.synthesizer_tasks:
         #         synth_task.cancel()
@@ -492,18 +498,7 @@ class TaskManager(BaseManager):
                     if message['data'] == "TRANSCRIBER_BEGIN":
                         logger.info("starting transcriber stream")
                         start_time = time.time()
-                        await self.tools["output"].handle_interruption()
-                        if self.llm_task is not None:
-                            logger.info("Cancelling LLM Task as it's on")
-                            self.llm_task.cancel()
-                            self.llm_task = None
-                            self.was_long_pause = True
-
-                        if len(self.synthesizer_tasks) > 0:
-                            logger.info("Cancelling Synthesizer tasks")
-                            for synth_task in self.synthesizer_tasks:
-                                synth_task.cancel()
-                            self.synthesizer_tasks = []
+                        await self.process_interruption()
                         continue
                     elif message['data'] == "TRANSCRIBER_END":
                         logger.info("transcriber stream and preparing the next step")
@@ -548,14 +543,18 @@ class TaskManager(BaseManager):
                 logger.info("Listening to synthesizer")
                 async for message in self.tools["synthesizer"].generate():
                     if not self.conversation_ended and message["meta_info"]["sequence_id"] in self.sequence_ids:
+                        logger.info(f"{message['meta_info']['sequence_id'] } is in sequence ids  {self.sequence_ids} and hence removing the sequence ids ")
                         await self.tools["output"].handle(message)
+                    else:
+                        logger.info(f"{message['meta_info']['sequence_id']} is not in sequence ids  {self.sequence_ids} and hence not sending to output")
                     
                     if "end_of_synthesizer_stream" in message["meta_info"] and message["meta_info"]["end_of_synthesizer_stream"]:
                         logger.info(f"Got End of stream and hence removing from sequence ids {self.sequence_ids}  {message['meta_info']['sequence_id']}")
                         self.sequence_ids.remove(message["meta_info"]["sequence_id"])
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
 
         except Exception as e:
+            traceback.print_exc()
             logger.error(f"Error in synthesizer {e}")
 
     async def _synthesize(self, message):
@@ -569,14 +568,15 @@ class TaskManager(BaseManager):
                 audio_chunk = await get_raw_audio_bytes_from_base64(self.assistant_name, text,
                                                                     self.task_config["tools_config"]["output"][
                                                                         "format"], local=self.is_local,
-                                                                    user_id=self.user_id,
                                                                     assistant_id=self.assistant_id)
 
                 #TODO: Either load IVR audio into memory before call or user s3 iter_cunks
                 # This will help with interruption in IVR
-                for chunk in  yield_chunks_from_memory(audio_chunk):
+                if self.connected_through_dashboard:
                     await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
-                                                                        
+                else:
+                    for chunk in  yield_chunks_from_memory(audio_chunk):
+                        await self.tools["output"].handle(create_ws_data_packet(chunk, meta_info))
             elif self.synthesizer_provider in SUPPORTED_SYNTHESIZER_MODELS.keys():
                 self.sequence_ids.add(meta_info["sequence_id"])
                 logger.info(f"After adding into sequence id {self.sequence_ids}")
@@ -643,6 +643,8 @@ class TaskManager(BaseManager):
 
         finally:
             # Construct output
+            if self.synthesizer_task is not None:
+                self.synthesizer_task.cancel()
             if self.task_id == 0:
                 output = {"messages": self.history, "conversation_time": time.time() - self.start_time,
                           "label_flow": self.label_flow, "call_sid": self.call_sid, "stream_sid": self.stream_sid,
@@ -662,7 +664,7 @@ class TaskManager(BaseManager):
             # Cancel all tasks on cancellation
             tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
             if self.synthesizer_task:
-                self.synthesizer_task.cancel()
+                self.synthsizer_task.cancel()
             logger.info(f"tasks {len(tasks)}")
             for task in tasks:
                 logger.info(f"Cancelling task {task.get_name()}")

@@ -11,10 +11,11 @@ from aiobotocore.session import AioSession
 from contextlib import AsyncExitStack
 from dotenv import load_dotenv
 from pydantic import BaseModel, create_model
-import ast
-
+import wave
+import io
 from .logger_config import configure_logger
 from bolna.constants import PREPROCESS_DIR
+from pydub import AudioSegment
 
 logger = configure_logger(__name__)
 load_dotenv()
@@ -97,27 +98,40 @@ async def get_s3_file(bucket_name, file_key):
             return file_content
 
 
-async def put_s3_file(bucket_name, file_key, file_data, content_type):
-    session = AioSession()
+async def store_file(bucket_name = None, file_key = None, file_data = None, content_type= "json", local = False):
 
-    async with AsyncExitStack() as exit_stack:
-        s3_client = await exit_stack.enter_async_context(session.create_client('s3'))
-        data = None
-        if content_type == "json":
-            data = json.dumps(file_data)
-        elif content_type in ["mp3", "wav", "pcm", "csv"]:
-            data = file_data
+    if not local:
+        session = AioSession()
+
+        async with AsyncExitStack() as exit_stack:
+            s3_client = await exit_stack.enter_async_context(session.create_client('s3'))
+            data = None
+            if content_type == "json":
+                data = json.dumps(file_data)
+            elif content_type in ["mp3", "wav", "pcm", "csv"]:
+                data = file_data
+            try:
+                await s3_client.put_object(Bucket=bucket_name, Key=file_key, Body=data)
+            except (BotoCoreError, ClientError) as error:
+                logger.error(error)
+            except Exception as e:
+                logger.error('Exception occurred while s3 put object: {}'.format(e))
+    if local:
         
+        directory_path = os.path.join(PREPROCESS_DIR, os.path.dirname(file_key))
+        logger.info(file_data)
+        os.makedirs(directory_path, exist_ok=True)
+        if content_type == "json":
+            logger.info(f"Writing to {PREPROCESS_DIR}/{file_key} ")
+            with open(f"{PREPROCESS_DIR}/{file_key}", 'w') as f:
+                data = json.dumps(file_data)
+                f.write(data)
+        elif content_type in ["mp3", "wav", "pcm", "csv"]:
+            with open(f"{PREPROCESS_DIR}/{file_key}", 'w') as f:
+                data = file_data
+                f.write(data)
 
-        try:
-            await s3_client.put_object(Bucket=bucket_name, Key=file_key, Body=data)
-        except (BotoCoreError, ClientError) as error:
-            logger.error(error)
-        except Exception as e:
-            logger.error('Exception occurred while s3 put object: {}'.format(e))
-
-
-async def get_raw_audio_bytes_from_base64(agent_name, b64_string, audio_format='mp3', user_id = None, assistant_id=None, local = False):
+                async def get_raw_audio_bytes_from_base64(agent_name, b64_string, audio_format='mp3', assistant_id=None, local = False):
     # we are already storing pcm formatted audio in the filler config. No need to encode/decode them further
     audio_data = None
     if local:
@@ -126,7 +140,8 @@ async def get_raw_audio_bytes_from_base64(agent_name, b64_string, audio_format='
             # Read the entire file content into a variable
             audio_data = file.read()
     else:
-        object_key = f"{user_id}/{assistant_id}/audio/{b64_string}.{audio_format}"
+        object_key = f"{assistant_id}/audio/{b64_string}.{audio_format}"
+        logger.info(f"Reading {object_key}")
         audio_data = await get_s3_file(BUCKET_NAME, object_key)
 
     return audio_data
@@ -177,8 +192,8 @@ def update_prompt_with_context(prompt, context_data):
     return prompt.format_map(DictWithMissing(context_data.get('recipient_dataa', {})))
 
 
-async def get_prompt_responses(agent_name, local=False, user_id=None, assistant_id = None):
-    filepath = f"{PREPROCESS_DIR}/{agent_name}/conversation_details.json"
+async def get_prompt_responses(assistant_id, local=False):
+    filepath = f"{PREPROCESS_DIR}/{assistant_id}/conversation_details.json"
     data = ""
     if local:
         logger.info("Loading up the conversation details from the local file")
@@ -186,9 +201,9 @@ async def get_prompt_responses(agent_name, local=False, user_id=None, assistant_
             with open(filepath, "r") as json_file:
                 data = json.load(json_file)
         except Exception as e:
-            logger.error("Could not load up the dataset")
+            logger.error(f"Could not load up the dataset {e}")
     else:
-        key = f"{user_id}/{assistant_id}/conversation_details.json"
+        key = f"{assistant_id}/conversation_details.json"
         logger.info(f"Loading up the conversation details from the s3 file BUCKET_NAME {BUCKET_NAME} {key}")
         try:
             response = await get_s3_file(BUCKET_NAME, key)
@@ -243,6 +258,22 @@ def clean_json_string(json_str):
     return json_str
 
 def yield_chunks_from_memory(audio_bytes, chunk_size=512):
-    total_length = len(file_in_memory)
+    total_length = len(audio_bytes)
     for i in range(0, total_length, chunk_size):
-        yield file_in_memory[i:i + chunk_size]
+        yield audio_bytes[i:i + chunk_size]
+
+def pcm_to_wav_bytes(pcm_data, sample_rate = 16000, num_channels = 1, sample_width = 2):
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav_file:
+        wav_file.setframerate(sample_rate)
+        wav_file.setnchannels(num_channels)
+        wav_file.setsampwidth(sample_width)
+        wav_file.writeframes(pcm_data)
+
+    return buffer.getvalue()
+
+def convert_audio_to_wav(audio_bytes, source_format = 'flac'):
+    audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format=source_format)
+    buffer = io.BytesIO()
+    audio.export(buffer, format="wav")
+    return buffer.getvalue()

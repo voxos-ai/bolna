@@ -21,12 +21,15 @@ class XTTSSynthesizer(BaseSynthesizer):
         self.buffered = False
         self.ws_url = os.getenv('TTS_WS')
         self.api_url = os.getenv('TTS_API_URL')
-        self.format = audio_format
+        self.format = self.get_format(audio_format)
         self.stream = stream
         self.language = language
         self.voice = voice
         self.sampling_rate = sampling_rate
         self.websocket_connection = None            
+
+    def get_format(self, format):
+        return "wav"
 
     async def _send_payload(self, payload):
         url = self.api_url

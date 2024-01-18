@@ -13,9 +13,10 @@ class DefaultOutputHandler:
 
     # @TODO Figure out the best way to handle this
     async def handle_interruption(self):
-        message_clear = {
-            "event": "clear"
-        }
+        logger.info("#######   Sending interruption message ####################")
+        response = {"data": None, "type": "clear"}
+        await self.websocket.send_json(response)
+
 
     async def handle(self, packet):
         try:
@@ -24,7 +25,10 @@ class DefaultOutputHandler:
             if packet["meta_info"]['type'] in ('audio', 'text'):
                 if packet["meta_info"]['type'] == 'audio':
                     logger.info(f"Sending audio")
+                    with open('audio1.wav', 'wb') as f:
+                        f.write(packet['data'])
                     data = base64.b64encode(packet['data']).decode("utf-8")
+                    #logger.info(f"data -> {data}")
                 elif packet["meta_info"]['type'] == 'text':
                     logger.info(f"Sending text response {packet['data']}")
                     data = packet['data']
