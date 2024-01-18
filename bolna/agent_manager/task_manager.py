@@ -60,6 +60,7 @@ class TaskManager(BaseManager):
             if self.task_config["tools_config"]["input"]["provider"] in SUPPORTED_INPUT_HANDLERS.keys():
                 logger.info(f"Connected through dashboard {connected_through_dashboard}")
                 if connected_through_dashboard:
+                    logger.info("Connected through dashboard and hence using default input handler")
                     # If connected through dashboard get basic dashboard class
                     input_handler_class = SUPPORTED_INPUT_HANDLERS.get("default")
                 else:
@@ -73,7 +74,11 @@ class TaskManager(BaseManager):
         if self.task_config["tools_config"]["output"] is None:
             logger.info("Not setting up any output handler as it is none")
         elif self.task_config["tools_config"]["output"]["provider"] in SUPPORTED_OUTPUT_HANDLERS.keys():
-            output_handler_class = SUPPORTED_OUTPUT_HANDLERS.get(self.task_config["tools_config"]["output"]["provider"])
+            if connected_through_dashboard:
+                logger.info("Connected through dashboard and hence using default output handler")
+                output_handler_class = SUPPORTED_OUTPUT_HANDLERS.get("default")
+            else:
+                output_handler_class = SUPPORTED_OUTPUT_HANDLERS.get(self.task_config["tools_config"]["output"]["provider"])
             if self.task_config["tools_config"]["output"]["provider"] == "twilio":
                 logger.info(f"Making sure that the sampling rate for output handler is 8000")
                 self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 8000
@@ -565,17 +570,21 @@ class TaskManager(BaseManager):
             if meta_info["is_md5_hash"]:
                 logger.info('sending preprocessed audio response to {}'.format(
                     self.task_config["tools_config"]["output"]["provider"]))
-                audio_chunk = await get_raw_audio_bytes_from_base64(self.assistant_name, text,
+                
+                #TODO: Either load IVR audio into memory before call or user s3 iter_cunks
+                # This will help with interruption in IVR
+                if self.connected_through_dashboard or self.task_config['tools_config']['output'] == "default":
+                    audio_chunk = await get_raw_audio_bytes_from_base64(self.assistant_name, text,
                                                                     self.task_config["tools_config"]["output"][
                                                                         "format"], local=self.is_local,
                                                                     assistant_id=self.assistant_id)
-
-                #TODO: Either load IVR audio into memory before call or user s3 iter_cunks
-                # This will help with interruption in IVR
-                if self.connected_through_dashboard:
                     await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
                 else:
-                    for chunk in  yield_chunks_from_memory(audio_chunk):
+                    audio_chunk = await get_raw_audio_bytes_from_base64(self.assistant_name, text,
+                                                                    'pcm', local=self.is_local,
+                                                                    assistant_id=self.assistant_id)
+                    #await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
+                    for chunk in  yield_chunks_from_memory(audio_chunk, chunk_size=16384):
                         await self.tools["output"].handle(create_ws_data_packet(chunk, meta_info))
             elif self.synthesizer_provider in SUPPORTED_SYNTHESIZER_MODELS.keys():
                 self.sequence_ids.add(meta_info["sequence_id"])
