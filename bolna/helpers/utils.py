@@ -22,6 +22,11 @@ load_dotenv()
 BUCKET_NAME = os.getenv('BUCKET_NAME')
 
 
+class DictWithMissing(dict):
+    def __missing__(self, key):
+        return ''
+
+
 def load_file(file_path, is_json=False):
     data = None
     with open(file_path, "r") as f:
@@ -103,7 +108,7 @@ async def store_file(bucket_name = None, file_key = None, file_data = None, cont
             data = None
             if content_type == "json":
                 data = json.dumps(file_data)
-            elif content_type in ["mp3", "wav", "pcm"]:
+            elif content_type in ["mp3", "wav", "pcm", "csv"]:
                 data = file_data
             try:
                 await s3_client.put_object(Bucket=bucket_name, Key=file_key, Body=data)
@@ -121,13 +126,12 @@ async def store_file(bucket_name = None, file_key = None, file_data = None, cont
             with open(f"{PREPROCESS_DIR}/{file_key}", 'w') as f:
                 data = json.dumps(file_data)
                 f.write(data)
-        elif content_type in ["mp3", "wav", "pcm"]:
+        elif content_type in ["mp3", "wav", "pcm", "csv"]:
             with open(f"{PREPROCESS_DIR}/{file_key}", 'w') as f:
                 data = file_data
                 f.write(data)
 
-
-async def get_raw_audio_bytes_from_base64(agent_name, b64_string, audio_format='mp3', assistant_id=None, local = False):
+                async def get_raw_audio_bytes_from_base64(agent_name, b64_string, audio_format='mp3', assistant_id=None, local = False):
     # we are already storing pcm formatted audio in the filler config. No need to encode/decode them further
     audio_data = None
     if local:
@@ -185,7 +189,7 @@ def format_messages(messages):
 def update_prompt_with_context(prompt, context_data):
     if not isinstance(context_data.get('recipient_data'), dict):
         return prompt
-    return prompt.format(**context_data.get('recipient_data', {}))
+    return prompt.format_map(DictWithMissing(context_data.get('recipient_dataa', {})))
 
 
 async def get_prompt_responses(assistant_id, local=False):
