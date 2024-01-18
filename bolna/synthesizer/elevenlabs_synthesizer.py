@@ -40,8 +40,14 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         #     return "ulaw_8000"
         # else:
         #     return "mp3_44100_128"
-            
+
+    # Don't send EOS signal. Let        
     async def sender(self, text, end_of_llm_stream=False): # sends text to websocket
+        if self.websocket_connection is not None and not self.websocket_connection.open:
+            self.connection_open = False
+            logger.info(f"Connection was closed and hence opening connection")
+            await self.open_connection()
+            
         if not self.connection_open:
             logger.info("Connecting to elevenlabs websocket...")
             bos_message = {
@@ -54,7 +60,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
             }
             await self.websocket_connection.send(json.dumps(bos_message))
             self.connection_open = True
-
+            
         if text != "":
             logger.info(f"Sending message {text}")
 
@@ -65,12 +71,6 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
             }
             await self.websocket_connection.send(json.dumps(input_message))
 
-        if end_of_llm_stream:
-            logger.info("End of LLM stream")
-            eos_message = {
-                "text": ""
-            }
-            await self.websocket_connection.send(json.dumps(eos_message))
             # self.connection_open = False
 
     async def receiver(self):
@@ -138,7 +138,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         response = await self.__send_payload(payload, format = format)
         return response
 
-    #Currently we are only supporting wav output butn soon we will incorporate conversion
+    #Currently we are only supporting wav output butn soon we will incorporate conver
     async def generate(self):
         try:
             if self.stream:

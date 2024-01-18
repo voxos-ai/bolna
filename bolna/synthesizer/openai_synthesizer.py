@@ -63,9 +63,10 @@ class OPENAISynthesizer(BaseSynthesizer):
                         yield create_ws_data_packet(convert_audio_to_wav(chunk, 'flac'), meta_info)
                 else:
                     audio = await self.__generate_http(text)
-                    if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
-                        meta_info["end_of_synthesizer_stream"] = True
                     yield create_ws_data_packet(convert_audio_to_wav(audio, 'flac'), meta_info)
+                
+                if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
+                    meta_info["end_of_synthesizer_stream"] = True
         except Exception as e:
                 logger.error(f"Error in openai generate {e}")
 

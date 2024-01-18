@@ -112,7 +112,7 @@ class TaskManager(BaseManager):
         self.extracted_data = None
         self.summarized_data = None
 
-        #self.stream = not connected_through_dashboard and "synthesizer" in self.task_config["tools_config"] and self.task_config["tools_config"]["synthesizer"]["stream"]
+        #self.stream = "synthesizer" in self.task_config["tools_config"] and self.task_config["tools_config"]["synthesizer"]["stream"]
         self.stream = not connected_through_dashboard #Currently we are allowing only realtime conversation based usecases. Hence it'll always be true unless connected through dashboard
         self.is_local = False
 
@@ -643,6 +643,8 @@ class TaskManager(BaseManager):
 
         finally:
             # Construct output
+            if self.synthesizer_task is not None:
+                self.synthesizer_task.cancel()
             if self.task_id == 0:
                 output = {"messages": self.history, "conversation_time": time.time() - self.start_time,
                           "label_flow": self.label_flow, "call_sid": self.call_sid, "stream_sid": self.stream_sid,
