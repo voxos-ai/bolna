@@ -104,6 +104,7 @@ class GraphBasedConversationAgent(BaseAgent):
         message = [{"role": "system", "content": self.current_node.prompt}] + prev_messages
         # Get classification label from LLM
         response = await self.brain.generate(message, True, False, request_json=True)
+        logger.info(f"Classification response {response}")
         classification_result = json.loads(response)
         label = classification_result["classification_label"]
         for child in self.current_node.children:
@@ -121,7 +122,7 @@ class GraphBasedConversationAgent(BaseAgent):
                     yield audio_pair["audio"]
                 else:
                     next_state = await self._get_next_preprocessed_step(history)
-                    logger.info('Agent: {}'.format(next_state.get('text')))
+                    logger.info('Agent: {}'.format(next_state))
                     history.append({'role': 'assistant', 'content': next_state['text']})
                     yield next_state["audio"]
                 

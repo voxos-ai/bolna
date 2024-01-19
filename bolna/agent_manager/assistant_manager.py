@@ -1,5 +1,4 @@
 import asyncio
-import uvloop
 import time
 import os
 from twilio.rest import Client
@@ -21,7 +20,7 @@ enc = tiktoken.get_encoding("cl100k_base")
 
 class AssistantManager(BaseManager):
     def __init__(self, agent_config, ws = None, assistant_id=None, context_data=None,
-                 connected_through_dashboard=None, cache = None):
+                 connected_through_dashboard=None, cache = None, input_queue = None, output_queue = None):
         super().__init__()
         self.tools = {}
         self.websocket = ws
@@ -33,6 +32,8 @@ class AssistantManager(BaseManager):
         self.run_id = f"{self.assistant_id}#{str(int(time.time() * 1000))}"
         self.connected_through_dashboard = connected_through_dashboard
         self.cache = cache
+        self.input_queue = input_queue
+        self.output_queue = output_queue
         
     @staticmethod
     def find_llm_output_price(outputs):
@@ -98,13 +99,13 @@ class AssistantManager(BaseManager):
         '''
         Run will start all tasks in sequential format
         '''
-        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
         input_parameters = None
         for task_id, task in enumerate(self.tasks):
             logger.info(f"Running task {task_id} {task}")
             task_manager = TaskManager(self.agent_config.get("agent_name", self.agent_config.get("assistant_name")), task_id, task, self.websocket,
                                        context_data=self.context_data, input_parameters=input_parameters,
-                                       assistant_id=self.assistant_id, run_id=self.run_id, connected_through_dashboard = self.connected_through_dashboard, cache = self.cache)
+                                       assistant_id=self.assistant_id, run_id=self.run_id, connected_through_dashboard = self.connected_through_dashboard, 
+                                       cache = self.cache, input_queue= self.input_queue, output_queue = self.output_queue)
             await task_manager.load_prompt(self.agent_config.get("agent_name", self.agent_config.get("assistant_name")), task_id, local=local)
             task_output = await task_manager.run()
             task_output['run_id'] = self.run_id

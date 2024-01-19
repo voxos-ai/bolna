@@ -9,12 +9,14 @@ from bolna.helpers.utils import create_ws_data_packet, is_valid_md5, get_raw_aud
     get_required_input_types, format_messages, get_prompt_responses, update_prompt_with_context, get_md5_hash, clean_json_string, yield_chunks_from_memory
 from bolna.helpers.logger_config import configure_logger
 
+asyncio.get_event_loop().set_debug(True)
 logger = configure_logger(__name__)
 
 
 class TaskManager(BaseManager):
     def __init__(self, assistant_name, task_id, task, ws, input_parameters=None, context_data=None,
-                 assistant_id=None, run_id=None, connected_through_dashboard=False, cache =  None):
+                 assistant_id=None, run_id=None, connected_through_dashboard=False, 
+                 cache =  None, input_queue = None, output_queue = None):
         super().__init__()
         logger.info(f"doing task {task}")
         self.task_id = task_id
@@ -60,26 +62,32 @@ class TaskManager(BaseManager):
             if self.task_config["tools_config"]["input"]["provider"] in SUPPORTED_INPUT_HANDLERS.keys():
                 logger.info(f"Connected through dashboard {connected_through_dashboard}")
                 if connected_through_dashboard:
+                    logger.info("Connected through dashboard and hence using default input handler")
                     # If connected through dashboard get basic dashboard class
                     input_handler_class = SUPPORTED_INPUT_HANDLERS.get("default")
                 else:
                     input_handler_class = SUPPORTED_INPUT_HANDLERS.get(
                         self.task_config["tools_config"]["input"]["provider"])
                 self.tools["input"] = input_handler_class(self.queues, self.websocket, get_required_input_types(task),
-                                                          self.mark_set, self.connected_through_dashboard)
+                                                          mark_set = self.mark_set, connected_through_dashboard = self.connected_through_dashboard,
+                                                          queue = input_queue)
             else:
                 raise "Other input handlers not supported yet"
 
         if self.task_config["tools_config"]["output"] is None:
             logger.info("Not setting up any output handler as it is none")
         elif self.task_config["tools_config"]["output"]["provider"] in SUPPORTED_OUTPUT_HANDLERS.keys():
-            output_handler_class = SUPPORTED_OUTPUT_HANDLERS.get(self.task_config["tools_config"]["output"]["provider"])
+            if connected_through_dashboard:
+                logger.info("Connected through dashboard and hence using default output handler")
+                output_handler_class = SUPPORTED_OUTPUT_HANDLERS.get("default")
+            else:
+                output_handler_class = SUPPORTED_OUTPUT_HANDLERS.get(self.task_config["tools_config"]["output"]["provider"])
             if self.task_config["tools_config"]["output"]["provider"] == "twilio":
                 logger.info(f"Making sure that the sampling rate for output handler is 8000")
                 self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 8000
                 self.task_config['tools_config']['synthesizer']['audio_format'] = 'pcm'
 
-            self.tools["output"] = output_handler_class(self.websocket, self.mark_set)
+            self.tools["output"] = output_handler_class(self.websocket, queue = output_queue)
         else:
             raise "Other input handlers not supported yet"
 
@@ -482,7 +490,7 @@ class TaskManager(BaseManager):
 
     async def _listen_transcriber(self):
         transcriber_message = ""
-        start_time = None
+        logger.info(f"Starting transcriber task")
         try:
             if self.stream:
                 async for message in self.tools["transcriber"].transcribe():
@@ -530,7 +538,6 @@ class TaskManager(BaseManager):
         except Exception as e:
             traceback.print_exc()
             logger.error(f"Error in transcriber {e}")
-
     
 
     async def __listen_synthesizer(self):
@@ -565,17 +572,21 @@ class TaskManager(BaseManager):
             if meta_info["is_md5_hash"]:
                 logger.info('sending preprocessed audio response to {}'.format(
                     self.task_config["tools_config"]["output"]["provider"]))
-                audio_chunk = await get_raw_audio_bytes_from_base64(self.assistant_name, text,
+                
+                #TODO: Either load IVR audio into memory before call or user s3 iter_cunks
+                # This will help with interruption in IVR
+                if self.connected_through_dashboard or self.task_config['tools_config']['output'] == "default":
+                    audio_chunk = await get_raw_audio_bytes_from_base64(self.assistant_name, text,
                                                                     self.task_config["tools_config"]["output"][
                                                                         "format"], local=self.is_local,
                                                                     assistant_id=self.assistant_id)
-
-                #TODO: Either load IVR audio into memory before call or user s3 iter_cunks
-                # This will help with interruption in IVR
-                if self.connected_through_dashboard:
                     await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
                 else:
-                    for chunk in  yield_chunks_from_memory(audio_chunk):
+                    audio_chunk = await get_raw_audio_bytes_from_base64(self.assistant_name, text,
+                                                                    'pcm', local=self.is_local,
+                                                                    assistant_id=self.assistant_id)
+                    #await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
+                    for chunk in  yield_chunks_from_memory(audio_chunk, chunk_size=16384):
                         await self.tools["output"].handle(create_ws_data_packet(chunk, meta_info))
             elif self.synthesizer_provider in SUPPORTED_SYNTHESIZER_MODELS.keys():
                 self.sequence_ids.add(meta_info["sequence_id"])
@@ -603,6 +614,7 @@ class TaskManager(BaseManager):
                 tasks = [asyncio.create_task(self.tools['input'].handle())]
                 if "transcriber" in self.tools:
                     tasks.append(asyncio.create_task(self._listen_transcriber()))
+
                 if self.connected_through_dashboard and self.task_config['task_type'] == "conversation":
                     logger.info(
                         "Since it's connected through dashboard, I'll run listen_llm_tas too in case user wants to simply text")
@@ -610,17 +622,19 @@ class TaskManager(BaseManager):
                 
                 if "synthesizer" in self.tools and self._is_conversation_task():
                     logger.info("Starting synthesizer task")
-                    self.synthesizer_task = asyncio.create_task(self.__listen_synthesizer())
+                    try:
+                        self.synthesizer_task = asyncio.create_task(self.__listen_synthesizer())
+                    except asyncio.CancelledError as e:
+                        logger.error(f'Synth task got cancelled {e}')
+                        traceback.print_exc()                    
                 try:
                     await asyncio.gather(*tasks)
+                except asyncio.CancelledError as e:
+                    logger.error(f'task got cancelled {e}')
+                    traceback.print_exc()
                 except Exception as e:
+                    traceback.print_exc()
                     logger.error(f"Error: {e}")
-
-                # Close connections
-                # if "transcriber" in self.tools:
-                #     logger.info(f"Closing transcriber")
-                #     await self.tools["transcriber"].toggle_connection()
-                #     await asyncio.sleep(5) #Making sure whatever message was passed is over
 
                 logger.info("Conversation completed")
             else:
@@ -643,7 +657,7 @@ class TaskManager(BaseManager):
 
         finally:
             # Construct output
-            if self.synthesizer_task is not None:
+            if "synthesizer" in self.tools and self.synthesizer_task is not None:
                 self.synthesizer_task.cancel()
             if self.task_id == 0:
                 output = {"messages": self.history, "conversation_time": time.time() - self.start_time,
@@ -663,8 +677,8 @@ class TaskManager(BaseManager):
         try:
             # Cancel all tasks on cancellation
             tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
-            if self.synthesizer_task:
-                self.synthsizer_task.cancel()
+            if "synthesizer" in self.tools and self.synthesizer_task:
+                self.synthesizer_task.cancel()
             logger.info(f"tasks {len(tasks)}")
             for task in tasks:
                 logger.info(f"Cancelling task {task.get_name()}")

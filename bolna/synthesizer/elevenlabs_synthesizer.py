@@ -87,7 +87,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                     chunk = base64.b64decode(data["audio"])
                     # @TODO make it better - for example sample rate changing for mp3 and other formats  
                     if self.audio_format == "pcm" and self.sampling_rate != 16000:
-                        chunk = audioop.ratecv(chunk, 2, 1,16000 , int(self.sampling_rate), None)[0]
+                        yield self.resample(chunk)
                     elif self.audio_format == "mp3" and self.sampling_rate != 44100:
                         chunk = audioop.ratecv(chunk, 2, 1, 44100 , int(self.sampling_rate), None)[0]
                     yield chunk
