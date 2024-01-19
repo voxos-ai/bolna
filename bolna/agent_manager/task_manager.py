@@ -15,8 +15,9 @@ logger = configure_logger(__name__)
 
 class TaskManager(BaseManager):
     def __init__(self, assistant_name, task_id, task, ws, input_parameters=None, context_data=None,
-                 assistant_id=None, run_id=None, connected_through_dashboard=False, 
-                 cache =  None, input_queue = None, output_queue = None):
+                 assistant_id=None, run_id=None, conversation_history = None, 
+                 connected_through_dashboard=False, cache =  None, 
+                 input_queue = None, output_queue = None):
         super().__init__()
         logger.info(f"doing task {task}")
         self.task_id = task_id
@@ -98,7 +99,10 @@ class TaskManager(BaseManager):
         self.llm_processed_request_ids = set()
 
         # Agent stuff
-        self.history = []
+        # Need to maintain current conversation history and overall persona/history kinda thing. 
+        # Soon we will maintain a seperate history for this 
+        self.history = [] if conversation_history is None else conversation_history 
+        logger.info(f'History {self.history}')
         self.label_flow = []
 
         # Setup IO SERVICE, TRANSCRIBER, LLM, SYNTHESIZER
@@ -159,7 +163,7 @@ class TaskManager(BaseManager):
                 'content': ""
             }
 
-        self.history = [self.system_prompt]
+        self.history =  [self.system_prompt] if len(self.history) == 0 else [self.system_prompt] + self.history
 
         llm_config = {
             "streaming_model": self.task_config["tools_config"]["llm_agent"]["streaming_model"],
