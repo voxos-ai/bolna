@@ -9,18 +9,20 @@ load_dotenv()
 
 
 class DefaultInputHandler:
-    def __init__(self, queues=None, websocket=None, input_types=None, mark_set=None, connected_through_dashboard=False):
+    def __init__(self, queues=None, websocket=None, input_types=None, mark_set = None, queue = None, connected_through_dashboard=False):
         self.queues = queues
         self.websocket = websocket
         self.input_types = input_types
         self.websocket_listen_task = None
         self.running = True
         self.connected_through_dashboard = connected_through_dashboard
+        self.queue = queue
 
     async def stop_handler(self):
         self.running = False
         try:
-            await self.websocket.close()
+            if not self.queue:
+                await self.websocket.close()
         except Exception as e:
             logger.error(f"Error closing WebSocket: {e}")
 
@@ -53,7 +55,11 @@ class DefaultInputHandler:
     async def _listen(self):
         try:
             while self.running:
-                request = await self.websocket.receive_json()
+                if self.queue is not None:
+                    logger.info(f"self.queue is not None and hence listening to the queue")
+                    request = await self.queue.get()
+                else:
+                    request = await self.websocket.receive_json()
                 await self.process_message(request)
         except Exception as e:
             # Send EOS message to transcriber to shut the connection

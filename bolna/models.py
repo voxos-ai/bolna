@@ -83,6 +83,7 @@ class LLM(BaseModel):
     family: Optional[str] = "openai"
     temperature: Optional[float] = 0.1
     request_json: Optional[bool] = False
+    prompt: Optional[str] = None
 
 
 class MessagingModel(BaseModel):
