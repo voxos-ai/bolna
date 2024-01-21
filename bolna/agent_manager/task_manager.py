@@ -124,8 +124,8 @@ class TaskManager(BaseManager):
         self.extracted_data = None
         self.summarized_data = None
 
-        #self.stream = "synthesizer" in self.task_config["tools_config"] and self.task_config["tools_config"]["synthesizer"]["stream"]
-        self.stream = not connected_through_dashboard #Currently we are allowing only realtime conversation based usecases. Hence it'll always be true unless connected through dashboard
+        self.stream =( "synthesizer" in self.task_config["tools_config"] and self.task_config["tools_config"]["synthesizer"]["stream"]) and not connected_through_dashboard 
+        #self.stream = not connected_through_dashboard #Currently we are allowing only realtime conversation based usecases. Hence it'll always be true unless connected through dashboard
         self.is_local = False
 
         # Memory
@@ -328,8 +328,6 @@ class TaskManager(BaseManager):
             'role': 'user',
             'content': message['data']
         })
-
-            
         start_time = time.time()
         should_bypass_synth = 'bypass_synth' in meta_info and meta_info['bypass_synth'] == True
         next_step = self._get_next_step(sequence, "llm")
@@ -347,12 +345,11 @@ class TaskManager(BaseManager):
                 llm_response += " " + text_chunk
                 if end_of_llm_stream:
                     meta_info["end_of_llm_stream"] = True
-                if self.stream:
-                    await self._handle_llm_output(next_step, text_chunk, should_bypass_synth, meta_info)
+                await self._handle_llm_output(next_step, text_chunk, should_bypass_synth, meta_info)
 
-            if not self.stream:
-                meta_info["end_of_llm_stream"]=  True
-                await self._handle_llm_output(next_step, llm_response, should_bypass_synth, meta_info)
+            # if not self.stream:
+            #     meta_info["end_of_llm_stream"]=  True
+            #     await self._handle_llm_output(next_step, llm_response, should_bypass_synth, meta_info)
 
             #add to cache
             # if self.cache is not None:
@@ -549,19 +546,25 @@ class TaskManager(BaseManager):
             if self.stream and self.synthesizer_provider != "polly":
                 logger.info("Opening websocket connection to synthesizer")
                 await self.tools["synthesizer"].open_connection()
-
+            audio_bytes = b""
             while True:
                 logger.info("Listening to synthesizer")
                 async for message in self.tools["synthesizer"].generate():
                     if not self.conversation_ended and message["meta_info"]["sequence_id"] in self.sequence_ids:
                         logger.info(f"{message['meta_info']['sequence_id'] } is in sequence ids  {self.sequence_ids} and hence removing the sequence ids ")
-                        await self.tools["output"].handle(message)
+                        if self.stream:
+                            await self.tools["output"].handle(message)
+                        else:
+                            audio_bytes += message['data']
                     else:
                         logger.info(f"{message['meta_info']['sequence_id']} is not in sequence ids  {self.sequence_ids} and hence not sending to output")
-                    
                     if "end_of_synthesizer_stream" in message["meta_info"] and message["meta_info"]["end_of_synthesizer_stream"]:
                         logger.info(f"Got End of stream and hence removing from sequence ids {self.sequence_ids}  {message['meta_info']['sequence_id']}")
                         self.sequence_ids.remove(message["meta_info"]["sequence_id"])
+                        if not self.stream:
+                            message['data'] = audio_bytes
+                            await self.tools["output"].handle(message)
+                            audio_bytes = b""
                 await asyncio.sleep(0.5)
 
         except Exception as e:
