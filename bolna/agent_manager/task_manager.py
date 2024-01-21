@@ -15,9 +15,11 @@ logger = configure_logger(__name__)
 
 class TaskManager(BaseManager):
     def __init__(self, assistant_name, task_id, task, ws, input_parameters=None, context_data=None,
+                 assistant_id=None, run_id=None, connected_through_dashboard=False, 
+                 cache =  None, input_queue = None, output_queue = None, **kwargs):
                  assistant_id=None, run_id=None, conversation_history = None, 
                  connected_through_dashboard=False, cache =  None, 
-                 input_queue = None, output_queue = None):
+                 input_queue = None, output_queue = None, **kwargs):
         super().__init__()
         logger.info(f"doing task {task}")
         self.task_id = task_id
@@ -136,7 +138,7 @@ class TaskManager(BaseManager):
         self.curr_sequence_id = 0
         self.sequence_ids = set()
 
-    async def load_prompt(self, assistant_name, task_id, local):
+    async def load_prompt(self, assistant_name, task_id, local, **kwargs):
         logger.info("prompt and config setup started")
         self.is_local = local
         if "prompt" in self.task_config["tools_config"]["llm_agent"]:
@@ -197,7 +199,7 @@ class TaskManager(BaseManager):
         # setting llm
         if self.task_config["tools_config"]["llm_agent"]["family"] in SUPPORTED_LLM_MODELS.keys():
             llm_class = SUPPORTED_LLM_MODELS.get(self.task_config["tools_config"]["llm_agent"]["family"])
-            llm = llm_class(**llm_config)
+            llm = llm_class(**llm_config, **kwargs)
         else:
             raise Exception(f'LLM {self.task_config["tools_config"]["llm_agent"]["family"]} not supported')
 

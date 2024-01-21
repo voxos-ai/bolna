@@ -7,15 +7,17 @@ from bolna.helpers.logger_config import configure_logger
 
 logger = configure_logger(__name__)
 load_dotenv()
-openai.api_key = os.getenv('OPENAI_API_KEY')
+
 
 class OpenAiLLM(BaseLLM):
     def __init__(self, max_tokens=100, buffer_size=40, streaming_model="gpt-3.5-turbo-16k",
-                 classification_model="gpt-3.5-turbo-1106", temperature= 0.1):
+                 classification_model="gpt-3.5-turbo-1106", temperature= 0.1, **kwargs):
         super().__init__(max_tokens, buffer_size)
         self.model = streaming_model
         self.started_streaming = False
-        self.async_client = AsyncOpenAI()
+        self.async_client = AsyncOpenAI(
+            api_key=kwargs.get('OPENAI_API_KEY', os.getenv('OPENAI_API_KEY'))
+        )
         self.max_tokens = max_tokens
         self.classification_model = classification_model
         self.temperature = temperature
