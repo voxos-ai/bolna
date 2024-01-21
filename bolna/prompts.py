@@ -41,3 +41,13 @@ I've asked user to explain in English what data would they like to extract from 
 ### Rules
 {}
 """
+
+CONVERSATION_SUMMARY_PROMPT = """
+Your job is to create the persona of users on based of previous messages in a conversation between an AI persona and a human to maintain a persona of user from assistant's perspective.
+Messages sent by the AI are marked with the 'assistant' role.
+Messages the user sends are in the 'user' role.
+Gather the persona of user like their name, likes dislikes, tonality of their conversation, theme of the conversation or any anything else a human would notice.
+Keep your persona summary less than 150 words, do NOT exceed this word limit.
+Only output the persona, do NOT include anything else in your output.
+If there were any proper nouns, or number or date or time involved explicitly maintain it.
+"""
