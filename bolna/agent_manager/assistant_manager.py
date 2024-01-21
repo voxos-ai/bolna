@@ -19,7 +19,7 @@ enc = tiktoken.get_encoding("cl100k_base")
 
 
 class AssistantManager(BaseManager):
-    def __init__(self, agent_config, ws = None, assistant_id=None, context_data=None,
+    def __init__(self, agent_config, ws = None, assistant_id=None, context_data=None, conversation_history = None,
                  connected_through_dashboard=None, cache = None, input_queue = None, output_queue = None, **kwargs):
         super().__init__()
         self.tools = {}
@@ -35,6 +35,7 @@ class AssistantManager(BaseManager):
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.kwargs = kwargs
+        self.conversation_history = conversation_history
         
     @staticmethod
     def find_llm_output_price(outputs):
@@ -107,6 +108,9 @@ class AssistantManager(BaseManager):
                                        context_data=self.context_data, input_parameters=input_parameters,
                                        assistant_id=self.assistant_id, run_id=self.run_id, connected_through_dashboard = self.connected_through_dashboard, 
                                        cache = self.cache, input_queue= self.input_queue, output_queue = self.output_queue, **self.kwargs)
+            await task_manager.load_prompt(self.agent_config.get("agent_name", self.agent_config.get("assistant_name")), task_id, local=local, **self.kwargs)
+                                       assistant_id=self.assistant_id, run_id=self.run_id, conversation_history = self.conversation_history, connected_through_dashboard = self.connected_through_dashboard, 
+                                       cache = self.cache, input_queue= self.input_queue, output_queue = self.output_queue)
             await task_manager.load_prompt(self.agent_config.get("agent_name", self.agent_config.get("assistant_name")), task_id, local=local, **self.kwargs)
             task_output = await task_manager.run()
             task_output['run_id'] = self.run_id

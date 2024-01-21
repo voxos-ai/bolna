@@ -1,6 +1,4 @@
 import asyncio
-import numpy as np
-import torch
 import websockets
 import os
 import json
@@ -9,7 +7,7 @@ import time
 from dotenv import load_dotenv
 from .base_transcriber import BaseTranscriber
 from bolna.helpers.logger_config import configure_logger
-from bolna.helpers.utils import create_ws_data_packet, int2float
+from bolna.helpers.utils import create_ws_data_packet
 
 logger = configure_logger(__name__)
 load_dotenv()
@@ -28,9 +26,6 @@ class DeepgramTranscriber(BaseTranscriber):
         self.model = 'deepgram'
         self.sampling_rate = sampling_rate
         self.encoding = encoding
-        self.voice_threshold = 0.6
-        self.vad_model, self.vad_utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', force_reload=False)
-        self.vad_signal_given = False
         if not self.stream:
             self.session = aiohttp.ClientSession()
             self.api_url = f"https://api.deepgram.com/v1/listen?model=nova-2&filler_words=true&language={self.language}"
@@ -64,7 +59,7 @@ class DeepgramTranscriber(BaseTranscriber):
         self.connection_on = False
         if self.heartbeat_task is not None:
             self.heartbeat_task.cancel()
-        self.sender_task.cancel()
+        await self.sender_task.cancel()
 
     async def _get_http_transcription(self, audio_data):
         if self.session is None or self.session.closed:
@@ -90,18 +85,6 @@ class DeepgramTranscriber(BaseTranscriber):
             return True  # Indicates end of processing
 
         return False
-    
-    # async def check_for_vad(self, audio_data):
-    #     if self.vad_signal_given:
-    #         return
-    #     audio_int16 = np.frombuffer(audio_data, np.int16)
-    #     audio_float32 = int2float(audio_int16)
-    #     confidence = self.vad_model(torch.from_numpy(audio_float32), 16000).item()
-    #     if confidence > self.voice_threshold:
-    #         self.vad_signal_given = True
-    #         yield create_ws_data_packet("INTERRUPTION", self.meta_info)            
-
-        
 
     async def sender(self, ws=None):
         try:
@@ -112,10 +95,7 @@ class DeepgramTranscriber(BaseTranscriber):
                     break
 
                 self.meta_info = ws_data_packet.get('meta_info')
-                data_packet = ws_data_packet.get('data')
-                if not self.vad_signal_given:
-                    asyncio.create_task(self.check_for_vad(data_packet))
-                transcription = await self._get_http_transcription()
+                transcription = await self._get_http_transcription(ws_data_packet.get('data'))
                 yield transcription
         except Exception as e:
             logger.error('Error while sending: ' + str(e))
