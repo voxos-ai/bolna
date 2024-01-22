@@ -21,6 +21,13 @@ class OpenAiLLM(BaseLLM):
         self.max_tokens = max_tokens
         self.classification_model = classification_model
         self.temperature = temperature
+        self.vllm_model = "vllm" in self.model
+        if self.vllm_model:
+            logger.info(f"Sending message to vllm end point")
+            self.async_client = AsyncOpenAI(base_url=os.getenv('VLLM_SERVER_BASE_URL'))
+            self.model = self.model[5:]
+        else:
+            self.async_client = AsyncOpenAI()
 
     async def generate_stream(self, messages, classification_task=False, synthesize=True, request_json=False):
         response_format = self.get_response_format(request_json)

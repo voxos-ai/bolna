@@ -16,10 +16,7 @@ logger = configure_logger(__name__)
 class TaskManager(BaseManager):
     def __init__(self, assistant_name, task_id, task, ws, input_parameters=None, context_data=None,
                  assistant_id=None, run_id=None, connected_through_dashboard=False, 
-                 cache =  None, input_queue = None, output_queue = None, **kwargs):
-                 assistant_id=None, run_id=None, conversation_history = None, 
-                 connected_through_dashboard=False, cache =  None, 
-                 input_queue = None, output_queue = None, **kwargs):
+                 cache =  None, input_queue = None, conversation_history = None, output_queue = None, **kwargs):
         super().__init__()
         logger.info(f"doing task {task}")
         self.task_id = task_id
@@ -64,31 +61,44 @@ class TaskManager(BaseManager):
         if task_id == 0:
             if self.task_config["tools_config"]["input"]["provider"] in SUPPORTED_INPUT_HANDLERS.keys():
                 logger.info(f"Connected through dashboard {connected_through_dashboard}")
+                input_kwargs = {"queues": self.queues,
+                                "websocket": self.websocket,
+                                "input_types": get_required_input_types(task),
+                                "mark_set": self.mark_set,
+                                "connected_through_dashboard": self.connected_through_dashboard}  
+                                                          
                 if connected_through_dashboard:
                     logger.info("Connected through dashboard and hence using default input handler")
                     # If connected through dashboard get basic dashboard class
                     input_handler_class = SUPPORTED_INPUT_HANDLERS.get("default")
+                    input_kwargs['queue'] = input_queue
                 else:
                     input_handler_class = SUPPORTED_INPUT_HANDLERS.get(
                         self.task_config["tools_config"]["input"]["provider"])
-                self.tools["input"] = input_handler_class(self.queues, self.websocket, get_required_input_types(task),
-                                                          mark_set = self.mark_set, connected_through_dashboard = self.connected_through_dashboard,
-                                                          queue = input_queue)
+
+                    if self.task_config['tools_config']['input']['provider'] == 'default':
+                        input_kwargs['queue'] = input_queue
+                self.tools["input"] = input_handler_class(**input_kwargs)
             else:
                 raise "Other input handlers not supported yet"
-
+        output_kwargs = {"websocket": self.websocket}  
+        
         if self.task_config["tools_config"]["output"] is None:
             logger.info("Not setting up any output handler as it is none")
         elif self.task_config["tools_config"]["output"]["provider"] in SUPPORTED_OUTPUT_HANDLERS.keys():
             if connected_through_dashboard:
                 logger.info("Connected through dashboard and hence using default output handler")
                 output_handler_class = SUPPORTED_OUTPUT_HANDLERS.get("default")
+                output_kwargs['queue'] = output_queue
             else:
                 output_handler_class = SUPPORTED_OUTPUT_HANDLERS.get(self.task_config["tools_config"]["output"]["provider"])
             if self.task_config["tools_config"]["output"]["provider"] == "twilio":
+                output_kwargs['mark_set'] = self.mark_set
                 logger.info(f"Making sure that the sampling rate for output handler is 8000")
                 self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 8000
                 self.task_config['tools_config']['synthesizer']['audio_format'] = 'pcm'
+            else:
+                output_kwargs['queue'] = output_queue
 
             self.tools["output"] = output_handler_class(self.websocket, queue = output_queue)
         else:

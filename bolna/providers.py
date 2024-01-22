@@ -19,7 +19,9 @@ SUPPORTED_LLM_MODELS = {
     'ollama': LiteLLM,
     'mistral': LiteLLM,
     'llama': LiteLLM,
-    'zephyr': LiteLLM
+    'zephyr': LiteLLM,
+    'perplexity': LiteLLM,
+    'vllm': OpenAiLLM
 }
 SUPPORTED_INPUT_HANDLERS = {
     'default': DefaultInputHandler,

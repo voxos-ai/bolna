@@ -107,10 +107,7 @@ class AssistantManager(BaseManager):
             task_manager = TaskManager(self.agent_config.get("agent_name", self.agent_config.get("assistant_name")), task_id, task, self.websocket,
                                        context_data=self.context_data, input_parameters=input_parameters,
                                        assistant_id=self.assistant_id, run_id=self.run_id, connected_through_dashboard = self.connected_through_dashboard, 
-                                       cache = self.cache, input_queue= self.input_queue, output_queue = self.output_queue, **self.kwargs)
-            await task_manager.load_prompt(self.agent_config.get("agent_name", self.agent_config.get("assistant_name")), task_id, local=local, **self.kwargs)
-                                       assistant_id=self.assistant_id, run_id=self.run_id, conversation_history = self.conversation_history, connected_through_dashboard = self.connected_through_dashboard, 
-                                       cache = self.cache, input_queue= self.input_queue, output_queue = self.output_queue)
+                                       cache = self.cache, input_queue= self.input_queue, output_queue = self.output_queue, conversation_history = self.conversation_history, **self.kwargs)
             await task_manager.load_prompt(self.agent_config.get("agent_name", self.agent_config.get("assistant_name")), task_id, local=local, **self.kwargs)
             task_output = await task_manager.run()
             task_output['run_id'] = self.run_id

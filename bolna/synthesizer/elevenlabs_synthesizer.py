@@ -13,7 +13,6 @@ from bolna.helpers.utils import create_ws_data_packet, pcm_to_wav_bytes
 
 logger = configure_logger(__name__)
 
-
 class ElevenlabsSynthesizer(BaseSynthesizer):
     def __init__(self, voice, voice_id, model="eleven_multilingual_v1", audio_format = "pcm", sampling_rate = "16000", stream=False, buffer_size=400):
         super().__init__(stream)
