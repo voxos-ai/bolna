@@ -92,15 +92,16 @@ class TaskManager(BaseManager):
                 output_kwargs['queue'] = output_queue
             else:
                 output_handler_class = SUPPORTED_OUTPUT_HANDLERS.get(self.task_config["tools_config"]["output"]["provider"])
-            if self.task_config["tools_config"]["output"]["provider"] == "twilio":
-                output_kwargs['mark_set'] = self.mark_set
-                logger.info(f"Making sure that the sampling rate for output handler is 8000")
-                self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 8000
-                self.task_config['tools_config']['synthesizer']['audio_format'] = 'pcm'
-            else:
-                output_kwargs['queue'] = output_queue
+            
+                if self.task_config["tools_config"]["output"]["provider"] == "twilio":
+                    output_kwargs['mark_set'] = self.mark_set
+                    logger.info(f"Making sure that the sampling rate for output handler is 8000")
+                    self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 8000
+                    self.task_config['tools_config']['synthesizer']['audio_format'] = 'pcm'
+                else:
+                    output_kwargs['queue'] = output_queue
 
-            self.tools["output"] = output_handler_class(self.websocket, queue = output_queue)
+            self.tools["output"] = output_handler_class(**output_kwargs)
         else:
             raise "Other input handlers not supported yet"
 
@@ -135,8 +136,8 @@ class TaskManager(BaseManager):
 
         self.extracted_data = None
         self.summarized_data = None
-
-        self.stream =( "synthesizer" in self.task_config["tools_config"] and self.task_config["tools_config"]["synthesizer"]["stream"]) and not connected_through_dashboard 
+        logger.info(f"TASK CONFIG {self.task_config['tools_config'] }")
+        self.stream = ( self.task_config["tools_config"]['synthesizer'] is not None and self.task_config["tools_config"]["synthesizer"]["stream"]) and not connected_through_dashboard
         #self.stream = not connected_through_dashboard #Currently we are allowing only realtime conversation based usecases. Hence it'll always be true unless connected through dashboard
         self.is_local = False
 
