@@ -148,36 +148,6 @@ class TaskManager(BaseManager):
         # Sequence id for interruption
         self.curr_sequence_id = 0
         self.sequence_ids = set()
-
-    async def load_prompt(self, assistant_name, task_id, local, **kwargs):
-        logger.info("prompt and config setup started")
-        self.is_local = local
-        if "prompt" in self.task_config["tools_config"]["llm_agent"]:
-            self.prompts = {
-                "system_prompt": self.task_config["tools_config"]["llm_agent"]["prompt"]
-            }
-            logger.info(f"Prompt given in llm_agent and hence storing the prompt")
-        else:
-            prompt_responses = await get_prompt_responses(assistant_id=self.assistant_id,local=self.is_local)
-            self.prompts = prompt_responses["task_{}".format(task_id + 1)]
-
-        if "system_prompt" in self.prompts:
-            # This isn't a graph based agent
-            enriched_prompt = self.prompts["system_prompt"]
-            if self.context_data is not None:
-                enriched_prompt = update_prompt_with_context(self.prompts["system_prompt"], self.context_data)
-            self.system_prompt = {
-                'role': "system",
-                'content': enriched_prompt
-            }
-        else:
-            self.system_prompt = {
-                'role': "system",
-                'content': ""
-            }
-
-        self.history =  [self.system_prompt] if len(self.history) == 0 else [self.system_prompt] + self.history
-
         llm_config = {
             "streaming_model": self.task_config["tools_config"]["llm_agent"]["streaming_model"],
             "classification_model": self.task_config["tools_config"]["llm_agent"]["classification_model"]
@@ -209,6 +179,7 @@ class TaskManager(BaseManager):
 
         # setting llm
         if self.task_config["tools_config"]["llm_agent"]["family"] in SUPPORTED_LLM_MODELS.keys():
+            logger.info(f'Sending kwargs {kwargs}')
             llm_class = SUPPORTED_LLM_MODELS.get(self.task_config["tools_config"]["llm_agent"]["family"])
             llm = llm_class(**llm_config, **kwargs)
         else:
@@ -232,6 +203,43 @@ class TaskManager(BaseManager):
             self.summarized_data = None
 
         logger.info("prompt and config setup completed")
+    
+    ########################
+    # Load prompts
+    ########################
+        
+    async def load_prompt(self, assistant_name, task_id, local, **kwargs):
+        logger.info("prompt and config setup started")
+        self.is_local = local
+        if "prompt" in self.task_config["tools_config"]["llm_agent"]:
+            self.prompts = {
+                "system_prompt": self.task_config["tools_config"]["llm_agent"]["prompt"]
+            }
+            logger.info(f"Prompt given in llm_agent and hence storing the prompt")
+        else:
+            prompt_responses = await get_prompt_responses(assistant_id=self.assistant_id,local=self.is_local)
+            self.prompts = prompt_responses["task_{}".format(task_id + 1)]
+
+        if "system_prompt" in self.prompts:
+            # This isn't a graph based agent
+            enriched_prompt = self.prompts["system_prompt"]
+            if self.context_data is not None:
+                enriched_prompt = update_prompt_with_context(self.prompts["system_prompt"], self.context_data)
+            self.system_prompt = {
+                'role': "system",
+                'content': enriched_prompt
+            }
+        else:
+            self.system_prompt = {
+                'role': "system",
+                'content': ""
+            }
+        
+        if len(self.system_prompt['content']) == 0:
+            self.history =  [] if len(self.history) == 0 else self.history
+        else:
+            self.history =  [self.system_prompt] if len(self.history) == 0 else [self.system_prompt] + self.history
+
     ########################
     # LLM task
     ########################

@@ -10,7 +10,7 @@ load_dotenv()
 
 
 class LiteLLM(BaseLLM):
-    def __init__(self, streaming_model, api_key=None, api_base=None, max_tokens=100, buffer_size=40,
+    def __init__(self, streaming_model, api_key=None, api_base=None, max_tokens=30, buffer_size=40,
                  classification_model=None, temperature=0.0):
         super().__init__(max_tokens, buffer_size)
         self.model = streaming_model
