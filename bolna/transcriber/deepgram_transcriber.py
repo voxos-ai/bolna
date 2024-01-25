@@ -15,7 +15,7 @@ load_dotenv()
 
 class DeepgramTranscriber(BaseTranscriber):
     def __init__(self, provider, input_queue=None, model='deepgram', stream=True, language="en", endpointing="400",
-                 sampling_rate="16000", encoding="linear16"):
+                 sampling_rate="16000", encoding="linear16", **kwargs):
         super().__init__(input_queue)
         self.endpointing = endpointing
         self.language = language
@@ -26,6 +26,8 @@ class DeepgramTranscriber(BaseTranscriber):
         self.model = 'deepgram'
         self.sampling_rate = sampling_rate
         self.encoding = encoding
+        self.api_key = kwargs.get("transcriber_key", os.getenv('DEEPGRAM_AUTH_TOKEN'))
+
         if not self.stream:
             self.session = aiohttp.ClientSession()
             self.api_url = f"https://api.deepgram.com/v1/listen?model=nova-2&filler_words=true&language={self.language}"
@@ -66,7 +68,7 @@ class DeepgramTranscriber(BaseTranscriber):
             self.session = aiohttp.ClientSession()
 
         headers = {
-            'Authorization': 'Token {}'.format(os.getenv('DEEPGRAM_AUTH_TOKEN')),
+            'Authorization': 'Token {}'.format(self.api_key),
             'Content-Type': 'audio/webm'  # Currently we are assuming this is via browser
         }
         start_time = time.time()

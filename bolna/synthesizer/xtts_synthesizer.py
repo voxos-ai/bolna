@@ -15,7 +15,7 @@ load_dotenv()
 
 
 class XTTSSynthesizer(BaseSynthesizer):
-    def __init__(self, audio_format = "wav", stream = False, sampling_rate="24000", buffer_size=400, language = "en", voice = "rohan"):
+    def __init__(self, audio_format = "wav", stream = False, sampling_rate="24000", buffer_size=400, language = "en", voice = "rohan", **kwargs):
         super().__init__(stream, buffer_size)
         self.buffer = []  # Initialize buffer to make sure we're sending chunks of words instead of token wise
         self.buffered = False

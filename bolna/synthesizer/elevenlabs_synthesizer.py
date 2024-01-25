@@ -14,9 +14,9 @@ from bolna.helpers.utils import create_ws_data_packet, pcm_to_wav_bytes
 logger = configure_logger(__name__)
 
 class ElevenlabsSynthesizer(BaseSynthesizer):
-    def __init__(self, voice, voice_id, model="eleven_multilingual_v1", audio_format = "pcm", sampling_rate = "16000", stream=False, buffer_size=400):
+    def __init__(self, voice, voice_id, model="eleven_multilingual_v1", audio_format = "pcm", sampling_rate = "16000", stream=False, buffer_size=400, synthesier_key = None):
         super().__init__(stream)
-        self.api_key = os.environ["ELEVENLABS_API_KEY"]
+        self.api_key = os.environ["ELEVENLABS_API_KEY"] if synthesier_key is None else synthesier_key
         self.voice = voice_id
         self.model = model
         self.stream = stream #Issue with elevenlabs streaming that we need to always send the text quickly
@@ -80,7 +80,6 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
             try:
                 response = await self.websocket_connection.recv()
                 data = json.loads(response)
-
                 logger.info("response for isFinal: {}".format(data.get('isFinal', False)))
                 if "audio" in data and data["audio"]:
                     chunk = base64.b64decode(data["audio"])
@@ -103,9 +102,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         headers = {
             'xi-api-key': self.api_key
         }
-
         url = f"{self.api_url}{self.get_format(self.audio_format, self.sampling_rate)}" if format is None else f"{self.api_url}{format}"
-
         async with aiohttp.ClientSession() as session:
             if payload is not None:
                 async with session.post(url, headers=headers, json=payload) as response:

@@ -163,7 +163,7 @@ class TaskManager(BaseManager):
                     self.task_config["tools_config"]["transcriber"]["stream"] = False
                 transcriber_class = SUPPORTED_TRANSCRIBER_MODELS.get(
                     self.task_config["tools_config"]["transcriber"]["model"])
-                self.tools["transcriber"] = transcriber_class(provider, **self.task_config["tools_config"]["transcriber"])
+                self.tools["transcriber"] = transcriber_class(provider, **self.task_config["tools_config"]["transcriber"], **kwargs)
         # setting synthesizer
         logger.info(f"Synthesizer config: {self.task_config['tools_config']['synthesizer']}")
         if self.task_config["tools_config"]["synthesizer"] is not None:
@@ -173,13 +173,12 @@ class TaskManager(BaseManager):
             if self.connected_through_dashboard:
                 self.task_config["tools_config"]["synthesizer"]["audio_format"] = "mp3" # Hard code mp3 if we're connected through dashboard
                 self.task_config["tools_config"]["synthesizer"]["stream"] = False #Hardcode stream to be False as we don't want to get blocked by a __listen_synthesizer co-routine
-            self.tools["synthesizer"] = synthesizer_class(**self.task_config["tools_config"]["synthesizer"], **provider_config)
+            self.tools["synthesizer"] = synthesizer_class(**self.task_config["tools_config"]["synthesizer"], **provider_config, **kwargs)
             llm_config["max_tokens"] = self.task_config["tools_config"]["synthesizer"].get('max_tokens')
             llm_config["buffer_size"] = self.task_config["tools_config"]["synthesizer"].get('buffer_size')
 
         # setting llm
         if self.task_config["tools_config"]["llm_agent"]["family"] in SUPPORTED_LLM_MODELS.keys():
-            logger.info(f'Sending kwargs {kwargs}')
             llm_class = SUPPORTED_LLM_MODELS.get(self.task_config["tools_config"]["llm_agent"]["family"])
             llm = llm_class(**llm_config, **kwargs)
         else:

@@ -21,14 +21,12 @@ class OpenAiLLM(BaseLLM):
         self.temperature = temperature
         self.vllm_model = "vllm" in self.model
         if self.vllm_model:
-            logger.info(f"Sending message to vllm end point")
-            logger.info(f'kwargs {kwargs}')
-            base_url = kwargs['base_url'] if "base_url" in kwargs else os.getenv('VLLM_SERVER_BASE_URL')
-            self.async_client = AsyncOpenAI(api_key=kwargs.get('OPENAI_API_KEY', os.getenv('OPENAI_API_KEY')), base_url=base_url)
+            base_url = kwargs.get("base_url", os.getenv("VLLM_SERVER_BASE_URL"))
+            self.async_client = AsyncOpenAI(api_key=kwargs.get('llm_key', os.getenv('OPENAI_API_KEY')), base_url=base_url)
             self.model = self.model[5:]
         else:
             self.async_client = AsyncOpenAI(
-            api_key=kwargs.get('OPENAI_API_KEY', os.getenv('OPENAI_API_KEY'))
+            api_key=kwargs.get('llm_key', os.getenv('OPENAI_API_KEY'))
         )
 
     async def generate_stream(self, messages, classification_task=False, synthesize=True, request_json=False):

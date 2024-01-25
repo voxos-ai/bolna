@@ -10,11 +10,11 @@ load_dotenv()
 
 
 class LiteLLM(BaseLLM):
-    def __init__(self, streaming_model, api_key=None, api_base=None, max_tokens=30, buffer_size=40,
-                 classification_model=None, temperature=0.0):
+    def __init__(self, streaming_model, api_base=None, max_tokens=30, buffer_size=40,
+                 classification_model=None, temperature=0.0, **kwargs):
         super().__init__(max_tokens, buffer_size)
         self.model = streaming_model
-        self.api_key = api_key or os.getenv('LLM_MODEL_API_KEY')
+        self.api_key = kwargs.get("llm_key", os.getenv('LITELLM_MODEL_API_KEY'))
         self.api_base = api_base or os.getenv('LLM_MODEL_API_BASE')
         self.started_streaming = False
         self.max_tokens = max_tokens

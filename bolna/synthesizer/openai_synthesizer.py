@@ -10,7 +10,7 @@ logger = configure_logger(__name__)
 load_dotenv()
 
 class OPENAISynthesizer(BaseSynthesizer):
-    def __init__(self, voice, audio_format="mp3", model = "tts-1", stream=False, buffer_size=400):
+    def __init__(self, voice, audio_format="mp3", model = "tts-1", stream=False, buffer_size=400, **kwargs):
         super().__init__(stream, buffer_size)
         self.format = self.get_format(audio_format.lower())
         self.voice = voice
