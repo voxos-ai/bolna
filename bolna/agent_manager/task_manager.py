@@ -5,8 +5,8 @@ import json
 from .base_manager import BaseManager
 from bolna.agent_types import *
 from bolna.providers import *
-from bolna.helpers.utils import create_ws_data_packet, is_valid_md5, get_raw_audio_bytes_from_base64, \
-    get_required_input_types, format_messages, get_prompt_responses, update_prompt_with_context, get_md5_hash, clean_json_string, yield_chunks_from_memory
+from bolna.helpers.utils import convert_audio_to_wav, create_ws_data_packet, is_valid_md5, get_raw_audio_bytes_from_base64, \
+    get_required_input_types, format_messages, get_prompt_responses, pcm_to_wav_bytes, update_prompt_with_context, get_md5_hash, clean_json_string, yield_chunks_from_memory
 from bolna.helpers.logger_config import configure_logger
 
 asyncio.get_event_loop().set_debug(True)
@@ -354,7 +354,6 @@ class TaskManager(BaseManager):
         self.curr_sequence_id +=1
         meta_info["sequence_id"] = self.curr_sequence_id
         cache_response =  self.cache.get(get_md5_hash(message['data'])) if self.cache is not None else None
-        
         if cache_response is not None:
             logger.info("It was a cache hit and hence simply returning")
             await self._handle_llm_output(next_step, cache_response, should_bypass_synth, meta_info)
@@ -366,14 +365,6 @@ class TaskManager(BaseManager):
                 if end_of_llm_stream:
                     meta_info["end_of_llm_stream"] = True
                 await self._handle_llm_output(next_step, text_chunk, should_bypass_synth, meta_info)
-
-            # if not self.stream:
-            #     meta_info["end_of_llm_stream"]=  True
-            #     await self._handle_llm_output(next_step, llm_response, should_bypass_synth, meta_info)
-
-            #add to cache
-            # if self.cache is not None:
-            #     self.cache.set(get_md5_hash(message['data']), llm_response)
 
         if self.current_request_id in self.llm_rejected_request_ids:
             logger.info("User spoke while LLM was generating response")
@@ -582,9 +573,11 @@ class TaskManager(BaseManager):
                         logger.info(f"Got End of stream and hence removing from sequence ids {self.sequence_ids}  {message['meta_info']['sequence_id']}")
                         self.sequence_ids.remove(message["meta_info"]["sequence_id"])
                         if not self.stream:
-                            message['data'] = audio_bytes
+                            logger.info(f"Sending all audio bytes {len(audio_bytes)}")
+                            if self.synthesizer_provider == "polly":
+                                message['data'] =  convert_audio_to_wav(audio_bytes, source_format= "mp3")
                             await self.tools["output"].handle(message)
-                            audio_bytes = b""
+                            audio_bytes = b""   
                 await asyncio.sleep(0.5)
 
         except Exception as e:

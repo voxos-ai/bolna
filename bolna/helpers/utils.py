@@ -13,6 +13,9 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, create_model
 import wave
 import io
+
+import torch
+import torchaudio
 from .logger_config import configure_logger
 from bolna.constants import PREPROCESS_DIR
 from pydub import AudioSegment
@@ -264,12 +267,13 @@ def yield_chunks_from_memory(audio_bytes, chunk_size=512):
 
 def pcm_to_wav_bytes(pcm_data, sample_rate = 16000, num_channels = 1, sample_width = 2):
     buffer = io.BytesIO()
-    with wave.open(buffer, "wb") as wav_file:
-        wav_file.setframerate(sample_rate)
-        wav_file.setnchannels(num_channels)
-        wav_file.setsampwidth(sample_width)
-        wav_file.writeframes(pcm_data)
-
+    bit_depth = 16 
+    if len(pcm_data)%2 == 1:
+        pcm_data += b'\x00'
+    tensor_pcm = torch.frombuffer(pcm_data, dtype=torch.int16)
+    tensor_pcm = tensor_pcm.float() / (2**(bit_depth - 1))  
+    tensor_pcm = tensor_pcm.unsqueeze(0)  
+    torchaudio.save(buffer, tensor_pcm, sample_rate, format='wav')
     return buffer.getvalue()
 
 def convert_audio_to_wav(audio_bytes, source_format = 'flac'):
@@ -277,3 +281,12 @@ def convert_audio_to_wav(audio_bytes, source_format = 'flac'):
     buffer = io.BytesIO()
     audio.export(buffer, format="wav")
     return buffer.getvalue()
+
+def resample(audio_bytes, target_sample_rate, format = "mp3"):
+    audio_buffer = io.BytesIO(audio_bytes)
+    waveform, orig_sample_rate = torchaudio.load(audio_buffer, format = format)
+    resampler = torchaudio.transforms.Resample(orig_sample_rate, target_sample_rate)
+    audio_waveform = resampler(waveform)
+    audio_buffer = io.BytesIO()
+    torchaudio.save(audio_buffer, audio_waveform, 8000, format="wav")
+    return audio_buffer.getvalue()

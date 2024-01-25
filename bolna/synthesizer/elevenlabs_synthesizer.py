@@ -9,7 +9,7 @@ import logging
 import audioop
 from .base_synthesizer import BaseSynthesizer
 from bolna.helpers.logger_config import configure_logger
-from bolna.helpers.utils import create_ws_data_packet, pcm_to_wav_bytes
+from bolna.helpers.utils import create_ws_data_packet, pcm_to_wav_bytes, resample
 
 logger = configure_logger(__name__)
 
@@ -139,11 +139,11 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
             if self.stream:
                 async for message in self.receiver():
                     logger.info(f"Received message friom server")
-                    yield create_ws_data_packet(pcm_to_wav_bytes(message), self.meta_info)
+                    yield create_ws_data_packet(message, self.meta_info)
                     if message == b'\x00':
                         logger.info("received null byte and hence end of stream")
                         self.meta_info["end_of_synthesizer_stream"] = True
-                        yield create_ws_data_packet(message, self.meta_info)
+                        yield create_ws_data_packet(resample(message, int(self.sampling_rate), format= "mp3"), self.meta_info)
             else:
                 while True:
                     message = await self.internal_queue.get()
@@ -152,7 +152,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                     audio = await self.__generate_http(text)
                     if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
                         meta_info["end_of_synthesizer_stream"] = True
-                    yield create_ws_data_packet(pcm_to_wav_bytes(audio), meta_info)
+                    yield create_ws_data_packet(resample(message, int(self.sampling_rate), format= "mp3"), meta_info)
         except Exception as e:
                 logger.error(f"Error in eleven labs generate {e}")
 
