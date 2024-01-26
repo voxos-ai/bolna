@@ -294,5 +294,6 @@ def resample(audio_bytes, target_sample_rate, format = "mp3"):
     resampler = torchaudio.transforms.Resample(orig_sample_rate, target_sample_rate)
     audio_waveform = resampler(waveform)
     audio_buffer = io.BytesIO()
-    torchaudio.save(audio_buffer, audio_waveform, 8000, format="wav")
+    logger.info(f"Resampling from {orig_sample_rate} to {target_sample_rate}")
+    torchaudio.save(audio_buffer, audio_waveform, target_sample_rate, format="wav")
     return audio_buffer.getvalue()

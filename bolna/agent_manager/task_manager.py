@@ -550,6 +550,8 @@ class TaskManager(BaseManager):
             logger.error(f"Error in transcriber {e}")
     
 
+    
+
     async def __listen_synthesizer(self):
         try:
             if self.stream and self.synthesizer_provider != "polly":
@@ -566,6 +568,7 @@ class TaskManager(BaseManager):
                                 message['data'] = wav_bytes_to_pcm(message['data'])
                             await self.tools["output"].handle(message)
                         else:
+                            logger.info(f"creating new audio bytes {len(message['data'])}")
                             audio_bytes += message['data']
                     else:
                         logger.info(f"{message['meta_info']['sequence_id']} is not in sequence ids  {self.sequence_ids} and hence not sending to output")
@@ -573,13 +576,13 @@ class TaskManager(BaseManager):
                         logger.info(f"Got End of stream and hence removing from sequence ids {self.sequence_ids}  {message['meta_info']['sequence_id']}")
                         self.sequence_ids.remove(message["meta_info"]["sequence_id"])
                         if not self.stream:
-                            logger.info(f"Sending all audio bytes {len(audio_bytes)}")
-                            if self.synthesizer_provider == "elevenlabs":
-                                message['data'] =  convert_audio_to_wav(audio_bytes, source_format= "mp3")
-                            else:
-                                message['data'] =audio_bytes
+                            with open(f"new______final.wav", "wb") as f:
+                                f.write(audio_bytes)
+                            message['data'] = audio_bytes
+                            
                             await self.tools["output"].handle(message)
                             audio_bytes = b""   
+                            logger.info(f"making audio bytes null again {len(audio_bytes)}")
                 await asyncio.sleep(0.5)
 
         except Exception as e:

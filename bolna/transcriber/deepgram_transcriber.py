@@ -103,7 +103,6 @@ class DeepgramTranscriber(BaseTranscriber):
                 ws_data_packet = await self.input_queue.get()
                 end_of_stream = await self._handle_data_packet(ws_data_packet, ws)
                 if end_of_stream:
-                    logger.info("Yes, it's the end of stream")
                     break
 
                 self.meta_info = ws_data_packet.get('meta_info')
@@ -111,7 +110,6 @@ class DeepgramTranscriber(BaseTranscriber):
                 yield transcription
             if self.transcription_task is not None:
                 self.transcription_task.cancel()
-                logger.info("Cancelled transcription task")
         except asyncio.CancelledError:
             logger.info("Cancelled sender task")
             return

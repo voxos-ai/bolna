@@ -14,7 +14,7 @@ from bolna.helpers.utils import convert_audio_to_wav, create_ws_data_packet, pcm
 logger = configure_logger(__name__)
 
 class ElevenlabsSynthesizer(BaseSynthesizer):
-    def __init__(self, voice, voice_id, model="eleven_multilingual_v1", audio_format = "mp3", sampling_rate = "16000", stream=False, buffer_size=400, synthesier_key = None):
+    def __init__(self, voice, voice_id, model="eleven_multilingual_v1", audio_format = "mp3", sampling_rate = "16000", stream=False, buffer_size=400, synthesier_key = None, **kwargs):
         super().__init__(stream)
         self.api_key = os.environ["ELEVENLABS_API_KEY"] if synthesier_key is None else synthesier_key
         self.voice = voice_id
@@ -137,11 +137,11 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
             if self.stream:
                 async for message in self.receiver():
                     logger.info(f"Received message friom server")
-                    yield create_ws_data_packet(message, self.meta_info)
+                    yield create_ws_data_packet(resample(convert_audio_to_wav(message, source_format="mp3"), int(self.sampling_rate), format= "wav"), self.meta_info)
                     if message == b'\x00':
                         logger.info("received null byte and hence end of stream")
                         self.meta_info["end_of_synthesizer_stream"] = True
-                        yield create_ws_data_packet(resample(convert_audio_to_wav(message, source_format="mp3"), int(self.sampling_rate), format= "mp3"), self.meta_info)
+                        yield create_ws_data_packet(resample(message), self.meta_info)
             else:
                 while True:
                     message = await self.internal_queue.get()
@@ -150,7 +150,8 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                     audio = await self.__generate_http(text)
                     if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
                         meta_info["end_of_synthesizer_stream"] = True
-                    yield create_ws_data_packet(resample(audio, int(self.sampling_rate), format= "mp3"), meta_info)
+                        wav_bytes = convert_audio_to_wav(audio, source_format="mp3")
+                    yield create_ws_data_packet(resample(wav_bytes, int(self.sampling_rate), format= "wav"), meta_info)
         except Exception as e:
                 import traceback
                 traceback.print_exc()
