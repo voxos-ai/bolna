@@ -30,6 +30,7 @@ class DeepgramTranscriber(BaseTranscriber):
         self.encoding = encoding
         self.api_key = kwargs.get("transcriber_key", os.getenv('DEEPGRAM_AUTH_TOKEN'))
         self.transcriber_output_queue = output_queue
+        self.transcription_task = None
         self.vad_model, self.vad_utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', force_reload=False)
         (self.get_speech_timestamps, self.save_audio, self.read_audio, self.VADIterator, self.collect_chunks) = self.vad_utils
 
@@ -89,7 +90,9 @@ class DeepgramTranscriber(BaseTranscriber):
 
     async def _handle_data_packet(self, ws_data_packet, ws):
         if 'eos' in ws_data_packet['meta_info'] and ws_data_packet['meta_info']['eos'] is True:
+            logger.info("First closing transcription websocket")
             await self._close(ws, data={"type": "CloseStream"})
+            logger.info("Closed transcription websocket and now closing transcription task")
             return True  # Indicates end of processing
 
         return False
@@ -100,11 +103,18 @@ class DeepgramTranscriber(BaseTranscriber):
                 ws_data_packet = await self.input_queue.get()
                 end_of_stream = await self._handle_data_packet(ws_data_packet, ws)
                 if end_of_stream:
+                    logger.info("Yes, it's the end of stream")
                     break
 
                 self.meta_info = ws_data_packet.get('meta_info')
                 transcription = await self._get_http_transcription(ws_data_packet.get('data'))
                 yield transcription
+            if self.transcription_task is not None:
+                self.transcription_task.cancel()
+                logger.info("Cancelled transcription task")
+        except asyncio.CancelledError:
+            logger.info("Cancelled sender task")
+            return
         except Exception as e:
             logger.error('Error while sending: ' + str(e))
             raise Exception("Something went wrong")
@@ -169,18 +179,25 @@ class DeepgramTranscriber(BaseTranscriber):
 
         return deepgram_ws
 
-    async def transcribe(self):
-        async with self.deepgram_connect() as deepgram_ws:
-            if self.stream:
-                self.sender_task = asyncio.create_task(self.sender_stream(deepgram_ws))
-                self.heartbeat_task = asyncio.create_task(self.send_heartbeat(deepgram_ws))
-                async for message in self.receiver(deepgram_ws):
-                    if self.connection_on:
-                        self.push_to_transcriber_queue(message)
-                    else:
-                        logger.info("closing the deepgram connection")
-                        await self._close(deepgram_ws, data={"type": "CloseStream"})
-            else:
-                async for message in self.sender():
-                    self.push_to_transcriber_queue(message)
+    async def run(self):
+        self.transcription_task = asyncio.create_task(self.transcribe())
 
+    async def transcribe(self):
+        try:
+            async with self.deepgram_connect() as deepgram_ws:
+                if self.stream:
+                    self.sender_task = asyncio.create_task(self.sender_stream(deepgram_ws))
+                    self.heartbeat_task = asyncio.create_task(self.send_heartbeat(deepgram_ws))
+                    async for message in self.receiver(deepgram_ws):
+                        if self.connection_on:
+                            self.push_to_transcriber_queue(message)
+                        else:
+                            logger.info("closing the deepgram connection")
+                            await self._close(deepgram_ws, data={"type": "CloseStream"})
+                else:
+                    async for message in self.sender():
+                        self.push_to_transcriber_queue(message)
+            
+            self.push_to_transcriber_queue(create_ws_data_packet("transcriber_connection_closed", self.meta_info))
+        except Exception as e:
+            logger.error(f"Error in transcribe: {e}")

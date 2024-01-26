@@ -636,7 +636,7 @@ class TaskManager(BaseManager):
                 tasks = [asyncio.create_task(self.tools['input'].handle())]
                 if "transcriber" in self.tools:
                     tasks.append(asyncio.create_task(self._listen_transcriber()))
-                    tasks.append(asyncio.create_task(self.tools["transcriber"].transcribe()))
+                    self.transcriber_task = asyncio.create_task(self.tools["transcriber"].run())
 
                 if self.connected_through_dashboard and self.task_config['task_type'] == "conversation":
                     logger.info(
@@ -671,6 +671,7 @@ class TaskManager(BaseManager):
         except asyncio.CancelledError as e:
             # Cancel all tasks on cancel
             traceback.print_exc()
+            self.transcriber_task.cancel()
             self.handle_cancellation(f"Websocket got cancelled {self.task_id}")
 
         except Exception as e:
@@ -680,7 +681,7 @@ class TaskManager(BaseManager):
 
         finally:
             # Construct output
-            if "synthesizer" in self.tools and self.synthesizer_task is not None:
+            if "synthesizer" in self.tools and self.synthesizer_task is not None:   
                 self.synthesizer_task.cancel()
             if self.task_id == 0:
                 output = {"messages": self.history, "conversation_time": time.time() - self.start_time,
