@@ -9,12 +9,12 @@ import logging
 import audioop
 from .base_synthesizer import BaseSynthesizer
 from bolna.helpers.logger_config import configure_logger
-from bolna.helpers.utils import create_ws_data_packet, pcm_to_wav_bytes, resample
+from bolna.helpers.utils import convert_audio_to_wav, create_ws_data_packet, pcm_to_wav_bytes, resample
 
 logger = configure_logger(__name__)
 
 class ElevenlabsSynthesizer(BaseSynthesizer):
-    def __init__(self, voice, voice_id, model="eleven_multilingual_v1", audio_format = "pcm", sampling_rate = "16000", stream=False, buffer_size=400, synthesier_key = None):
+    def __init__(self, voice, voice_id, model="eleven_multilingual_v1", audio_format = "mp3", sampling_rate = "16000", stream=False, buffer_size=400, synthesier_key = None):
         super().__init__(stream)
         self.api_key = os.environ["ELEVENLABS_API_KEY"] if synthesier_key is None else synthesier_key
         self.voice = voice_id
@@ -23,14 +23,14 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         self.websocket_connection = None
         self.connection_open = False
         self.sampling_rate = sampling_rate
-        self.audio_format = audio_format
+        self.audio_format = "mp3"
         self.ws_url = f"wss://api.elevenlabs.io/v1/text-to-speech/{self.voice}/stream-input?model_id=eleven_multilingual_v1&optimize_streaming_latency=2&output_format={self.get_format(self.audio_format, self.sampling_rate)}"
         self.api_url = f"https://api.elevenlabs.io/v1/text-to-speech/{self.voice}?optimize_streaming_latency=3&output_format="
    
     #Ensuring we only do wav output for now
     def get_format(self, format, sampling_rate):    
         #Eleven labs only allow mp3_44100_64, mp3_44100_96, mp3_44100_128, mp3_44100_192, pcm_16000, pcm_22050, pcm_24000, ulaw_8000
-        return f"pcm_16000"
+        return f"mp3_44100_128"
         # if format == "pcm":
         #     return f"pcm_16000"
         # if format == "mp3":
@@ -83,11 +83,9 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                 logger.info("response for isFinal: {}".format(data.get('isFinal', False)))
                 if "audio" in data and data["audio"]:
                     chunk = base64.b64decode(data["audio"])
+                    if len(chunk)%2 == 1:
+                        chunk +=  b'\x00'
                     # @TODO make it better - for example sample rate changing for mp3 and other formats  
-                    if self.audio_format == "pcm" and self.sampling_rate != 16000:
-                        yield self.resample(chunk)
-                    elif self.audio_format == "mp3" and self.sampling_rate != 44100:
-                        chunk = audioop.ratecv(chunk, 2, 1, 44100 , int(self.sampling_rate), None)[0]
                     yield chunk
                 
                     if "isFinal" in data and data["isFinal"]:
@@ -143,7 +141,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                     if message == b'\x00':
                         logger.info("received null byte and hence end of stream")
                         self.meta_info["end_of_synthesizer_stream"] = True
-                        yield create_ws_data_packet(resample(message, int(self.sampling_rate), format= "mp3"), self.meta_info)
+                        yield create_ws_data_packet(resample(convert_audio_to_wav(message, source_format="mp3"), int(self.sampling_rate), format= "mp3"), self.meta_info)
             else:
                 while True:
                     message = await self.internal_queue.get()
@@ -152,8 +150,10 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                     audio = await self.__generate_http(text)
                     if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
                         meta_info["end_of_synthesizer_stream"] = True
-                    yield create_ws_data_packet(resample(message, int(self.sampling_rate), format= "mp3"), meta_info)
+                    yield create_ws_data_packet(resample(audio, int(self.sampling_rate), format= "mp3"), meta_info)
         except Exception as e:
+                import traceback
+                traceback.print_exc()
                 logger.error(f"Error in eleven labs generate {e}")
 
     async def open_connection(self):

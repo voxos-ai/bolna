@@ -78,6 +78,12 @@ def mu_law_encode(audio, quantization_channels=256):
     signal = np.sign(audio) * magnitude
     return ((signal + 1) / 2 * mu + 0.5).astype(np.int32)
 
+def wav_bytes_to_pcm(wav_bytes):
+    wav_buffer = io.BytesIO(wav_bytes)
+    with wave.open(wav_buffer, 'rb') as wav_file:
+        pcm_data = wav_file.readframes(wav_file.getnframes())
+    return pcm_data
+
 
 def raw_to_mulaw(raw_bytes):
     # Convert bytes to numpy array of int16 values
