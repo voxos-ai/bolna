@@ -9,7 +9,7 @@ import redis.asyncio as redis
 from dotenv import load_dotenv
 from bolna.agent_manager import AssistantManager
 from bolna.helpers.logger_config import configure_logger
-from bolna.models import AssistantModel
+from bolna.models import AgentModel
 
 logger = configure_logger(__name__)
 load_dotenv()
@@ -20,7 +20,7 @@ app = FastAPI()
 
 
 @app.post("/create_agent")
-async def create_agent(agent_data: AssistantModel):
+async def create_agent(agent_data: AgentModel):
     agent_uuid = '{}'.format(str(uuid.uuid4()))
     redis_task = asyncio.create_task(redis_client.set(agent_uuid, agent_data.json()))
     await asyncio.gather(redis_task)
@@ -46,7 +46,7 @@ async def websocket_endpoint(agent_id: str, user_id: str, websocket: WebSocket):
     agent_manager = AssistantManager(agent_config, websocket, context_data, user_id, agent_id)
 
     try:
-        async for res in agent_manager.run(is_local = True):
+        async for res in agent_manager.run(local = True):
             print(res)
     except WebSocketDisconnect:
         active_websockets.remove(websocket)
