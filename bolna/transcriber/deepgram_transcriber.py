@@ -1,4 +1,5 @@
 import asyncio
+import numpy as np
 import torch
 import websockets
 import os
@@ -8,7 +9,7 @@ import time
 from dotenv import load_dotenv
 from .base_transcriber import BaseTranscriber
 from bolna.helpers.logger_config import configure_logger
-from bolna.helpers.utils import create_ws_data_packet
+from bolna.helpers.utils import create_ws_data_packet, int2float
 torch.set_num_threads(1)
 
 logger = configure_logger(__name__)
@@ -32,9 +33,8 @@ class DeepgramTranscriber(BaseTranscriber):
         self.transcriber_output_queue = output_queue
         self.transcription_task = None
         self.vad_model, self.vad_utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', force_reload=False)
-        (self.get_speech_timestamps, self.save_audio, self.read_audio, self.VADIterator, self.collect_chunks) = self.vad_utils
-
-
+        self.voice_threshold = 0.6
+        self.interruption_signalled = False
         if not self.stream:
             self.session = aiohttp.ClientSession()
             self.api_url = f"https://api.deepgram.com/v1/listen?model=nova-2&filler_words=true&language={self.language}"
@@ -117,10 +117,24 @@ class DeepgramTranscriber(BaseTranscriber):
             logger.error('Error while sending: ' + str(e))
             raise Exception("Something went wrong")
 
+    async def __check_for_vad(self, data):
+        if data is None:
+            return
+        logger.info(f"Checking for VAD {len(data)}")
+        audio_int16 = np.frombuffer(data, np.int16)
+        audio_float32 = int2float(audio_int16)
+        confidence = self.vad_model(torch.from_numpy(audio_float32), 16000).item()
+        if confidence > self.voice_threshold:
+            logger.info(f"It's definitely human voice and hence interrupting")
+            self.interruption_signalled = True
+            self.push_to_transcriber_queue(create_ws_data_packet("INTERRUPTION", self.meta_info))
+        
     async def sender_stream(self, ws=None):
         try:
             while True:
                 ws_data_packet = await self.input_queue.get()
+                if not self.interruption_signalled:
+                    asyncio.create_task(self.__check_for_vad(ws_data_packet['data']))
                 end_of_stream = await self._handle_data_packet(ws_data_packet, ws)
                 if end_of_stream:
                     break
@@ -152,17 +166,15 @@ class DeepgramTranscriber(BaseTranscriber):
                         yield create_ws_data_packet("TRANSCRIBER_BEGIN", self.meta_info)
                     curr_message += " " + transcript
 
-                if (msg["speech_final"] and self.callee_speaking) or not self.stream:
+                if msg["speech_final"]  or not self.stream:
                     self.push_to_transcriber_queue(create_ws_data_packet(curr_message, self.meta_info))
                     logger.info('User: {}'.format(curr_message))
                     curr_message = ""
+                    self.interruption_signalled = False
                     yield create_ws_data_packet("TRANSCRIBER_END", self.meta_info)
-                    self.callee_speaking = False
-                    self.last_vocal_frame_time = None
-                    self.previous_request_id = self.current_request_id
-                    self.current_request_id = None
             except Exception as e:
                 logger.error(f"Error while getting transcriptions {e}")
+                self.interruption_signalled = False
                 yield create_ws_data_packet("TRANSCRIBER_END", self.meta_info)
 
     def push_to_transcriber_queue(self, data_packet):
