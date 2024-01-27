@@ -6,7 +6,7 @@ from .base_manager import BaseManager
 from bolna.agent_types import *
 from bolna.providers import *
 from bolna.helpers.utils import convert_audio_to_wav, create_ws_data_packet, is_valid_md5, get_raw_audio_bytes_from_base64, \
-    get_required_input_types, format_messages, get_prompt_responses, pcm_to_wav_bytes, update_prompt_with_context, get_md5_hash, clean_json_string, wav_bytes_to_pcm, yield_chunks_from_memory
+    get_required_input_types, format_messages, get_prompt_responses, merge_wav_bytes, pcm_to_wav_bytes, update_prompt_with_context, get_md5_hash, clean_json_string, wav_bytes_to_pcm, yield_chunks_from_memory
 from bolna.helpers.logger_config import configure_logger
 
 asyncio.get_event_loop().set_debug(True)
@@ -100,6 +100,7 @@ class TaskManager(BaseManager):
                     self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 8000
                     self.task_config['tools_config']['synthesizer']['audio_format'] = 'pcm'
                 else:
+                    self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 24000
                     output_kwargs['queue'] = output_queue
 
             self.tools["output"] = output_handler_class(**output_kwargs)
@@ -364,10 +365,14 @@ class TaskManager(BaseManager):
                 text_chunk, end_of_llm_stream = llm_message
                 logger.info(f"###### time to get the first chunk {time.time() - start_time} {text_chunk}")
                 llm_response += " " + text_chunk
-                if end_of_llm_stream:
-                    meta_info["end_of_llm_stream"] = True
-                await self._handle_llm_output(next_step, text_chunk, should_bypass_synth, meta_info)
-
+                if self.stream:
+                    if end_of_llm_stream:
+                        meta_info["end_of_llm_stream"] = True
+                    await self._handle_llm_output(next_step, text_chunk, should_bypass_synth, meta_info)
+                    
+            if not self.stream:
+                meta_info["end_of_llm_stream"] = True
+                await self._handle_llm_output(next_step, llm_response, should_bypass_synth, meta_info)
         if self.current_request_id in self.llm_rejected_request_ids:
             logger.info("User spoke while LLM was generating response")
         else:
@@ -507,7 +512,7 @@ class TaskManager(BaseManager):
                     if message['data'] == "transcriber_connection_closed":
                         self.transcriber_duration += message['meta_info']["transcriber_duration"]
                         logger.info("transcriber connection closed")
-                        return
+                        break
 
                     self._set_call_details(message)
                     meta_info = message["meta_info"]
@@ -540,50 +545,34 @@ class TaskManager(BaseManager):
                     logger.info("Not a streaming conversation. Hence getting a full blown transcript")
                     message = await self.transcriber_output_queue.get()
                     logger.info(f"message from transcriber {message}")
+                    if message['data'] == "transcriber_connection_closed":
+                        self.transcriber_duration += message['meta_info']["transcriber_duration"]
+                        logger.info("transcriber connection closed")
+                        break
                     sequence = message["meta_info"]["sequence"]
                     next_task = self._get_next_step(sequence, "transcriber")
                     self.transcriber_duration += message["meta_info"]["transcriber_duration"] if "transcriber_duration" in message["meta_info"] else 0
                     await self._handle_transcriber_output(next_task, message['data'], message["meta_info"])
-
         except Exception as e:
             traceback.print_exc()
             logger.error(f"Error in transcriber {e}")
-    
-
-    
 
     async def __listen_synthesizer(self):
         try:
             if self.stream and self.synthesizer_provider != "polly":
                 logger.info("Opening websocket connection to synthesizer")
                 await self.tools["synthesizer"].open_connection()
-            audio_bytes = b""
             while True:
                 logger.info("Listening to synthesizer")
                 async for message in self.tools["synthesizer"].generate():
                     if not self.conversation_ended and message["meta_info"]["sequence_id"] in self.sequence_ids:
                         logger.info(f"{message['meta_info']['sequence_id'] } is in sequence ids  {self.sequence_ids} and hence removing the sequence ids ")
-                        if self.stream:
-                            if self.task_config["tools_config"]["output"]["provider"] == "twilio" and not self.connected_through_dashboard and self.synthesizer_provider == "elevenlabs":
+                        if self.task_config["tools_config"]["output"]["provider"] == "twilio" and not self.connected_through_dashboard and self.synthesizer_provider == "elevenlabs":
                                 message['data'] = wav_bytes_to_pcm(message['data'])
-                            await self.tools["output"].handle(message)
-                        else:
-                            logger.info(f"creating new audio bytes {len(message['data'])}")
-                            audio_bytes += message['data']
+                        await self.tools["output"].handle(message)
                     else:
-                        logger.info(f"{message['meta_info']['sequence_id']} is not in sequence ids  {self.sequence_ids} and hence not sending to output")
-                    if "end_of_synthesizer_stream" in message["meta_info"] and message["meta_info"]["end_of_synthesizer_stream"]:
-                        logger.info(f"Got End of stream and hence removing from sequence ids {self.sequence_ids}  {message['meta_info']['sequence_id']}")
-                        self.sequence_ids.remove(message["meta_info"]["sequence_id"])
-                        if not self.stream:
-                            with open(f"new______final.wav", "wb") as f:
-                                f.write(audio_bytes)
-                            message['data'] = audio_bytes
-                            
-                            await self.tools["output"].handle(message)
-                            audio_bytes = b""   
-                            logger.info(f"making audio bytes null again {len(audio_bytes)}")
-                await asyncio.sleep(0.5)
+                        logger.info(f"{message['meta_info']['sequence_id']} is not in sequence ids  {self.sequence_ids} and hence not sending to output")                
+                        await asyncio.sleep(0.5)
 
         except Exception as e:
             traceback.print_exc()

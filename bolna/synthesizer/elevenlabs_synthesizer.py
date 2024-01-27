@@ -151,6 +151,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                     if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
                         meta_info["end_of_synthesizer_stream"] = True
                         wav_bytes = convert_audio_to_wav(audio, source_format="mp3")
+                        logger.info(f"Got wav bytes {len(wav_bytes)}")
                     yield create_ws_data_packet(resample(wav_bytes, int(self.sampling_rate), format= "wav"), meta_info)
         except Exception as e:
                 import traceback

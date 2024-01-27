@@ -26,7 +26,9 @@ class XTTSSynthesizer(BaseSynthesizer):
         self.language = language
         self.voice = voice
         self.sampling_rate = sampling_rate
-        self.websocket_connection = None            
+        self.websocket_connection = None
+        self.audio = b"" 
+        self.chunk_count = 1
 
     def get_format(self, format):
         return "wav"
@@ -128,16 +130,16 @@ class XTTSSynthesizer(BaseSynthesizer):
                     logger.info(f"Generating TTS response for message: {message}")
                     meta_info, text = message.get("meta_info"), message.get("data")
                     audio = await self.__generate_http(text)
-                    if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
-                        meta_info["end_of_synthesizer_stream"] = True
+                    meta_info["end_of_synthesizer_stream"] = True
                     yield create_ws_data_packet(audio, meta_info)
+                    logger.info(f"Generated TTS response for message: {message}")
         except Exception as e:
                 logger.error(f"Error in xtts generate {e}")
-
     
     async def push(self, message):
         logger.info(f"Pushed message to internal queue {message}")
         if self.stream:
+            logger.info(f"Pushing message to internal queue {message}")
             meta_info, text = message.get("meta_info"), message.get("data")
             end_of_llm_stream =  "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]
             self.meta_info = meta_info

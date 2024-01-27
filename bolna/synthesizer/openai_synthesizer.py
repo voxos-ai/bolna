@@ -1,3 +1,4 @@
+import os
 from dotenv import load_dotenv
 import audioop
 from bolna.helpers.logger_config import configure_logger
@@ -15,7 +16,8 @@ class OPENAISynthesizer(BaseSynthesizer):
         self.format = self.get_format(audio_format.lower())
         self.voice = voice
         self.sample_rate = 24000
-        self.async_client = AsyncOpenAI()
+        api_key = kwargs.get("synthesizer_key", os.getenv("OPENAI_API_KEY"))
+        self.async_client = AsyncOpenAI(api_key= api_key)
         self.model = model
   
     # Ensuring we can only do wav outputs becasue mulaw conversion for others messes up twilio
@@ -61,13 +63,15 @@ class OPENAISynthesizer(BaseSynthesizer):
                 if self.stream:
                     for chunk in self.__generate_stream(text):
                         yield create_ws_data_packet(convert_audio_to_wav(chunk, 'flac'), meta_info)
+                    if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
+                        meta_info["end_of_synthesizer_stream"] = True
+                        yield create_ws_data_packet(b"\x00", meta_info)
+
                 else:
+                    logger.info(f"Generating without a stream")
                     audio = await self.__generate_http(text)
                     yield create_ws_data_packet(convert_audio_to_wav(audio, 'flac'), meta_info)
                 
-                if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
-                    meta_info["end_of_synthesizer_stream"] = True
-                    yield create_ws_data_packet(b"\x00", meta_info)
         except Exception as e:
                 logger.error(f"Error in openai generate {e}")
 

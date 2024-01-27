@@ -291,9 +291,46 @@ def convert_audio_to_wav(audio_bytes, source_format = 'flac'):
 def resample(audio_bytes, target_sample_rate, format = "mp3"):
     audio_buffer = io.BytesIO(audio_bytes)
     waveform, orig_sample_rate = torchaudio.load(audio_buffer, format = format)
+    if orig_sample_rate == target_sample_rate:
+        return audio_bytes
     resampler = torchaudio.transforms.Resample(orig_sample_rate, target_sample_rate)
     audio_waveform = resampler(waveform)
     audio_buffer = io.BytesIO()
     logger.info(f"Resampling from {orig_sample_rate} to {target_sample_rate}")
     torchaudio.save(audio_buffer, audio_waveform, target_sample_rate, format="wav")
     return audio_buffer.getvalue()
+
+# def merge_wav_bytes(wav_bytes_list):
+#     logger.info(f"Merging {len(wav_bytes_list)} wav files")
+#     if not wav_bytes_list:
+#         return None
+    
+#     header_length = 44
+#     header = wav_bytes_list[0][:header_length]
+#     merged_audio_data = io.BytesIO(header)
+#     data_size_offset = 40
+#     total_data_size = 0
+
+#     for wav_bytes in wav_bytes_list:
+#         audio_data = wav_bytes[header_length:]
+#         merged_audio_data.write(audio_data)
+#         total_data_size += len(audio_data)
+#     merged_audio_data.seek(data_size_offset)
+#     merged_audio_data.write(total_data_size.to_bytes(4, byteorder='endian'))
+#     file_size = total_data_size + header_length - 8
+#     merged_audio_data.seek(4)
+#     merged_audio_data.write(file_size.to_bytes(4, byteorder='endian'))
+#     return merged_audio_data.getvalue()
+
+def merge_wav_bytes(wav_files_bytes):
+    combined = AudioSegment.empty()
+    for wav_bytes in wav_files_bytes:
+        file_like_object = io.BytesIO(wav_bytes)
+
+        audio_segment = AudioSegment.from_file(file_like_object, format="wav")
+        combined += audio_segment
+
+    buffer = io.BytesIO()
+    combined.export(buffer, format="wav")
+    return buffer.getvalue()
+
