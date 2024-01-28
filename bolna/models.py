@@ -36,6 +36,10 @@ class OpenAIConfig(BaseModel):
     model: str
     sampling_rate: Optional[str] ="24000"
 
+class FourieConfig(BaseModel):
+    voice_id: str
+    gender: str
+    voice: str
 
 class Transcriber(BaseModel):
     model: str
@@ -56,7 +60,7 @@ class Transcriber(BaseModel):
 
 class Synthesizer(BaseModel):
     provider: str
-    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig]
+    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig]
     stream: bool = False
     buffer_size: Optional[int] = 40  # 40 characters in a buffer
     audio_format: Optional[str] = "pcm"

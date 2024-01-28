@@ -1,4 +1,6 @@
 import asyncio
+import numpy as np
+import torch
 import websockets
 import os
 import json
@@ -7,7 +9,8 @@ import time
 from dotenv import load_dotenv
 from .base_transcriber import BaseTranscriber
 from bolna.helpers.logger_config import configure_logger
-from bolna.helpers.utils import create_ws_data_packet
+from bolna.helpers.utils import create_ws_data_packet, int2float
+torch.set_num_threads(1)
 
 logger = configure_logger(__name__)
 load_dotenv()
@@ -15,7 +18,7 @@ load_dotenv()
 
 class DeepgramTranscriber(BaseTranscriber):
     def __init__(self, provider, input_queue=None, model='deepgram', stream=True, language="en", endpointing="400",
-                 sampling_rate="16000", encoding="linear16", **kwargs):
+                 sampling_rate="16000", encoding="linear16", output_queue= None, **kwargs):
         super().__init__(input_queue)
         self.endpointing = endpointing
         self.language = language
@@ -27,7 +30,11 @@ class DeepgramTranscriber(BaseTranscriber):
         self.sampling_rate = sampling_rate
         self.encoding = encoding
         self.api_key = kwargs.get("transcriber_key", os.getenv('DEEPGRAM_AUTH_TOKEN'))
-
+        self.transcriber_output_queue = output_queue
+        self.transcription_task = None
+        self.vad_model, self.vad_utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', force_reload=False)
+        self.voice_threshold = 0.6
+        self.interruption_signalled = False
         if not self.stream:
             self.session = aiohttp.ClientSession()
             self.api_url = f"https://api.deepgram.com/v1/listen?model=nova-2&filler_words=true&language={self.language}"
@@ -83,7 +90,9 @@ class DeepgramTranscriber(BaseTranscriber):
 
     async def _handle_data_packet(self, ws_data_packet, ws):
         if 'eos' in ws_data_packet['meta_info'] and ws_data_packet['meta_info']['eos'] is True:
+            logger.info("First closing transcription websocket")
             await self._close(ws, data={"type": "CloseStream"})
+            logger.info("Closed transcription websocket and now closing transcription task")
             return True  # Indicates end of processing
 
         return False
@@ -99,14 +108,33 @@ class DeepgramTranscriber(BaseTranscriber):
                 self.meta_info = ws_data_packet.get('meta_info')
                 transcription = await self._get_http_transcription(ws_data_packet.get('data'))
                 yield transcription
+            if self.transcription_task is not None:
+                self.transcription_task.cancel()
+        except asyncio.CancelledError:
+            logger.info("Cancelled sender task")
+            return
         except Exception as e:
             logger.error('Error while sending: ' + str(e))
             raise Exception("Something went wrong")
 
+    async def __check_for_vad(self, data):
+        if data is None:
+            return
+        logger.info(f"Checking for VAD {len(data)}")
+        audio_int16 = np.frombuffer(data, np.int16)
+        audio_float32 = int2float(audio_int16)
+        confidence = self.vad_model(torch.from_numpy(audio_float32), 16000).item()
+        if confidence > self.voice_threshold:
+            logger.info(f"It's definitely human voice and hence interrupting")
+            self.interruption_signalled = True
+            self.push_to_transcriber_queue(create_ws_data_packet("INTERRUPTION", self.meta_info))
+        
     async def sender_stream(self, ws=None):
         try:
             while True:
                 ws_data_packet = await self.input_queue.get()
+                if not self.interruption_signalled:
+                    asyncio.create_task(self.__check_for_vad(ws_data_packet['data']))
                 end_of_stream = await self._handle_data_packet(ws_data_packet, ws)
                 if end_of_stream:
                     break
@@ -136,21 +164,21 @@ class DeepgramTranscriber(BaseTranscriber):
                 if transcript and len(transcript.strip()) != 0:
                     if await self.signal_transcription_begin(msg):
                         yield create_ws_data_packet("TRANSCRIBER_BEGIN", self.meta_info)
-
                     curr_message += " " + transcript
 
-                if (msg["speech_final"] and self.callee_speaking) or not self.stream:
-                    yield create_ws_data_packet(curr_message, self.meta_info)
+                if msg["speech_final"]  or not self.stream:
+                    self.push_to_transcriber_queue(create_ws_data_packet(curr_message, self.meta_info))
                     logger.info('User: {}'.format(curr_message))
                     curr_message = ""
+                    self.interruption_signalled = False
                     yield create_ws_data_packet("TRANSCRIBER_END", self.meta_info)
-                    self.callee_speaking = False
-                    self.last_vocal_frame_time = None
-                    self.previous_request_id = self.current_request_id
-                    self.current_request_id = None
             except Exception as e:
                 logger.error(f"Error while getting transcriptions {e}")
+                self.interruption_signalled = False
                 yield create_ws_data_packet("TRANSCRIBER_END", self.meta_info)
+
+    def push_to_transcriber_queue(self, data_packet):
+        self.transcriber_output_queue.put_nowait(data_packet)
 
     def deepgram_connect(self):
         websocket_url = self.get_deepgram_ws_url()
@@ -161,17 +189,25 @@ class DeepgramTranscriber(BaseTranscriber):
 
         return deepgram_ws
 
+    async def run(self):
+        self.transcription_task = asyncio.create_task(self.transcribe())
+
     async def transcribe(self):
-        async with self.deepgram_connect() as deepgram_ws:
-            if self.stream:
-                self.sender_task = asyncio.create_task(self.sender_stream(deepgram_ws))
-                self.heartbeat_task = asyncio.create_task(self.send_heartbeat(deepgram_ws))
-                async for message in self.receiver(deepgram_ws):
-                    if self.connection_on:
-                        yield message
-                    else:
-                        logger.info("closing the deepgram connection")
-                        await self._close(deepgram_ws, data={"type": "CloseStream"})
-            else:
-                async for message in self.sender():
-                    yield message
+        try:
+            async with self.deepgram_connect() as deepgram_ws:
+                if self.stream:
+                    self.sender_task = asyncio.create_task(self.sender_stream(deepgram_ws))
+                    self.heartbeat_task = asyncio.create_task(self.send_heartbeat(deepgram_ws))
+                    async for message in self.receiver(deepgram_ws):
+                        if self.connection_on:
+                            self.push_to_transcriber_queue(message)
+                        else:
+                            logger.info("closing the deepgram connection")
+                            await self._close(deepgram_ws, data={"type": "CloseStream"})
+                else:
+                    async for message in self.sender():
+                        self.push_to_transcriber_queue(message)
+            
+            self.push_to_transcriber_queue(create_ws_data_packet("transcriber_connection_closed", self.meta_info))
+        except Exception as e:
+            logger.error(f"Error in transcribe: {e}")

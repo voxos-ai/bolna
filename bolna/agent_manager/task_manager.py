@@ -5,8 +5,8 @@ import json
 from .base_manager import BaseManager
 from bolna.agent_types import *
 from bolna.providers import *
-from bolna.helpers.utils import create_ws_data_packet, is_valid_md5, get_raw_audio_bytes_from_base64, \
-    get_required_input_types, format_messages, get_prompt_responses, update_prompt_with_context, get_md5_hash, clean_json_string, yield_chunks_from_memory
+from bolna.helpers.utils import convert_audio_to_wav, create_ws_data_packet, is_valid_md5, get_raw_audio_bytes_from_base64, \
+    get_required_input_types, format_messages, get_prompt_responses, merge_wav_bytes, pcm_to_wav_bytes, update_prompt_with_context, get_md5_hash, clean_json_string, wav_bytes_to_pcm, yield_chunks_from_memory
 from bolna.helpers.logger_config import configure_logger
 
 asyncio.get_event_loop().set_debug(True)
@@ -31,6 +31,7 @@ class TaskManager(BaseManager):
         self.audio_queue = asyncio.Queue()
         self.llm_queue = asyncio.Queue()
         self.synthesizer_queue = asyncio.Queue()
+        self.transcriber_output_queue = asyncio.Queue()
 
         self.pipelines = task['toolchain']['pipelines']
         self.textual_chat_agent = False
@@ -99,6 +100,7 @@ class TaskManager(BaseManager):
                     self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 8000
                     self.task_config['tools_config']['synthesizer']['audio_format'] = 'pcm'
                 else:
+                    self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 24000
                     output_kwargs['queue'] = output_queue
 
             self.tools["output"] = output_handler_class(**output_kwargs)
@@ -158,6 +160,7 @@ class TaskManager(BaseManager):
             provider = "playground" if self.connected_through_dashboard else self.task_config["tools_config"]["input"][
                 "provider"]
             self.task_config["tools_config"]["transcriber"]["input_queue"] = self.audio_queue
+            self.task_config['tools_config']["transcriber"]["output_queue"] = self.transcriber_output_queue
             if self.task_config["tools_config"]["transcriber"]["model"] in SUPPORTED_TRANSCRIBER_MODELS.keys():
                 if self.connected_through_dashboard:
                     self.task_config["tools_config"]["transcriber"]["stream"] = False
@@ -354,7 +357,6 @@ class TaskManager(BaseManager):
         self.curr_sequence_id +=1
         meta_info["sequence_id"] = self.curr_sequence_id
         cache_response =  self.cache.get(get_md5_hash(message['data'])) if self.cache is not None else None
-        
         if cache_response is not None:
             logger.info("It was a cache hit and hence simply returning")
             await self._handle_llm_output(next_step, cache_response, should_bypass_synth, meta_info)
@@ -363,18 +365,14 @@ class TaskManager(BaseManager):
                 text_chunk, end_of_llm_stream = llm_message
                 logger.info(f"###### time to get the first chunk {time.time() - start_time} {text_chunk}")
                 llm_response += " " + text_chunk
-                if end_of_llm_stream:
-                    meta_info["end_of_llm_stream"] = True
-                await self._handle_llm_output(next_step, text_chunk, should_bypass_synth, meta_info)
-
-            # if not self.stream:
-            #     meta_info["end_of_llm_stream"]=  True
-            #     await self._handle_llm_output(next_step, llm_response, should_bypass_synth, meta_info)
-
-            #add to cache
-            # if self.cache is not None:
-            #     self.cache.set(get_md5_hash(message['data']), llm_response)
-
+                if self.stream:
+                    if end_of_llm_stream:
+                        meta_info["end_of_llm_stream"] = True
+                    await self._handle_llm_output(next_step, text_chunk, should_bypass_synth, meta_info)
+                    
+            if not self.stream:
+                meta_info["end_of_llm_stream"] = True
+                await self._handle_llm_output(next_step, llm_response, should_bypass_synth, meta_info)
         if self.current_request_id in self.llm_rejected_request_ids:
             logger.info("User spoke while LLM was generating response")
         else:
@@ -487,12 +485,7 @@ class TaskManager(BaseManager):
         if self.llm_task is not None:
             self.llm_task.cancel()
             self.llm_task = None
-            self.was_long_pause = True
-        # if len(self.synthesizer_tasks) > 0:
-        #     for synth_task in self.synthesizer_tasks:
-        #         synth_task.cancel()
-        #     self.synthesizer_tasks = []
-        
+            self.was_long_pause = True        
 
     ########################
     # Transcriber task
@@ -513,20 +506,22 @@ class TaskManager(BaseManager):
         transcriber_message = ""
         logger.info(f"Starting transcriber task")
         try:
-            if self.stream:
-                async for message in self.tools["transcriber"].transcribe():
+            while True:
+                if self.stream:
+                    message = await self.transcriber_output_queue.get()
                     if message['data'] == "transcriber_connection_closed":
                         self.transcriber_duration += message['meta_info']["transcriber_duration"]
                         logger.info("transcriber connection closed")
-                        return
+                        break
 
                     self._set_call_details(message)
                     meta_info = message["meta_info"]
                     sequence = await self.process_transcriber_request(meta_info)
 
+                    # if message['data'] == "INTERRUPTION":
+                    #     await self.process_interruption()
                     if message['data'] == "TRANSCRIBER_BEGIN":
                         logger.info("starting transcriber stream")
-                        start_time = time.time()
                         await self.process_interruption()
                         continue
                     elif message['data'] == "TRANSCRIBER_END":
@@ -547,45 +542,38 @@ class TaskManager(BaseManager):
                     else:
                         logger.info("processed text from transcriber: {}".format(message['data']))
                         transcriber_message += message['data']
-            else:
-                logger.info("Not a streaming conversation. Hence getting a full blown transcript")
-                async for message in self.tools["transcriber"].transcribe():
+                else:
+                    logger.info("Not a streaming conversation. Hence getting a full blown transcript")
+                    message = await self.transcriber_output_queue.get()
                     logger.info(f"message from transcriber {message}")
+                    if message['data'] == "transcriber_connection_closed":
+                        self.transcriber_duration += message['meta_info']["transcriber_duration"]
+                        logger.info("transcriber connection closed")
+                        break
                     sequence = message["meta_info"]["sequence"]
                     next_task = self._get_next_step(sequence, "transcriber")
                     self.transcriber_duration += message["meta_info"]["transcriber_duration"] if "transcriber_duration" in message["meta_info"] else 0
                     await self._handle_transcriber_output(next_task, message['data'], message["meta_info"])
-
         except Exception as e:
             traceback.print_exc()
             logger.error(f"Error in transcriber {e}")
-    
 
     async def __listen_synthesizer(self):
         try:
             if self.stream and self.synthesizer_provider != "polly":
                 logger.info("Opening websocket connection to synthesizer")
                 await self.tools["synthesizer"].open_connection()
-            audio_bytes = b""
             while True:
                 logger.info("Listening to synthesizer")
                 async for message in self.tools["synthesizer"].generate():
                     if not self.conversation_ended and message["meta_info"]["sequence_id"] in self.sequence_ids:
                         logger.info(f"{message['meta_info']['sequence_id'] } is in sequence ids  {self.sequence_ids} and hence removing the sequence ids ")
-                        if self.stream:
-                            await self.tools["output"].handle(message)
-                        else:
-                            audio_bytes += message['data']
+                        if self.task_config["tools_config"]["output"]["provider"] == "twilio" and not self.connected_through_dashboard and self.synthesizer_provider == "elevenlabs":
+                                message['data'] = wav_bytes_to_pcm(message['data'])
+                        await self.tools["output"].handle(message)
                     else:
-                        logger.info(f"{message['meta_info']['sequence_id']} is not in sequence ids  {self.sequence_ids} and hence not sending to output")
-                    if "end_of_synthesizer_stream" in message["meta_info"] and message["meta_info"]["end_of_synthesizer_stream"]:
-                        logger.info(f"Got End of stream and hence removing from sequence ids {self.sequence_ids}  {message['meta_info']['sequence_id']}")
-                        self.sequence_ids.remove(message["meta_info"]["sequence_id"])
-                        if not self.stream:
-                            message['data'] = audio_bytes
-                            await self.tools["output"].handle(message)
-                            audio_bytes = b""
-                await asyncio.sleep(0.5)
+                        logger.info(f"{message['meta_info']['sequence_id']} is not in sequence ids  {self.sequence_ids} and hence not sending to output")                
+                        await asyncio.sleep(0.5)
 
         except Exception as e:
             traceback.print_exc()
@@ -641,6 +629,7 @@ class TaskManager(BaseManager):
                 tasks = [asyncio.create_task(self.tools['input'].handle())]
                 if "transcriber" in self.tools:
                     tasks.append(asyncio.create_task(self._listen_transcriber()))
+                    self.transcriber_task = asyncio.create_task(self.tools["transcriber"].run())
 
                 if self.connected_through_dashboard and self.task_config['task_type'] == "conversation":
                     logger.info(
@@ -675,6 +664,7 @@ class TaskManager(BaseManager):
         except asyncio.CancelledError as e:
             # Cancel all tasks on cancel
             traceback.print_exc()
+            self.transcriber_task.cancel()
             self.handle_cancellation(f"Websocket got cancelled {self.task_id}")
 
         except Exception as e:
@@ -684,7 +674,7 @@ class TaskManager(BaseManager):
 
         finally:
             # Construct output
-            if "synthesizer" in self.tools and self.synthesizer_task is not None:
+            if "synthesizer" in self.tools and self.synthesizer_task is not None:   
                 self.synthesizer_task.cancel()
             if self.task_id == 0:
                 output = {"messages": self.history, "conversation_time": time.time() - self.start_time,
