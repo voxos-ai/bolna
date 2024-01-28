@@ -35,6 +35,7 @@ class DeepgramTranscriber(BaseTranscriber):
         self.vad_model, self.vad_utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', force_reload=False)
         self.voice_threshold = 0.6
         self.interruption_signalled = False
+        self.sampling_rate = 16000
         if not self.stream:
             self.session = aiohttp.ClientSession()
             self.api_url = f"https://api.deepgram.com/v1/listen?model=nova-2&filler_words=true&language={self.language}"
@@ -46,10 +47,12 @@ class DeepgramTranscriber(BaseTranscriber):
         if self.provider == 'twilio':
             websocket_url = (f"wss://api.deepgram.com/v1/listen?model=nova-2&encoding=mulaw&sample_rate=8000&channels"
                              f"=1&filler_words=true&endpointing={self.endpointing}")
+            self.sampling_rate = 8000
 
         if self.provider == "playground":
             websocket_url = (f"wss://api.deepgram.com/v1/listen?model=nova-2&encoding=opus&sample_rate=8000&channels"
                              f"=1&filler_words=true&endpointing={self.endpointing}")
+            self.sampling_rate = 8000
         if "en" not in self.language:
             websocket_url += '&language={}'.format(self.language)
         return websocket_url
@@ -120,10 +123,9 @@ class DeepgramTranscriber(BaseTranscriber):
     async def __check_for_vad(self, data):
         if data is None:
             return
-        logger.info(f"Checking for VAD {len(data)}")
         audio_int16 = np.frombuffer(data, np.int16)
         audio_float32 = int2float(audio_int16)
-        confidence = self.vad_model(torch.from_numpy(audio_float32), 16000).item()
+        confidence = self.vad_model(torch.from_numpy(audio_float32), self.sampling_rate).item()
         if confidence > self.voice_threshold:
             logger.info(f"It's definitely human voice and hence interrupting")
             self.interruption_signalled = True
@@ -133,8 +135,10 @@ class DeepgramTranscriber(BaseTranscriber):
         try:
             while True:
                 ws_data_packet = await self.input_queue.get()
-                if not self.interruption_signalled:
-                    asyncio.create_task(self.__check_for_vad(ws_data_packet['data']))
+                audio_bytes = ws_data_packet['data']
+                # if not self.interruption_signalled:
+                #     await self.__check_for_vad(audio_bytes)
+                logger.info(f"Sending packet {ws_data_packet}")
                 end_of_stream = await self._handle_data_packet(ws_data_packet, ws)
                 if end_of_stream:
                     break

@@ -518,11 +518,11 @@ class TaskManager(BaseManager):
                     meta_info = message["meta_info"]
                     sequence = await self.process_transcriber_request(meta_info)
 
-                    # if message['data'] == "INTERRUPTION":
-                    #     await self.process_interruption()
+                    if message['data'] == "INTERRUPTION":
+                        await self.process_interruption()
                     if message['data'] == "TRANSCRIBER_BEGIN":
                         logger.info("starting transcriber stream")
-                        await self.process_interruption()
+                        #await self.process_interruption()
                         continue
                     elif message['data'] == "TRANSCRIBER_END":
                         logger.info("transcriber stream and preparing the next step")
