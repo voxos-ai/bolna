@@ -32,7 +32,9 @@ class DeepgramTranscriber(BaseTranscriber):
         self.api_key = kwargs.get("transcriber_key", os.getenv('DEEPGRAM_AUTH_TOKEN'))
         self.transcriber_output_queue = output_queue
         self.transcription_task = None
-        self.vad_model, self.vad_utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', force_reload=False)
+        self.on_device_vad = kwargs.get("on_device_vad", False)
+        if self.on_device_vad:
+            self.vad_model, self.vad_utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', force_reload=False)
         self.voice_threshold = 0.6
         self.interruption_signalled = False
         self.sampling_rate = 16000
@@ -136,9 +138,8 @@ class DeepgramTranscriber(BaseTranscriber):
             while True:
                 ws_data_packet = await self.input_queue.get()
                 audio_bytes = ws_data_packet['data']
-                # if not self.interruption_signalled:
-                #     await self.__check_for_vad(audio_bytes)
-                logger.info(f"Sending packet {ws_data_packet}")
+                if not self.interruption_signalled and self.on_device_vad:
+                    await self.__check_for_vad(audio_bytes)
                 end_of_stream = await self._handle_data_packet(ws_data_packet, ws)
                 if end_of_stream:
                     break
@@ -167,6 +168,8 @@ class DeepgramTranscriber(BaseTranscriber):
 
                 if transcript and len(transcript.strip()) != 0:
                     if await self.signal_transcription_begin(msg):
+                        if not self.on_device_vad:
+                            self.meta_info["should_interrupt"] = True
                         yield create_ws_data_packet("TRANSCRIBER_BEGIN", self.meta_info)
                     curr_message += " " + transcript
 

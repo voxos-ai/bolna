@@ -368,6 +368,7 @@ class TaskManager(BaseManager):
                 if self.stream:
                     if end_of_llm_stream:
                         meta_info["end_of_llm_stream"] = True
+                    
                     await self._handle_llm_output(next_step, text_chunk, should_bypass_synth, meta_info)
                     
             if not self.stream:
@@ -521,6 +522,8 @@ class TaskManager(BaseManager):
                     if message['data'] == "INTERRUPTION":
                         await self.process_interruption()
                     if message['data'] == "TRANSCRIBER_BEGIN":
+                        if meta_info.get("should_interrupt", False):
+                            self.process_interruption()
                         logger.info("starting transcriber stream")
                         #await self.process_interruption()
                         continue
@@ -568,9 +571,17 @@ class TaskManager(BaseManager):
                 async for message in self.tools["synthesizer"].generate():
                     if not self.conversation_ended and message["meta_info"]["sequence_id"] in self.sequence_ids:
                         logger.info(f"{message['meta_info']['sequence_id'] } is in sequence ids  {self.sequence_ids} and hence removing the sequence ids ")
-                        if self.task_config["tools_config"]["output"]["provider"] == "twilio" and not self.connected_through_dashboard and self.synthesizer_provider == "elevenlabs":
-                                message['data'] = wav_bytes_to_pcm(message['data'])
-                        await self.tools["output"].handle(message)
+                        if self.stream:   
+                            if self.synthesizer_provider == "polly":
+                                for chunk in yield_chunks_from_memory(message['data'], chunk_size=16384):
+                                    await self.tools["output"].handle(create_ws_data_packet(chunk, message["meta_info"]))
+                            else:
+                                if self.task_config["tools_config"]["output"]["provider"] == "twilio" and not self.connected_through_dashboard and self.synthesizer_provider == "elevenlabs":
+                                    message['data'] = wav_bytes_to_pcm(message['data'])
+                                await self.tools["output"].handle(message)
+                        else:
+                            logger.info("Stream is not enabled and hence sending entire audio")
+                            await self.tools["output"].handle(message)
                     else:
                         logger.info(f"{message['meta_info']['sequence_id']} is not in sequence ids  {self.sequence_ids} and hence not sending to output")                
                         await asyncio.sleep(0.5)

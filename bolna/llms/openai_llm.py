@@ -34,7 +34,7 @@ class OpenAiLLM(BaseLLM):
 
         answer, buffer = "", ""
         model = self.classification_model if classification_task is True else self.model
-        logger.info(f"request to open ai {messages}")
+        logger.info(f"request to open ai {messages} max tokens {self.max_tokens}")
         #message_hash = get_md5_hash(messages[-1].content)            
         async for chunk in await self.async_client.chat.completions.create(model=model, temperature=self.temperature,
                                                                            messages=messages, stream=True,
