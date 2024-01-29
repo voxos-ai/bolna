@@ -15,15 +15,21 @@ class OpenAiLLM(BaseLLM):
         super().__init__(max_tokens, buffer_size)
         self.model = streaming_model
         self.started_streaming = False
-        
+        logger.info(f"Initializing OpenAI LLM with model: {self.model} and maxc tokens {max_tokens}")
         self.max_tokens = max_tokens
         self.classification_model = classification_model
         self.temperature = temperature
         self.vllm_model = "vllm" in self.model
         if self.vllm_model:
             base_url = kwargs.get("base_url", os.getenv("VLLM_SERVER_BASE_URL"))
-            self.async_client = AsyncOpenAI(api_key=kwargs.get('llm_key', os.getenv('OPENAI_API_KEY')), base_url=base_url)
+            api_key=kwargs.get('llm_key', None)
+            if len(api_key) > 0:
+                api_key = api_key
+            else:
+                api_key = "EMPTY"
+            self.async_client = AsyncOpenAI( base_url=base_url, api_key= api_key)
             self.model = self.model[5:]
+            logger.info(f"Using VLLM model base_url {base_url} and model {self.model} and api key {api_key}")
         else:
             self.async_client = AsyncOpenAI(
             api_key=kwargs.get('llm_key', os.getenv('OPENAI_API_KEY'))
@@ -34,7 +40,7 @@ class OpenAiLLM(BaseLLM):
 
         answer, buffer = "", ""
         model = self.classification_model if classification_task is True else self.model
-        logger.info(f"request to open ai {messages} max tokens {self.max_tokens}")
+        logger.info(f"request to open ai {messages} max tokens {self.max_tokens} ")
         #message_hash = get_md5_hash(messages[-1].content)            
         async for chunk in await self.async_client.chat.completions.create(model=model, temperature=self.temperature,
                                                                            messages=messages, stream=True,

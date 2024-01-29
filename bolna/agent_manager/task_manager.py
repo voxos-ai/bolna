@@ -152,7 +152,8 @@ class TaskManager(BaseManager):
         self.sequence_ids = set()
         llm_config = {
             "streaming_model": self.task_config["tools_config"]["llm_agent"]["streaming_model"],
-            "classification_model": self.task_config["tools_config"]["llm_agent"]["classification_model"]
+            "classification_model": self.task_config["tools_config"]["llm_agent"]["classification_model"],
+            "max_tokens": self.task_config["tools_config"]["llm_agent"]["max_tokens"]
         }
 
         # setting transcriber
@@ -177,12 +178,12 @@ class TaskManager(BaseManager):
                 self.task_config["tools_config"]["synthesizer"]["audio_format"] = "mp3" # Hard code mp3 if we're connected through dashboard
                 self.task_config["tools_config"]["synthesizer"]["stream"] = False #Hardcode stream to be False as we don't want to get blocked by a __listen_synthesizer co-routine
             self.tools["synthesizer"] = synthesizer_class(**self.task_config["tools_config"]["synthesizer"], **provider_config, **kwargs)
-            llm_config["max_tokens"] = self.task_config["tools_config"]["synthesizer"].get('max_tokens')
             llm_config["buffer_size"] = self.task_config["tools_config"]["synthesizer"].get('buffer_size')
 
         # setting llm
         if self.task_config["tools_config"]["llm_agent"]["family"] in SUPPORTED_LLM_MODELS.keys():
             llm_class = SUPPORTED_LLM_MODELS.get(self.task_config["tools_config"]["llm_agent"]["family"])
+            logger.info(f"LLM CONFIG {llm_config}")
             llm = llm_class(**llm_config, **kwargs)
         else:
             raise Exception(f'LLM {self.task_config["tools_config"]["llm_agent"]["family"]} not supported')
@@ -241,11 +242,10 @@ class TaskManager(BaseManager):
             self.history =  [] if len(self.history) == 0 else self.history
         else:
             self.history =  [self.system_prompt] if len(self.history) == 0 else [self.system_prompt] + self.history
-
+            
     ########################
     # LLM task
     ########################
-
     async def _handle_llm_output(self, next_step, text_chunk, should_bypass_synth, meta_info):
         logger.info("received text from LLM for output processing: {}".format(text_chunk))
         if next_step == "synthesizer" and not should_bypass_synth:
