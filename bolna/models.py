@@ -87,7 +87,12 @@ class LLM(BaseModel):
     family: Optional[str] = "openai"
     temperature: Optional[float] = 0.1
     request_json: Optional[bool] = False
-
+    stop: Optional[List[str]] = None
+    top_k: Optional[int] = 0
+    top_p: Optional[float] = 0.9
+    min_p: Optional[float] = 0.1
+    frequency_penalty: Optional[float] = 0.0  
+    presence_penalty: Optional[float] = 0.0
 
 class MessagingModel(BaseModel):
     provider: str
