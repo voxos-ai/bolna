@@ -34,6 +34,7 @@ class DeepgramTranscriber(BaseTranscriber):
         self.transcription_task = None
         self.on_device_vad = kwargs.get("on_device_vad", False)
         if self.on_device_vad:
+            logger.info("on_device_vad is TRue")
             self.vad_model, self.vad_utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', force_reload=False)
         self.voice_threshold = 0.6
         self.interruption_signalled = False

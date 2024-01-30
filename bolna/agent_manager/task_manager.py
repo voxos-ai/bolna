@@ -222,6 +222,9 @@ class TaskManager(BaseManager):
         else:
             prompt_responses = await get_prompt_responses(assistant_id=self.assistant_id,local=self.is_local)
             self.prompts = prompt_responses["task_{}".format(task_id + 1)]
+            if self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "preprocessed":
+                self.tools["llm_agent"].load_prompts_and_create_graph(self.prompts)
+
 
         if "system_prompt" in self.prompts:
             # This isn't a graph based agent
@@ -450,6 +453,7 @@ class TaskManager(BaseManager):
                 await self._process_followup_task(message, sequence, meta_info)
             elif self._is_conversation_task():
                 if self._is_preprocessed_flow():
+                    logger.info(f"Running preprocessedf task")
                     await self._process_conversation_preprocessed_task(message, sequence, meta_info)
 
                 elif self._is_formulaic_flow():
@@ -523,9 +527,8 @@ class TaskManager(BaseManager):
                         await self.process_interruption()
                     if message['data'] == "TRANSCRIBER_BEGIN":
                         if meta_info.get("should_interrupt", False):
-                            self.process_interruption()
+                            await self.process_interruption()
                         logger.info("starting transcriber stream")
-                        #await self.process_interruption()
                         continue
                     elif message['data'] == "TRANSCRIBER_END":
                         logger.info("transcriber stream and preparing the next step")
@@ -539,7 +542,8 @@ class TaskManager(BaseManager):
                             self.was_long_pause = False
 
                         logger.info(f'invoking next_task {next_task} with transcriber_message: {transcriber_message}')
-                        await self._handle_transcriber_output(next_task, transcriber_message, meta_info)
+                        if len(transcriber_message.strip()) != 0:
+                            await self._handle_transcriber_output(next_task, transcriber_message, meta_info)
                         transcriber_message = ""
                         continue
                     else:

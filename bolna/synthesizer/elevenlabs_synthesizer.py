@@ -4,9 +4,6 @@ import base64
 import json
 import aiohttp
 import os
-import queue
-import logging
-import audioop
 from .base_synthesizer import BaseSynthesizer
 from bolna.helpers.logger_config import configure_logger
 from bolna.helpers.utils import convert_audio_to_wav, create_ws_data_packet, pcm_to_wav_bytes, resample
@@ -137,7 +134,11 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
             if self.stream:
                 async for message in self.receiver():
                     logger.info(f"Received message friom server")
-                    yield create_ws_data_packet(resample(convert_audio_to_wav(message, source_format="mp3"), int(self.sampling_rate), format= "wav"), self.meta_info)
+                    wav_bytes = resample(convert_audio_to_wav(message, source_format="mp3"), int(self.sampling_rate), format= "wav")
+                    logger.info(f"wav_bytes {len(wav_bytes)}")
+                    with open("output.wav", "wb") as f:
+                        f.write(wav_bytes)
+                    yield create_ws_data_packet(wav_bytes, self.meta_info)
                     if message == b'\x00':
                         logger.info("received null byte and hence end of stream")
                         self.meta_info["end_of_synthesizer_stream"] = True

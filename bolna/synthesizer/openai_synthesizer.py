@@ -52,6 +52,7 @@ class OPENAISynthesizer(BaseSynthesizer):
             )
 
         for chunk in spoken_response.iter_bytes(chunk_size=4096):
+            logger.info(f"Generating TTS response chunk: {chunk}")
             yield chunk
 
     async def generate(self):
@@ -61,7 +62,7 @@ class OPENAISynthesizer(BaseSynthesizer):
                 logger.info(f"Generating TTS response for message: {message}")
                 meta_info, text = message.get("meta_info"), message.get("data")
                 if self.stream:
-                    for chunk in self.__generate_stream(text):
+                    async for chunk in self.__generate_stream(text):
                         yield create_ws_data_packet(convert_audio_to_wav(chunk, 'flac'), meta_info)
                     if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
                         meta_info["end_of_synthesizer_stream"] = True

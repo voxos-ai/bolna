@@ -20,6 +20,19 @@ class LiteLLM(BaseLLM):
         self.max_tokens = max_tokens
         self.classification_model = classification_model
         self.temperature = temperature
+        self.model_args = { "max_tokens": self.max_tokens, "temperature": self.temperature, "model": self.model}
+        if "top_k" in kwargs:
+            self.model_args["top_k"] = kwargs["top_k"]
+        logger.info(f"Using VLLM model base_url {base_url} and model {self.model} and api key {api_key}")
+        if "top_p" in kwargs:
+            self.model_args["top_p"] = kwargs["top_p"]
+        if "stop" in kwargs:
+            self.model_args["stop"] = kwargs["stop"]        
+        if "presence_penalty" in kwargs:
+            self.model_args["presence_penalty"] = kwargs["presence_penalty"]
+        if  "frequency_penalty" in kwargs:
+            self.model_args["frequency_penalty"] = kwargs["frequency_penalty"]
+
 
 
     async def generate_stream(self, messages, synthesize=True):
@@ -54,20 +67,17 @@ class LiteLLM(BaseLLM):
         model = self.classification_model if classification_task is True else self.model
         logger.info(f'Request to litellm {messages}')
 
-        completion_args = {
-            "model": model,
-            "messages": messages,
-            "api_key": self.api_key,
-            "api_base": self.api_base,
-            "temperature": self.temperature,
-            "stream": stream
-        }
+        model_args = self.model_args
+        model_args["messages"] = messages
+        model_args["stream"] = True
+        model_args["api_key"] = self.api_key
+        model_args["api_base"] = self.api_base
 
         if request_json is True:
-            completion_args['response_format'] = {
+            model_args['response_format'] = {
                 "type": "json_object",
                 "schema": json_to_pydantic_schema('{"classification_label": "classification label goes here"}')
             }
-        completion = await litellm.acompletion(**completion_args)
+        completion = await litellm.acompletion(**model_args)
         text = completion.choices[0].message.content
         return text

@@ -13,6 +13,8 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, create_model
 import wave
 import io
+import numpy as np
+from scipy.io import wavfile
 
 import torch
 import torchaudio
@@ -78,11 +80,34 @@ def mu_law_encode(audio, quantization_channels=256):
     signal = np.sign(audio) * magnitude
     return ((signal + 1) / 2 * mu + 0.5).astype(np.int32)
 
+
+def float32_to_int16(float_audio):
+    float_audio = np.clip(float_audio, -1.0, 1.0)
+    int16_audio = (float_audio * 32767).astype(np.int16)
+    return int16_audio
+
 def wav_bytes_to_pcm(wav_bytes):
     wav_buffer = io.BytesIO(wav_bytes)
-    with wave.open(wav_buffer, 'rb') as wav_file:
-        pcm_data = wav_file.readframes(wav_file.getnframes())
-    return pcm_data
+    rate, data = wavfile.read(wav_buffer)
+    if data.dtype == np.int16:
+        return data.tobytes()
+    if data.dtype == np.float32:
+        data = float32_to_int16(data)
+        return data.tobytes()
+
+
+# def wav_bytes_to_pcm(wav_bytes):
+#     wav_buffer = io.BytesIO(wav_bytes)
+#     with wave.open(wav_buffer, 'rb') as wav_file:
+#         pcm_data = wav_file.readframes(wav_file.getnframes())
+#     return pcm_data
+
+# def wav_bytes_to_pcm(wav_bytes):
+#     wav_buffer = io.BytesIO(wav_bytes)
+#     audio = AudioSegment.from_file(wav_buffer, format="wav")
+#     pcm_data = audio.raw_data
+#     return pcm_data
+
 
 
 def raw_to_mulaw(raw_bytes):
@@ -286,6 +311,7 @@ def convert_audio_to_wav(audio_bytes, source_format = 'flac'):
     audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format=source_format)
     buffer = io.BytesIO()
     audio.export(buffer, format="wav")
+    logger.info(f"SENDING BACK WAV")
     return buffer.getvalue()
 
 def resample(audio_bytes, target_sample_rate, format = "mp3"):

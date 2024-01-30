@@ -1,5 +1,4 @@
 import os
-import openai
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from .llm import BaseLLM
