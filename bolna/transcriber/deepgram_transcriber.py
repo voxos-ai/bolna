@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from .base_transcriber import BaseTranscriber
 from bolna.helpers.logger_config import configure_logger
 from bolna.helpers.utils import create_ws_data_packet, int2float
+from bolna.helpers.vad import VAD
 torch.set_num_threads(1)
 
 logger = configure_logger(__name__)
@@ -32,11 +33,13 @@ class DeepgramTranscriber(BaseTranscriber):
         self.api_key = kwargs.get("transcriber_key", os.getenv('DEEPGRAM_AUTH_TOKEN'))
         self.transcriber_output_queue = output_queue
         self.transcription_task = None
-        self.on_device_vad = kwargs.get("on_device_vad", False)
+        self.on_device_vad = kwargs.get("on_device_vad", False) if self.stream else False
+        logger.info(f"self.stream: {self.stream}")
         if self.on_device_vad:
+            self.vad_model = VAD()
             logger.info("on_device_vad is TRue")
             self.vad_model, self.vad_utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', force_reload=False)
-        self.voice_threshold = 0.6
+        self.voice_threshold = 0.5
         self.interruption_signalled = False
         self.sampling_rate = 16000
         if not self.stream:
@@ -124,21 +127,25 @@ class DeepgramTranscriber(BaseTranscriber):
             raise Exception("Something went wrong")
 
     async def __check_for_vad(self, data):
+        start_time = time.time()
         if data is None:
             return
         audio_int16 = np.frombuffer(data, np.int16)
-        audio_float32 = int2float(audio_int16)
-        confidence = self.vad_model(torch.from_numpy(audio_float32), self.sampling_rate).item()
-        if confidence > self.voice_threshold:
+        frame_np = int2float(audio_int16)
+        speech_prob = self.vad_model(torch.from_numpy(frame_np.copy()), self.sampling_rate)
+        logger.info(f"Speech probability: {speech_prob}")
+        if speech_prob > self.voice_threshold:
             logger.info(f"It's definitely human voice and hence interrupting")
             self.interruption_signalled = True
             self.push_to_transcriber_queue(create_ws_data_packet("INTERRUPTION", self.meta_info))
-        
+
+        logger.info(f"Time to run VAD {time.time() - start_time}")
     async def sender_stream(self, ws=None):
         try:
             while True:
                 ws_data_packet = await self.input_queue.get()
                 audio_bytes = ws_data_packet['data']
+                logger.info(f"On device vad {self.on_device_vad} interruption signalled {self.interruption_signalled}")
                 if not self.interruption_signalled and self.on_device_vad:
                     await self.__check_for_vad(audio_bytes)
                 end_of_stream = await self._handle_data_packet(ws_data_packet, ws)

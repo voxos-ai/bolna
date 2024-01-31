@@ -23,7 +23,7 @@ class LiteLLM(BaseLLM):
         self.model_args = { "max_tokens": self.max_tokens, "temperature": self.temperature, "model": self.model}
         if "top_k" in kwargs:
             self.model_args["top_k"] = kwargs["top_k"]
-        logger.info(f"Using VLLM model base_url {base_url} and model {self.model} and api key {api_key}")
+        logger.info(f"Using VLLM model base_url {api_base} and model {self.model} and api key {self.api_key}")
         if "top_p" in kwargs:
             self.model_args["top_p"] = kwargs["top_p"]
         if "stop" in kwargs:

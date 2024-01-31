@@ -522,7 +522,6 @@ class TaskManager(BaseManager):
                     self._set_call_details(message)
                     meta_info = message["meta_info"]
                     sequence = await self.process_transcriber_request(meta_info)
-
                     if message['data'] == "INTERRUPTION":
                         await self.process_interruption()
                     if message['data'] == "TRANSCRIBER_BEGIN":
