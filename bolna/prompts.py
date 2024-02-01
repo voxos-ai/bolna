@@ -27,6 +27,7 @@ RULES:
 
 EXTRACTION_PROMPT_GENERATION_PROMPT = """
 I've asked user to explain in English what data would they like to extract from the conversation. A user will write in points and your task is to form a JSON by converting every point into a respective key value pair.
+Always use SNAKE_CASE with lower case characters as JSON Keys
 
 ### Example input
 1. user intent - intent for the user to come back on app. Example cold, lukewarm, warm, hot.

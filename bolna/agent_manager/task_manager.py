@@ -8,6 +8,7 @@ from bolna.providers import *
 from bolna.helpers.utils import convert_audio_to_wav, create_ws_data_packet, is_valid_md5, get_raw_audio_bytes_from_base64, \
     get_required_input_types, format_messages, get_prompt_responses, merge_wav_bytes, pcm_to_wav_bytes, update_prompt_with_context, get_md5_hash, clean_json_string, wav_bytes_to_pcm, yield_chunks_from_memory
 from bolna.helpers.logger_config import configure_logger
+from datetime import datetime
 
 asyncio.get_event_loop().set_debug(True)
 logger = configure_logger(__name__)
@@ -150,11 +151,12 @@ class TaskManager(BaseManager):
         # Sequence id for interruption
         self.curr_sequence_id = 0
         self.sequence_ids = set()
-        llm_config = {
-            "streaming_model": self.task_config["tools_config"]["llm_agent"]["streaming_model"],
-            "classification_model": self.task_config["tools_config"]["llm_agent"]["classification_model"],
-            "max_tokens": self.task_config["tools_config"]["llm_agent"]["max_tokens"]
-        }
+        if self.task_config["tools_config"]["llm_agent"] is not None:
+            llm_config = {
+                "streaming_model": self.task_config["tools_config"]["llm_agent"]["streaming_model"],
+                "classification_model": self.task_config["tools_config"]["llm_agent"]["classification_model"],
+                "max_tokens": self.task_config["tools_config"]["llm_agent"]["max_tokens"]
+            }
 
         # setting transcriber
         if self.task_config["tools_config"]["transcriber"] is not None:
@@ -181,12 +183,13 @@ class TaskManager(BaseManager):
             llm_config["buffer_size"] = self.task_config["tools_config"]["synthesizer"].get('buffer_size')
 
         # setting llm
-        if self.task_config["tools_config"]["llm_agent"]["family"] in SUPPORTED_LLM_MODELS.keys():
-            llm_class = SUPPORTED_LLM_MODELS.get(self.task_config["tools_config"]["llm_agent"]["family"])
-            logger.info(f"LLM CONFIG {llm_config}")
-            llm = llm_class(**llm_config, **kwargs)
-        else:
-            raise Exception(f'LLM {self.task_config["tools_config"]["llm_agent"]["family"]} not supported')
+        if self.task_config["tools_config"]["llm_agent"] is not None:
+            if self.task_config["tools_config"]["llm_agent"]["family"] in SUPPORTED_LLM_MODELS.keys():
+                llm_class = SUPPORTED_LLM_MODELS.get(self.task_config["tools_config"]["llm_agent"]["family"])
+                logger.info(f"LLM CONFIG {llm_config}")
+                llm = llm_class(**llm_config, **kwargs)
+            else:
+                raise Exception(f'LLM {self.task_config["tools_config"]["llm_agent"]["family"]} not supported')
 
         if self.task_config["task_type"] == "conversation":
             if self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "streaming":
@@ -204,6 +207,10 @@ class TaskManager(BaseManager):
             logger.info("Setting up summarization agent")
             self.tools["llm_agent"] = SummarizationContextualAgent(llm, prompt=self.system_prompt)
             self.summarized_data = None
+        elif self.task_config["task_type"] == "webhook":
+            zap_url = self.task_config["tools_config"]["api_tools"]["webhookURL"]
+            logger.info(f"Zap URL {zap_url}")
+            self.tools["webhook_agent"] = ZapierAgent(zap_url = zap_url)
 
         logger.info("prompt and config setup completed")
     
@@ -213,6 +220,8 @@ class TaskManager(BaseManager):
         
     async def load_prompt(self, assistant_name, task_id, local, **kwargs):
         logger.info("prompt and config setup started")
+        if self.task_config["task_type"] == "webhook":
+            return
         self.is_local = local
         if "prompt" in self.task_config["tools_config"]["llm_agent"]:
             self.prompts = {
@@ -273,22 +282,33 @@ class TaskManager(BaseManager):
         if "stream_sid" in message:
             self.stream_sid = message['meta_info']["stream_sid"]
 
-    async def _process_followup_task(self, message, sequence, meta_info):
-        message = format_messages(self.input_parameters["messages"])  # Remove the initial system prompt
-        self.history.append({
-            'role': 'user',
-            'content': message
-        })
-
-        json_data = await self.tools["llm_agent"].generate(self.history)
-        if "summary" in json_data:
-            logger.info(f'Summary {json_data["summary"]}')
-            self.summarized_data = json_data["summary"]
+    async def _process_followup_task(self, message = None):
+        logger.info(f" TASK CONFIG  {self.task_config['task_type']}")
+        if self.task_config["task_type"] == "webhook":
+            logger.info(f"Input patrameters {self.input_parameters}")
+            logger.info(f"DOINFG THE POST REQUEST TO ZAPIER WEBHOOK {self.input_parameters['extraction_details']}")
+            self.webhook_response = await self.tools["webhook_agent"].execute(self.input_parameters['extraction_details'])
+            logger.info(f"Response from the server {self.webhook_response}")
         else:
-            json_data = clean_json_string(json_data)
-            logger.info(f"After replacing {json_data}")
-            json_data = json.loads(json_data)
-            self.extracted_data = json_data
+            message = format_messages(self.input_parameters["messages"])  # Remove the initial system prompt
+            self.history.append({
+                'role': 'user',
+                'content': message
+            })
+
+            today = datetime.now().strftime("%A, %B %d, %Y")
+            self.history[0]['content'] += f"\n Today's Date is {today}"
+
+
+            json_data = await self.tools["llm_agent"].generate(self.history)
+            if self.task_config["task_type"] == "summary":
+                logger.info(f'Summary {json_data["summary"]}')
+                self.summarized_data = json_data["summary"]
+            else:
+                json_data = clean_json_string(json_data)
+                logger.info(f"After replacing {json_data}")
+                json_data = json.loads(json_data)
+                self.extracted_data = json_data
         logger.info("Done")
 
     async def _process_conversation_preprocessed_task(self, message, sequence, meta_info):
@@ -450,7 +470,7 @@ class TaskManager(BaseManager):
 
         try:
             if self._is_extraction_task() or self._is_summarization_task():
-                await self._process_followup_task(message, sequence, meta_info)
+                await self._process_followup_task(message)
             elif self._is_conversation_task():
                 if self._is_preprocessed_flow():
                     logger.info(f"Running preprocessedf task")
@@ -676,7 +696,10 @@ class TaskManager(BaseManager):
             else:
                 # Run agent followup tasks
                 try:
-                    await self._run_llm_task(self.input_parameters)
+                    if self.task_config["task_type"] == "webhook":
+                        await self._process_followup_task()
+                    else:
+                        await self._run_llm_task(self.input_parameters)
                 except Exception as e:
                     logger.error(f"Could not do llm call: {e}")
                     raise Exception(e)
@@ -707,7 +730,8 @@ class TaskManager(BaseManager):
                     output = { "extracted_data" : self.extracted_data, "task_type": "extraction"}
                 elif self.task_config["task_type"] == "summarization":
                     output = {"summary" : self.summarized_data, "task_type": "summarization"}
-
+                elif self.task_config["task_type"] == "webhook":
+                    output = {"status" : self.webhook_response, "task_type": "webhook"}
             return output
 
     def handle_cancellation(self, message):

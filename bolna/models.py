@@ -112,6 +112,7 @@ class ToolModel(BaseModel):
     whatsapp: Optional[MessagingModel] = None
     sms: Optional[MessagingModel] = None
     email: Optional[MessagingModel] = None
+    webhookURL: Optional[str] = None
 
 
 class ToolsConfig(BaseModel):
