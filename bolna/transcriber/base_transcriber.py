@@ -31,9 +31,7 @@ class BaseTranscriber:
 
     async def signal_transcription_begin(self, msg):
         send_begin_packet = False
-        if self.current_request_id is None:
-            self.current_request_id = self.generate_request_id()
-            self.meta_info['request_id'] = self.current_request_id
+        self.meta_info['request_id'] = self.current_request_id
 
         if not self.callee_speaking:
             self.callee_speaking = True

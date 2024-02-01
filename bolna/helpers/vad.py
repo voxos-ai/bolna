@@ -16,7 +16,6 @@ class VAD():
         opts.inter_op_num_threads = 1
         opts.intra_op_num_threads = 1
         self.session = onnxruntime.InferenceSession(path, providers=['CPUExecutionProvider'], sess_options=opts)
-        logger.error(f"SOMETHING WENT WRONG")        
         self.reset_states()
         self.sample_rates = [8000, 16000]
 

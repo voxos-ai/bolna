@@ -477,20 +477,24 @@ class TaskManager(BaseManager):
         if self.previous_request_id is None:
             is_first_message = True
         elif self.previous_request_id not in self.llm_processed_request_ids:
+            logger.info(f"Adding previous request id to LLM rejected request if")
             self.llm_rejected_request_ids.add(self.previous_request_id)
         else:
             skip_append_to_data = False
         return sequence
 
     async def process_interruption(self):
-        logger.info("Handling interruption")
+        logger.info(f"Handling interruption sequenxce ids {self.sequence_ids}")
         self.sequence_ids = set() #Remove all the sequence ids so subsequent won't be processed
         await self.tools["output"].handle_interruption()
         
         if self.llm_task is not None:
             self.llm_task.cancel()
             self.llm_task = None
-            self.was_long_pause = True        
+            self.was_long_pause = True     
+        self.synthesizer_task.cancel()
+        self.synthesizer_task = asyncio.create_task(self.__listen_synthesizer())
+        logger.info(f"Restarted synthesizer")
 
     ########################
     # Transcriber task
@@ -522,10 +526,12 @@ class TaskManager(BaseManager):
                     self._set_call_details(message)
                     meta_info = message["meta_info"]
                     sequence = await self.process_transcriber_request(meta_info)
-                    if message['data'] == "INTERRUPTION":
+                    if message['data'].strip() == "INTERRUPTION":
+                        logger.info(f"Processing interruption FROM INTERRUPTION")
                         await self.process_interruption()
-                    if message['data'] == "TRANSCRIBER_BEGIN":
+                    elif message['data'] == "TRANSCRIBER_BEGIN":
                         if meta_info.get("should_interrupt", False):
+                            logger.info(f"Processing interruption from TRANSCRIBER_BEGIN")
                             await self.process_interruption()
                         logger.info("starting transcriber stream")
                         continue

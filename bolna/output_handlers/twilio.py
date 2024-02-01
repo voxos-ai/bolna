@@ -28,13 +28,12 @@ class TwilioOutputHandler(DefaultOutputHandler):
 
     async def handle_interruption(self):
         logger.info("interrupting because user spoke in between")
-        if len(self.mark_set) > 0:
-            message_clear = {
-                "event": "clear",
-                "streamSid": self.stream_sid,
-            }
-            await self.websocket.send_text(json.dumps(message_clear))
-            self.mark_set = set()
+        message_clear = {
+            "event": "clear",
+            "streamSid": self.stream_sid,
+        }
+        await self.websocket.send_text(json.dumps(message_clear))
+        self.mark_set = set()
 
     async def send_sms(self, message_text, call_number):
         message = twilio_client.messages.create(

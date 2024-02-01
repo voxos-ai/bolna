@@ -80,7 +80,7 @@ class TwilioInputHandler(DefaultInputHandler):
                         buffer.append(media_audio)
                         self.message_count += 1
                         #Send 100 ms of audio to deepgram
-                        if self.message_count == 5:
+                        if self.message_count == 10:
                             merged_audio = b''.join(buffer)
                             buffer = []
                             await self.ingest_audio(merged_audio, meta_info)
