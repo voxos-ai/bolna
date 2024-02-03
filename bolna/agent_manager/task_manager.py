@@ -259,6 +259,13 @@ class TaskManager(BaseManager):
     # LLM task
     ########################
     async def _handle_llm_output(self, next_step, text_chunk, should_bypass_synth, meta_info):
+        #THis is to remove stop words. Really helpful in smaller 7B models
+        if meta_info["end_of_llm_stream"] and "user" in text_chunk[-5:].lower():
+            if text_chunk[-5:].lower() == "user:":
+                text_chunk == text_chunk[:-5]
+            elif text_chunk[-4:].lower() == "user":
+                text_chunk = text_chunk[:-4]
+
         logger.info("received text from LLM for output processing: {}".format(text_chunk))
         if next_step == "synthesizer" and not should_bypass_synth:
             task = asyncio.gather(self._synthesize(create_ws_data_packet(text_chunk, meta_info)))

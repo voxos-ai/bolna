@@ -26,8 +26,6 @@ class DefaultOutputHandler:
             if packet["meta_info"]['type'] in ('audio', 'text'):
                 if packet["meta_info"]['type'] == 'audio':
                     logger.info(f"Sending audio")
-                    with open('audio1.wav', 'wb') as f:
-                        f.write(packet['data'])
                     data = base64.b64encode(packet['data']).decode("utf-8")
                     #logger.info(f"data -> {data}")
                 elif packet["meta_info"]['type'] == 'text':

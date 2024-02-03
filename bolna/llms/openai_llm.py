@@ -58,7 +58,7 @@ class OpenAiLLM(BaseLLM):
         model_args["response_format"] = response_format
         model_args["messages"] = messages
         model_args["stream"] = True
-
+        model_args["stop"] = ["User:"]
         async for chunk in await self.async_client.chat.completions.create(**model_args):
             if text_chunk := chunk.choices[0].delta.content:
                 answer += text_chunk

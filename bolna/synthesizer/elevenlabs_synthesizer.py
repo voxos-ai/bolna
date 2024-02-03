@@ -136,8 +136,6 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                     logger.info(f"Received message friom server")
                     wav_bytes = resample(convert_audio_to_wav(message, source_format="mp3"), int(self.sampling_rate), format= "wav")
                     logger.info(f"wav_bytes {len(wav_bytes)}")
-                    with open("output.wav", "wb") as f:
-                        f.write(wav_bytes)
                     yield create_ws_data_packet(wav_bytes, self.meta_info)
                     if message == b'\x00':
                         logger.info("received null byte and hence end of stream")
