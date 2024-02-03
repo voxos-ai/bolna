@@ -6,7 +6,7 @@ COPY ./quickstart_server.py /app
 
 RUN apt-get update && apt-get install libgomp1 git -y
 RUN pip install -r requirements.txt
-RUN pip install --force-reinstall git+https://github.com/bolna-ai/bolna@feat/quicker-interruption
+RUN pip install --force-reinstall git+https://github.com/bolna-ai/bolna@master
 RUN pip install scipy==1.11.0
 RUN pip install torch==2.0.1
 RUN pip install torchaudio==2.0.1
