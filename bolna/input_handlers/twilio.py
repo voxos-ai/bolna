@@ -1,3 +1,4 @@
+import traceback
 from .default import DefaultInputHandler
 import asyncio
 import base64
@@ -49,6 +50,7 @@ class TwilioInputHandler(DefaultInputHandler):
         self.queues['transcriber'].put_nowait(ws_data_packet)
 
     async def _listen(self):
+        buffer = []
         while True:
             try:
                 message = await self.websocket.receive_text()
@@ -60,7 +62,7 @@ class TwilioInputHandler(DefaultInputHandler):
                     media_data = packet['media']
                     media_audio = base64.b64decode(media_data['payload'])
                     media_ts = int(media_data["timestamp"])
-
+                    
                     if packet['media']['track'] == 'inbound':
                         meta_info = {
                             'io': 'twilio',
@@ -68,14 +70,21 @@ class TwilioInputHandler(DefaultInputHandler):
                             'stream_sid': self.stream_sid,
                             'sequence': self.input_types['audio']
                         }
-
+                        '''
                         if self.last_media_received + 20 < media_ts:
                             bytes_to_fill = 8 * (media_ts - (self.last_media_received + 20))
                             logger.info(f"Filling {bytes_to_fill} bytes of silence")
-                            await self.ingest_audio(b"\xff" * bytes_to_fill, meta_info)
-
+                            #await self.ingest_audio(b"\xff" * bytes_to_fill, meta_info)
+                        '''
                         self.last_media_received = media_ts
-                        await self.ingest_audio(media_audio, meta_info)
+                        buffer.append(media_audio)
+                        self.message_count += 1
+                        #Send 100 ms of audio to deepgram
+                        if self.message_count == 10:
+                            merged_audio = b''.join(buffer)
+                            buffer = []
+                            await self.ingest_audio(merged_audio, meta_info)
+                            self.message_count = 0
                     else:
                         logger.info("Getting media elements but not inbound media")
 
@@ -89,6 +98,7 @@ class TwilioInputHandler(DefaultInputHandler):
                     break
 
             except Exception as e:
+                traceback.print_exc()
                 ws_data_packet = create_ws_data_packet(
                     data=None,
                     meta_info={

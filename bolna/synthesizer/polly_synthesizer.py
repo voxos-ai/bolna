@@ -20,7 +20,6 @@ class PollySynthesizer(BaseSynthesizer):
         self.voice = voice
         self.language = language
         self.sample_rate = str(sampling_rate)
-
         # @TODO: initialize client here
         self.client = None
 

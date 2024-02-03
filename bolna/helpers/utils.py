@@ -13,6 +13,11 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, create_model
 import wave
 import io
+import numpy as np
+from scipy.io import wavfile
+
+import torch
+import torchaudio
 from .logger_config import configure_logger
 from bolna.constants import PREPROCESS_DIR
 from pydub import AudioSegment
@@ -76,6 +81,35 @@ def mu_law_encode(audio, quantization_channels=256):
     return ((signal + 1) / 2 * mu + 0.5).astype(np.int32)
 
 
+def float32_to_int16(float_audio):
+    float_audio = np.clip(float_audio, -1.0, 1.0)
+    int16_audio = (float_audio * 32767).astype(np.int16)
+    return int16_audio
+
+def wav_bytes_to_pcm(wav_bytes):
+    wav_buffer = io.BytesIO(wav_bytes)
+    rate, data = wavfile.read(wav_buffer)
+    if data.dtype == np.int16:
+        return data.tobytes()
+    if data.dtype == np.float32:
+        data = float32_to_int16(data)
+        return data.tobytes()
+
+
+# def wav_bytes_to_pcm(wav_bytes):
+#     wav_buffer = io.BytesIO(wav_bytes)
+#     with wave.open(wav_buffer, 'rb') as wav_file:
+#         pcm_data = wav_file.readframes(wav_file.getnframes())
+#     return pcm_data
+
+# def wav_bytes_to_pcm(wav_bytes):
+#     wav_buffer = io.BytesIO(wav_bytes)
+#     audio = AudioSegment.from_file(wav_buffer, format="wav")
+#     pcm_data = audio.raw_data
+#     return pcm_data
+
+
+
 def raw_to_mulaw(raw_bytes):
     # Convert bytes to numpy array of int16 values
     samples = np.frombuffer(raw_bytes, dtype=np.int16)
@@ -98,8 +132,8 @@ async def get_s3_file(bucket_name, file_key):
             return file_content
 
 
-async def store_file(bucket_name = None, file_key = None, file_data = None, content_type= "json", local = False):
-
+async def store_file(bucket_name = None, file_key = None, file_data = None, content_type= "json", local = False, preprocess_dir = None):
+    
     if not local:
         session = AioSession()
 
@@ -117,17 +151,17 @@ async def store_file(bucket_name = None, file_key = None, file_data = None, cont
             except Exception as e:
                 logger.error('Exception occurred while s3 put object: {}'.format(e))
     if local:
-        
-        directory_path = os.path.join(PREPROCESS_DIR, os.path.dirname(file_key))
+        dir = PREPROCESS_DIR if preprocess_dir == None else preprocess_dir
+        directory_path = os.path.join(dir, os.path.dirname(file_key))
         logger.info(file_data)
         os.makedirs(directory_path, exist_ok=True)
         if content_type == "json":
-            logger.info(f"Writing to {PREPROCESS_DIR}/{file_key} ")
-            with open(f"{PREPROCESS_DIR}/{file_key}", 'w') as f:
+            logger.info(f"Writing to {dir}/{file_key} ")
+            with open(f"{dir}/{file_key}", 'w') as f:
                 data = json.dumps(file_data)
                 f.write(data)
         elif content_type in ["mp3", "wav", "pcm", "csv"]:
-            with open(f"{PREPROCESS_DIR}/{file_key}", 'w') as f:
+            with open(f"{dir}/{file_key}", 'w') as f:
                 data = file_data
                 f.write(data)
 
@@ -264,16 +298,65 @@ def yield_chunks_from_memory(audio_bytes, chunk_size=512):
 
 def pcm_to_wav_bytes(pcm_data, sample_rate = 16000, num_channels = 1, sample_width = 2):
     buffer = io.BytesIO()
-    with wave.open(buffer, "wb") as wav_file:
-        wav_file.setframerate(sample_rate)
-        wav_file.setnchannels(num_channels)
-        wav_file.setsampwidth(sample_width)
-        wav_file.writeframes(pcm_data)
-
+    bit_depth = 16 
+    if len(pcm_data)%2 == 1:
+        pcm_data += b'\x00'
+    tensor_pcm = torch.frombuffer(pcm_data, dtype=torch.int16)
+    tensor_pcm = tensor_pcm.float() / (2**(bit_depth - 1))  
+    tensor_pcm = tensor_pcm.unsqueeze(0)  
+    torchaudio.save(buffer, tensor_pcm, sample_rate, format='wav')
     return buffer.getvalue()
 
 def convert_audio_to_wav(audio_bytes, source_format = 'flac'):
     audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format=source_format)
     buffer = io.BytesIO()
     audio.export(buffer, format="wav")
+    logger.info(f"SENDING BACK WAV")
     return buffer.getvalue()
+
+def resample(audio_bytes, target_sample_rate, format = "mp3"):
+    audio_buffer = io.BytesIO(audio_bytes)
+    waveform, orig_sample_rate = torchaudio.load(audio_buffer, format = format)
+    if orig_sample_rate == target_sample_rate:
+        return audio_bytes
+    resampler = torchaudio.transforms.Resample(orig_sample_rate, target_sample_rate)
+    audio_waveform = resampler(waveform)
+    audio_buffer = io.BytesIO()
+    logger.info(f"Resampling from {orig_sample_rate} to {target_sample_rate}")
+    torchaudio.save(audio_buffer, audio_waveform, target_sample_rate, format="wav")
+    return audio_buffer.getvalue()
+
+# def merge_wav_bytes(wav_bytes_list):
+#     logger.info(f"Merging {len(wav_bytes_list)} wav files")
+#     if not wav_bytes_list:
+#         return None
+    
+#     header_length = 44
+#     header = wav_bytes_list[0][:header_length]
+#     merged_audio_data = io.BytesIO(header)
+#     data_size_offset = 40
+#     total_data_size = 0
+
+#     for wav_bytes in wav_bytes_list:
+#         audio_data = wav_bytes[header_length:]
+#         merged_audio_data.write(audio_data)
+#         total_data_size += len(audio_data)
+#     merged_audio_data.seek(data_size_offset)
+#     merged_audio_data.write(total_data_size.to_bytes(4, byteorder='endian'))
+#     file_size = total_data_size + header_length - 8
+#     merged_audio_data.seek(4)
+#     merged_audio_data.write(file_size.to_bytes(4, byteorder='endian'))
+#     return merged_audio_data.getvalue()
+
+def merge_wav_bytes(wav_files_bytes):
+    combined = AudioSegment.empty()
+    for wav_bytes in wav_files_bytes:
+        file_like_object = io.BytesIO(wav_bytes)
+
+        audio_segment = AudioSegment.from_file(file_like_object, format="wav")
+        combined += audio_segment
+
+    buffer = io.BytesIO()
+    combined.export(buffer, format="wav")
+    return buffer.getvalue()
+

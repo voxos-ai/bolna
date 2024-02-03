@@ -36,6 +36,10 @@ class OpenAIConfig(BaseModel):
     model: str
     sampling_rate: Optional[str] ="24000"
 
+class FourieConfig(BaseModel):
+    voice_id: str
+    gender: str
+    voice: str
 
 class Transcriber(BaseModel):
     model: str
@@ -56,7 +60,7 @@ class Transcriber(BaseModel):
 
 class Synthesizer(BaseModel):
     provider: str
-    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig]
+    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig]
     stream: bool = False
     buffer_size: Optional[int] = 40  # 40 characters in a buffer
     audio_format: Optional[str] = "pcm"
@@ -83,7 +87,12 @@ class LLM(BaseModel):
     family: Optional[str] = "openai"
     temperature: Optional[float] = 0.1
     request_json: Optional[bool] = False
-
+    stop: Optional[List[str]] = None
+    top_k: Optional[int] = 0
+    top_p: Optional[float] = 0.9
+    min_p: Optional[float] = 0.1
+    frequency_penalty: Optional[float] = 0.0  
+    presence_penalty: Optional[float] = 0.0
 
 class MessagingModel(BaseModel):
     provider: str
@@ -103,6 +112,7 @@ class ToolModel(BaseModel):
     whatsapp: Optional[MessagingModel] = None
     sms: Optional[MessagingModel] = None
     email: Optional[MessagingModel] = None
+    webhookURL: Optional[str] = None
 
 
 class ToolsConfig(BaseModel):

@@ -5,9 +5,10 @@ import json
 from .base_manager import BaseManager
 from bolna.agent_types import *
 from bolna.providers import *
-from bolna.helpers.utils import create_ws_data_packet, is_valid_md5, get_raw_audio_bytes_from_base64, \
-    get_required_input_types, format_messages, get_prompt_responses, update_prompt_with_context, get_md5_hash, clean_json_string, yield_chunks_from_memory
+from bolna.helpers.utils import convert_audio_to_wav, create_ws_data_packet, is_valid_md5, get_raw_audio_bytes_from_base64, \
+    get_required_input_types, format_messages, get_prompt_responses, merge_wav_bytes, pcm_to_wav_bytes, update_prompt_with_context, get_md5_hash, clean_json_string, wav_bytes_to_pcm, yield_chunks_from_memory
 from bolna.helpers.logger_config import configure_logger
+from datetime import datetime
 
 asyncio.get_event_loop().set_debug(True)
 logger = configure_logger(__name__)
@@ -31,6 +32,7 @@ class TaskManager(BaseManager):
         self.audio_queue = asyncio.Queue()
         self.llm_queue = asyncio.Queue()
         self.synthesizer_queue = asyncio.Queue()
+        self.transcriber_output_queue = asyncio.Queue()
 
         self.pipelines = task['toolchain']['pipelines']
         self.textual_chat_agent = False
@@ -99,6 +101,7 @@ class TaskManager(BaseManager):
                     self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 8000
                     self.task_config['tools_config']['synthesizer']['audio_format'] = 'pcm'
                 else:
+                    self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 24000
                     output_kwargs['queue'] = output_queue
 
             self.tools["output"] = output_handler_class(**output_kwargs)
@@ -148,16 +151,19 @@ class TaskManager(BaseManager):
         # Sequence id for interruption
         self.curr_sequence_id = 0
         self.sequence_ids = set()
-        llm_config = {
-            "streaming_model": self.task_config["tools_config"]["llm_agent"]["streaming_model"],
-            "classification_model": self.task_config["tools_config"]["llm_agent"]["classification_model"]
-        }
+        if self.task_config["tools_config"]["llm_agent"] is not None:
+            llm_config = {
+                "streaming_model": self.task_config["tools_config"]["llm_agent"]["streaming_model"],
+                "classification_model": self.task_config["tools_config"]["llm_agent"]["classification_model"],
+                "max_tokens": self.task_config["tools_config"]["llm_agent"]["max_tokens"]
+            }
 
         # setting transcriber
         if self.task_config["tools_config"]["transcriber"] is not None:
             provider = "playground" if self.connected_through_dashboard else self.task_config["tools_config"]["input"][
                 "provider"]
             self.task_config["tools_config"]["transcriber"]["input_queue"] = self.audio_queue
+            self.task_config['tools_config']["transcriber"]["output_queue"] = self.transcriber_output_queue
             if self.task_config["tools_config"]["transcriber"]["model"] in SUPPORTED_TRANSCRIBER_MODELS.keys():
                 if self.connected_through_dashboard:
                     self.task_config["tools_config"]["transcriber"]["stream"] = False
@@ -174,15 +180,16 @@ class TaskManager(BaseManager):
                 self.task_config["tools_config"]["synthesizer"]["audio_format"] = "mp3" # Hard code mp3 if we're connected through dashboard
                 self.task_config["tools_config"]["synthesizer"]["stream"] = False #Hardcode stream to be False as we don't want to get blocked by a __listen_synthesizer co-routine
             self.tools["synthesizer"] = synthesizer_class(**self.task_config["tools_config"]["synthesizer"], **provider_config, **kwargs)
-            llm_config["max_tokens"] = self.task_config["tools_config"]["synthesizer"].get('max_tokens')
             llm_config["buffer_size"] = self.task_config["tools_config"]["synthesizer"].get('buffer_size')
 
         # setting llm
-        if self.task_config["tools_config"]["llm_agent"]["family"] in SUPPORTED_LLM_MODELS.keys():
-            llm_class = SUPPORTED_LLM_MODELS.get(self.task_config["tools_config"]["llm_agent"]["family"])
-            llm = llm_class(**llm_config, **kwargs)
-        else:
-            raise Exception(f'LLM {self.task_config["tools_config"]["llm_agent"]["family"]} not supported')
+        if self.task_config["tools_config"]["llm_agent"] is not None:
+            if self.task_config["tools_config"]["llm_agent"]["family"] in SUPPORTED_LLM_MODELS.keys():
+                llm_class = SUPPORTED_LLM_MODELS.get(self.task_config["tools_config"]["llm_agent"]["family"])
+                logger.info(f"LLM CONFIG {llm_config}")
+                llm = llm_class(**llm_config, **kwargs)
+            else:
+                raise Exception(f'LLM {self.task_config["tools_config"]["llm_agent"]["family"]} not supported')
 
         if self.task_config["task_type"] == "conversation":
             if self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "streaming":
@@ -200,6 +207,10 @@ class TaskManager(BaseManager):
             logger.info("Setting up summarization agent")
             self.tools["llm_agent"] = SummarizationContextualAgent(llm, prompt=self.system_prompt)
             self.summarized_data = None
+        elif self.task_config["task_type"] == "webhook":
+            zap_url = self.task_config["tools_config"]["api_tools"]["webhookURL"]
+            logger.info(f"Zap URL {zap_url}")
+            self.tools["webhook_agent"] = ZapierAgent(zap_url = zap_url)
 
         logger.info("prompt and config setup completed")
     
@@ -209,6 +220,8 @@ class TaskManager(BaseManager):
         
     async def load_prompt(self, assistant_name, task_id, local, **kwargs):
         logger.info("prompt and config setup started")
+        if self.task_config["task_type"] == "webhook":
+            return
         self.is_local = local
         if "prompt" in self.task_config["tools_config"]["llm_agent"]:
             self.prompts = {
@@ -218,6 +231,9 @@ class TaskManager(BaseManager):
         else:
             prompt_responses = await get_prompt_responses(assistant_id=self.assistant_id,local=self.is_local)
             self.prompts = prompt_responses["task_{}".format(task_id + 1)]
+            if self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "preprocessed":
+                self.tools["llm_agent"].load_prompts_and_create_graph(self.prompts)
+
 
         if "system_prompt" in self.prompts:
             # This isn't a graph based agent
@@ -238,12 +254,18 @@ class TaskManager(BaseManager):
             self.history =  [] if len(self.history) == 0 else self.history
         else:
             self.history =  [self.system_prompt] if len(self.history) == 0 else [self.system_prompt] + self.history
-
+            
     ########################
     # LLM task
     ########################
-
     async def _handle_llm_output(self, next_step, text_chunk, should_bypass_synth, meta_info):
+        #THis is to remove stop words. Really helpful in smaller 7B models
+        if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"] and "user" in text_chunk[-5:].lower():
+            if text_chunk[-5:].lower() == "user:":
+                text_chunk == text_chunk[:-5]
+            elif text_chunk[-4:].lower() == "user":
+                text_chunk = text_chunk[:-4]
+
         logger.info("received text from LLM for output processing: {}".format(text_chunk))
         if next_step == "synthesizer" and not should_bypass_synth:
             task = asyncio.gather(self._synthesize(create_ws_data_packet(text_chunk, meta_info)))
@@ -267,22 +289,33 @@ class TaskManager(BaseManager):
         if "stream_sid" in message:
             self.stream_sid = message['meta_info']["stream_sid"]
 
-    async def _process_followup_task(self, message, sequence, meta_info):
-        message = format_messages(self.input_parameters["messages"])  # Remove the initial system prompt
-        self.history.append({
-            'role': 'user',
-            'content': message
-        })
-
-        json_data = await self.tools["llm_agent"].generate(self.history)
-        if "summary" in json_data:
-            logger.info(f'Summary {json_data["summary"]}')
-            self.summarized_data = json_data["summary"]
+    async def _process_followup_task(self, message = None):
+        logger.info(f" TASK CONFIG  {self.task_config['task_type']}")
+        if self.task_config["task_type"] == "webhook":
+            logger.info(f"Input patrameters {self.input_parameters}")
+            logger.info(f"DOINFG THE POST REQUEST TO ZAPIER WEBHOOK {self.input_parameters['extraction_details']}")
+            self.webhook_response = await self.tools["webhook_agent"].execute(self.input_parameters['extraction_details'])
+            logger.info(f"Response from the server {self.webhook_response}")
         else:
-            json_data = clean_json_string(json_data)
-            logger.info(f"After replacing {json_data}")
-            json_data = json.loads(json_data)
-            self.extracted_data = json_data
+            message = format_messages(self.input_parameters["messages"])  # Remove the initial system prompt
+            self.history.append({
+                'role': 'user',
+                'content': message
+            })
+
+            today = datetime.now().strftime("%A, %B %d, %Y")
+            self.history[0]['content'] += f"\n Today's Date is {today}"
+
+
+            json_data = await self.tools["llm_agent"].generate(self.history)
+            if self.task_config["task_type"] == "summary":
+                logger.info(f'Summary {json_data["summary"]}')
+                self.summarized_data = json_data["summary"]
+            else:
+                json_data = clean_json_string(json_data)
+                logger.info(f"After replacing {json_data}")
+                json_data = json.loads(json_data)
+                self.extracted_data = json_data
         logger.info("Done")
 
     async def _process_conversation_preprocessed_task(self, message, sequence, meta_info):
@@ -354,7 +387,6 @@ class TaskManager(BaseManager):
         self.curr_sequence_id +=1
         meta_info["sequence_id"] = self.curr_sequence_id
         cache_response =  self.cache.get(get_md5_hash(message['data'])) if self.cache is not None else None
-        
         if cache_response is not None:
             logger.info("It was a cache hit and hence simply returning")
             await self._handle_llm_output(next_step, cache_response, should_bypass_synth, meta_info)
@@ -363,18 +395,15 @@ class TaskManager(BaseManager):
                 text_chunk, end_of_llm_stream = llm_message
                 logger.info(f"###### time to get the first chunk {time.time() - start_time} {text_chunk}")
                 llm_response += " " + text_chunk
-                if end_of_llm_stream:
-                    meta_info["end_of_llm_stream"] = True
-                await self._handle_llm_output(next_step, text_chunk, should_bypass_synth, meta_info)
-
-            # if not self.stream:
-            #     meta_info["end_of_llm_stream"]=  True
-            #     await self._handle_llm_output(next_step, llm_response, should_bypass_synth, meta_info)
-
-            #add to cache
-            # if self.cache is not None:
-            #     self.cache.set(get_md5_hash(message['data']), llm_response)
-
+                if self.stream:
+                    if end_of_llm_stream:
+                        meta_info["end_of_llm_stream"] = True
+                    
+                    await self._handle_llm_output(next_step, text_chunk, should_bypass_synth, meta_info)
+                    
+            if not self.stream:
+                meta_info["end_of_llm_stream"] = True
+                await self._handle_llm_output(next_step, llm_response, should_bypass_synth, meta_info)
         if self.current_request_id in self.llm_rejected_request_ids:
             logger.info("User spoke while LLM was generating response")
         else:
@@ -448,9 +477,10 @@ class TaskManager(BaseManager):
 
         try:
             if self._is_extraction_task() or self._is_summarization_task():
-                await self._process_followup_task(message, sequence, meta_info)
+                await self._process_followup_task(message)
             elif self._is_conversation_task():
                 if self._is_preprocessed_flow():
+                    logger.info(f"Running preprocessedf task")
                     await self._process_conversation_preprocessed_task(message, sequence, meta_info)
 
                 elif self._is_formulaic_flow():
@@ -474,25 +504,24 @@ class TaskManager(BaseManager):
         if self.previous_request_id is None:
             is_first_message = True
         elif self.previous_request_id not in self.llm_processed_request_ids:
+            logger.info(f"Adding previous request id to LLM rejected request if")
             self.llm_rejected_request_ids.add(self.previous_request_id)
         else:
             skip_append_to_data = False
         return sequence
 
     async def process_interruption(self):
-        logger.info("Handling interruption")
+        logger.info(f"Handling interruption sequenxce ids {self.sequence_ids}")
         self.sequence_ids = set() #Remove all the sequence ids so subsequent won't be processed
         await self.tools["output"].handle_interruption()
         
         if self.llm_task is not None:
             self.llm_task.cancel()
             self.llm_task = None
-            self.was_long_pause = True
-        # if len(self.synthesizer_tasks) > 0:
-        #     for synth_task in self.synthesizer_tasks:
-        #         synth_task.cancel()
-        #     self.synthesizer_tasks = []
-        
+            self.was_long_pause = True     
+        self.synthesizer_task.cancel()
+        self.synthesizer_task = asyncio.create_task(self.__listen_synthesizer())
+        logger.info(f"Restarted synthesizer")
 
     ########################
     # Transcriber task
@@ -513,21 +542,25 @@ class TaskManager(BaseManager):
         transcriber_message = ""
         logger.info(f"Starting transcriber task")
         try:
-            if self.stream:
-                async for message in self.tools["transcriber"].transcribe():
+            while True:
+                if self.stream:
+                    message = await self.transcriber_output_queue.get()
                     if message['data'] == "transcriber_connection_closed":
                         self.transcriber_duration += message['meta_info']["transcriber_duration"]
                         logger.info("transcriber connection closed")
-                        return
+                        break
 
                     self._set_call_details(message)
                     meta_info = message["meta_info"]
                     sequence = await self.process_transcriber_request(meta_info)
-
-                    if message['data'] == "TRANSCRIBER_BEGIN":
-                        logger.info("starting transcriber stream")
-                        start_time = time.time()
+                    if message['data'].strip() == "INTERRUPTION":
+                        logger.info(f"Processing interruption FROM INTERRUPTION")
                         await self.process_interruption()
+                    elif message['data'] == "TRANSCRIBER_BEGIN":
+                        if meta_info.get("should_interrupt", False):
+                            logger.info(f"Processing interruption from TRANSCRIBER_BEGIN")
+                            await self.process_interruption()
+                        logger.info("starting transcriber stream")
                         continue
                     elif message['data'] == "TRANSCRIBER_END":
                         logger.info("transcriber stream and preparing the next step")
@@ -541,51 +574,53 @@ class TaskManager(BaseManager):
                             self.was_long_pause = False
 
                         logger.info(f'invoking next_task {next_task} with transcriber_message: {transcriber_message}')
-                        await self._handle_transcriber_output(next_task, transcriber_message, meta_info)
+                        if len(transcriber_message.strip()) != 0:
+                            await self._handle_transcriber_output(next_task, transcriber_message, meta_info)
                         transcriber_message = ""
                         continue
                     else:
                         logger.info("processed text from transcriber: {}".format(message['data']))
                         transcriber_message += message['data']
-            else:
-                logger.info("Not a streaming conversation. Hence getting a full blown transcript")
-                async for message in self.tools["transcriber"].transcribe():
+                else:
+                    logger.info("Not a streaming conversation. Hence getting a full blown transcript")
+                    message = await self.transcriber_output_queue.get()
                     logger.info(f"message from transcriber {message}")
+                    if message['data'] == "transcriber_connection_closed":
+                        self.transcriber_duration += message['meta_info']["transcriber_duration"]
+                        logger.info("transcriber connection closed")
+                        break
                     sequence = message["meta_info"]["sequence"]
                     next_task = self._get_next_step(sequence, "transcriber")
                     self.transcriber_duration += message["meta_info"]["transcriber_duration"] if "transcriber_duration" in message["meta_info"] else 0
                     await self._handle_transcriber_output(next_task, message['data'], message["meta_info"])
-
         except Exception as e:
             traceback.print_exc()
             logger.error(f"Error in transcriber {e}")
-    
 
     async def __listen_synthesizer(self):
         try:
             if self.stream and self.synthesizer_provider != "polly":
                 logger.info("Opening websocket connection to synthesizer")
                 await self.tools["synthesizer"].open_connection()
-            audio_bytes = b""
             while True:
                 logger.info("Listening to synthesizer")
                 async for message in self.tools["synthesizer"].generate():
                     if not self.conversation_ended and message["meta_info"]["sequence_id"] in self.sequence_ids:
                         logger.info(f"{message['meta_info']['sequence_id'] } is in sequence ids  {self.sequence_ids} and hence removing the sequence ids ")
-                        if self.stream:
-                            await self.tools["output"].handle(message)
+                        if self.stream:   
+                            if self.synthesizer_provider == "polly":
+                                for chunk in yield_chunks_from_memory(message['data'], chunk_size=16384):
+                                    await self.tools["output"].handle(create_ws_data_packet(chunk, message["meta_info"]))
+                            else:
+                                if self.task_config["tools_config"]["output"]["provider"] == "twilio" and not self.connected_through_dashboard and self.synthesizer_provider == "elevenlabs":
+                                    message['data'] = wav_bytes_to_pcm(message['data'])
+                                await self.tools["output"].handle(message)
                         else:
-                            audio_bytes += message['data']
-                    else:
-                        logger.info(f"{message['meta_info']['sequence_id']} is not in sequence ids  {self.sequence_ids} and hence not sending to output")
-                    if "end_of_synthesizer_stream" in message["meta_info"] and message["meta_info"]["end_of_synthesizer_stream"]:
-                        logger.info(f"Got End of stream and hence removing from sequence ids {self.sequence_ids}  {message['meta_info']['sequence_id']}")
-                        self.sequence_ids.remove(message["meta_info"]["sequence_id"])
-                        if not self.stream:
-                            message['data'] = audio_bytes
+                            logger.info("Stream is not enabled and hence sending entire audio")
                             await self.tools["output"].handle(message)
-                            audio_bytes = b""
-                await asyncio.sleep(0.5)
+                    else:
+                        logger.info(f"{message['meta_info']['sequence_id']} is not in sequence ids  {self.sequence_ids} and hence not sending to output")                
+                        await asyncio.sleep(0.5)
 
         except Exception as e:
             traceback.print_exc()
@@ -641,6 +676,7 @@ class TaskManager(BaseManager):
                 tasks = [asyncio.create_task(self.tools['input'].handle())]
                 if "transcriber" in self.tools:
                     tasks.append(asyncio.create_task(self._listen_transcriber()))
+                    self.transcriber_task = asyncio.create_task(self.tools["transcriber"].run())
 
                 if self.connected_through_dashboard and self.task_config['task_type'] == "conversation":
                     logger.info(
@@ -667,7 +703,10 @@ class TaskManager(BaseManager):
             else:
                 # Run agent followup tasks
                 try:
-                    await self._run_llm_task(self.input_parameters)
+                    if self.task_config["task_type"] == "webhook":
+                        await self._process_followup_task()
+                    else:
+                        await self._run_llm_task(self.input_parameters)
                 except Exception as e:
                     logger.error(f"Could not do llm call: {e}")
                     raise Exception(e)
@@ -675,6 +714,7 @@ class TaskManager(BaseManager):
         except asyncio.CancelledError as e:
             # Cancel all tasks on cancel
             traceback.print_exc()
+            self.transcriber_task.cancel()
             self.handle_cancellation(f"Websocket got cancelled {self.task_id}")
 
         except Exception as e:
@@ -684,7 +724,7 @@ class TaskManager(BaseManager):
 
         finally:
             # Construct output
-            if "synthesizer" in self.tools and self.synthesizer_task is not None:
+            if "synthesizer" in self.tools and self.synthesizer_task is not None:   
                 self.synthesizer_task.cancel()
             if self.task_id == 0:
                 output = {"messages": self.history, "conversation_time": time.time() - self.start_time,
@@ -697,7 +737,8 @@ class TaskManager(BaseManager):
                     output = { "extracted_data" : self.extracted_data, "task_type": "extraction"}
                 elif self.task_config["task_type"] == "summarization":
                     output = {"summary" : self.summarized_data, "task_type": "summarization"}
-
+                elif self.task_config["task_type"] == "webhook":
+                    output = {"status" : self.webhook_response, "task_type": "webhook"}
             return output
 
     def handle_cancellation(self, message):

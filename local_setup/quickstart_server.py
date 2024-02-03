@@ -9,7 +9,7 @@ from typing import List
 import redis.asyncio as redis
 from dotenv import load_dotenv
 from bolna.helpers.analytics_helpers import calculate_total_cost_of_llm_from_transcript, update_high_level_assistant_analytics_data
-from bolna.helpers.utils import get_md5_hash, get_s3_file, store_file, format_messages, load_file, create_ws_data_packet
+from bolna.helpers.utils import convert_audio_to_wav, get_md5_hash, get_s3_file, pcm_to_wav_bytes, resample, store_file, format_messages, load_file, create_ws_data_packet, wav_bytes_to_pcm
 from bolna.providers import *
 from bolna.prompts import *
 from bolna.helpers.logger_config import configure_logger
@@ -18,16 +18,14 @@ from bolna.models import *
 from bolna.llms import LiteLLM
 from litellm import token_counter
 from datetime import datetime, timezone
-from models import VoiceRequestModel, CreateUserModel, AddVoiceModel, VoiceRequestModel, DEFAULT_VOICES, DEFAULT_LLM_MODELS
 from bolna.agent_manager.assistant_manager import AssistantManager
-import base64
 
+PREPROCESS_DIR = "agent_data"
 load_dotenv()
 logger = configure_logger(__name__)
 
 redis_pool = redis.ConnectionPool.from_url(os.getenv('REDIS_URL'), decode_responses=True)
 redis_client = redis.Redis.from_pool(redis_pool)
-#cache = InmemoryScalarCache(ttl = 3600)
 active_websockets: List[WebSocket] = []
 
 app = FastAPI()
@@ -87,17 +85,40 @@ async def generate_audio_from_text(text, synthesizer_config):
     return audio_data
 
 
-async def process_and_store_audio(conversation_graph, user_id, assistant_id, synthesizer_config):
-    logger.info(f"Generating and storing data in S3 for the conversation graph {conversation_graph}")
+
+
+async def process_and_store_audio(conversation_graph, assistant_id, synthesizer_config):
+    audio_bytes = {}
     for node_key, node_value in conversation_graph['task_1'].items():
         for content in node_value['content']:
             if 'text' in content:
                 text = content['text']
                 file_name = get_md5_hash(content['text'])
                 content['audio'] = file_name
+                logger.info(f"NOt in hashes and hence not solving for it")
                 audio_data = await generate_audio_from_text(text, synthesizer_config)
-                await store_file(BUCKET_NAME, f"{user_id}/{assistant_id}/audio/{file_name}.{synthesizer_config['audio_format']}", audio_data, f"{synthesizer_config['audio_format']}")
-    await store_file(BUCKET_NAME, f"{user_id}/{assistant_id}/conversation_details.json", conversation_graph, "json", local = True)
+                if synthesizer_config['provider'] == 'polly':
+                    logger.info(f"converting {synthesizer_config['provider']} into wav file")
+                    audio_data = pcm_to_wav_bytes(audio_data, sample_rate= int(synthesizer_config['provider_config']['sampling_rate']))
+                elif synthesizer_config['provider'] == 'openai':
+                    audio_data = convert_audio_to_wav(audio_data, 'flac')
+                elif synthesizer_config['provider'] == 'elevenlabs':
+                    audio_data = convert_audio_to_wav(audio_data, 'mp3')
+                audio_bytes[file_name] = audio_data
+                await store_file(BUCKET_NAME, f"{assistant_id}/audio/{file_name}.wav", audio_data, f"wav") #Always store in wav format
+                
+    logger.info(f'Now processing audio bytes to pcm')
+
+    for key in audio_bytes.keys():
+        if synthesizer_config['provider'] == 'polly':
+            logger.info(f"Storing {key}")
+            await store_file(BUCKET_NAME, f"{assistant_id}/audio/{key}.pcm", audio_bytes[key], f"pcm")
+        elif synthesizer_config['provider'] == 'elevenlabs' or synthesizer_config['provider'] == 'openai' or synthesizer_config['provider'] == 'xtts' or synthesizer_config['provider'] == 'fourie':
+            audio_data = wav_bytes_to_pcm(resample(audio_bytes[key], 8000, format="wav"))
+            await store_file(BUCKET_NAME, f"{assistant_id}/audio/{key}.pcm", audio_data, f"pcm")
+
+    await store_file(BUCKET_NAME, f"{assistant_id}/conversation_details.json", conversation_graph, "json", local=True, preprocess_dir="agent_data")
+
 
 
 def get_follow_up_prompts(prompt_json, tasks):
@@ -122,28 +143,29 @@ def create_prompts_for_followup_tasks(tasks, prompt_json):
         return prompt_json
 
 
-async def background_process_and_store(conversation_type, assistant_id, assistant_prompts ,synthesizer_config = None,):
+async def background_process_and_store(conversation_type, assistant_id, assistant_prompts ,synthesizer_config = None, tasks = None):
     try:
         # For loop and add multiple prompts into the prompt file from here.
         if conversation_type == "preprocessed":
             conversation_graph = prompt_json['conversation_graph']
             logger.info(f"Preprocessed conversation. Storing required files to s3. {synthesizer_config}")
             prompt_json = create_prompts_for_followup_tasks(tasks, prompt_json)
-            await process_and_store_audio(prompt_json, user_id, assistant_id, synthesizer_config)
+            await process_and_store_audio(prompt_json, assistant_id, synthesizer_config)
             logger.info("Now storing nodes and graph")
         else:
             object_key = f'{assistant_id}/conversation_details.json'
-            await store_file(bucket_name = None, file_key = object_key, file_data = assistant_prompts, content_type = 'json', local = True)            
+            await store_file(bucket_name = None, file_key = object_key, file_data = assistant_prompts, content_type = 'json', local = True, preprocess_dir= PREPROCESS_DIR)            
     except Exception as e:
         traceback.print_exc()
         logger.error(f"Error while storing conversation details to s3: {e}")
 
-@app.post("/assistant")
-async def create_agent(agent_data: CreateAssistantPayload):
+@app.post("/agent")
+#Loading.
+async def create_agent(agent_data: CreateAgentPayload):
     agent_uuid = str(uuid.uuid4())
-    data_for_db = agent_data.assistant_config.dict()
+    data_for_db = agent_data.agent_config.dict()
     data_for_db["assistant_status"] = "seeding"
-    assistant_prompts = agent_data.assistant_prompts
+    agent_prompts = agent_data.agent_prompts
     logger.info(f'Data for DB {data_for_db}')
 
     if len(data_for_db['tasks']) > 0:
@@ -158,13 +180,13 @@ async def create_agent(agent_data: CreateAssistantPayload):
     redis_task = asyncio.create_task(redis_client.set(agent_uuid, json.dumps(data_for_db)))
     background_process_and_store_task = asyncio.create_task(
         background_process_and_store(data_for_db['tasks'][0]['tools_config']['llm_agent']['agent_flow_type'], 
-                                agent_uuid, agent_data.assistant_prompts, synthesizer_config = data_for_db['tasks'][0]['tools_config']['synthesizer']))
+                                agent_uuid, agent_prompts, synthesizer_config = data_for_db['tasks'][0]['tools_config']['synthesizer'], tasks = data_for_db['tasks']))
 
     return {"agent_id": agent_uuid, "state": "created"}
 
 
-@app.put("/assistant/{agent_uuid}")
-async def edit_agent(agent_uuid: str, agent_data: CreateAssistantPayload):
+@app.put("/agent/{agent_uuid}")
+async def edit_agent(agent_uuid: str, agent_data: CreateAgentPayload):
     user_id = agent_data.user_id
     existing_data = await redis_client.mget(agent_uuid)
     if not existing_data:
@@ -191,6 +213,7 @@ async def edit_agent(agent_uuid: str, agent_data: CreateAssistantPayload):
 
     return {"agent_id": agent_uuid, "state": "updated"}
 
+
 ############################################################################################# 
 # Websocket 
 #############################################################################################
@@ -210,7 +233,7 @@ async def websocket_endpoint(agent_id: str, websocket: WebSocket, user_agent: st
         raise HTTPException(status_code=404, detail="Agent not found")
 
     assistant_manager = AssistantManager(agent_config, websocket, agent_id)
-  
+    
     try:
         async for index, task_output in assistant_manager.run(local = True):
             logger.info(task_output)

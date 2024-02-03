@@ -1,5 +1,4 @@
 import os
-import openai
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from .llm import BaseLLM
@@ -15,31 +14,52 @@ class OpenAiLLM(BaseLLM):
         super().__init__(max_tokens, buffer_size)
         self.model = streaming_model
         self.started_streaming = False
-        
+        logger.info(f"Initializing OpenAI LLM with model: {self.model} and maxc tokens {max_tokens}")
         self.max_tokens = max_tokens
         self.classification_model = classification_model
         self.temperature = temperature
         self.vllm_model = "vllm" in self.model
+        self.model_args = { "max_tokens": self.max_tokens, "temperature": self.temperature, "model": self.model}
+
         if self.vllm_model:
             base_url = kwargs.get("base_url", os.getenv("VLLM_SERVER_BASE_URL"))
-            self.async_client = AsyncOpenAI(api_key=kwargs.get('llm_key', os.getenv('OPENAI_API_KEY')), base_url=base_url)
+            api_key=kwargs.get('llm_key', None)
+            if len(api_key) > 0:
+                api_key = api_key
+            else:
+                api_key = "EMPTY"
+            self.async_client = AsyncOpenAI( base_url=base_url, api_key= api_key)
             self.model = self.model[5:]
+            self.model_args["model"] = self.model
+            if "top_k" in kwargs:
+                self.model_args["top_k"] = kwargs["top_k"]
+            logger.info(f"Using VLLM model base_url {base_url} and model {self.model} and api key {api_key}")
         else:
             self.async_client = AsyncOpenAI(
             api_key=kwargs.get('llm_key', os.getenv('OPENAI_API_KEY'))
         )
+        
+        if "top_p" in kwargs:
+            self.model_args["top_p"] = kwargs["top_p"]
+        if "stop" in kwargs:
+            self.model_args["stop"] = kwargs["stop"]        
+        if "presence_penalty" in kwargs:
+            self.model_args["presence_penalty"] = kwargs["presence_penalty"]
+        if  "frequency_penalty" in kwargs:
+            self.model_args["frequency_penalty"] = kwargs["frequency_penalty"]
 
     async def generate_stream(self, messages, classification_task=False, synthesize=True, request_json=False):
         response_format = self.get_response_format(request_json)
 
         answer, buffer = "", ""
         model = self.classification_model if classification_task is True else self.model
-        logger.info(f"request to open ai {messages}")
-        #message_hash = get_md5_hash(messages[-1].content)            
-        async for chunk in await self.async_client.chat.completions.create(model=model, temperature=self.temperature,
-                                                                           messages=messages, stream=True,
-                                                                           max_tokens=self.max_tokens,
-                                                                           response_format=response_format):
+        logger.info(f"request to open ai {messages} max tokens {self.max_tokens} ")
+        model_args = self.model_args
+        model_args["response_format"] = response_format
+        model_args["messages"] = messages
+        model_args["stream"] = True
+        model_args["stop"] = ["User:"]
+        async for chunk in await self.async_client.chat.completions.create(**model_args):
             if text_chunk := chunk.choices[0].delta.content:
                 answer += text_chunk
                 buffer += text_chunk

@@ -28,6 +28,7 @@ class Graph:
         self.graph = self._create_graph(conversation_data)
 
     def _create_graph(self, data):
+        logger.info(f"Creating graph")
         node_map = dict()
         for node_id, node_data in data.items():
             node = Node(
@@ -62,9 +63,13 @@ class GraphBasedConversationAgent(BaseAgent):
         self.preprocessed = preprocessed
 
         # Goals
+        self.graph = None
+        self.conversation_intro_done = False
+
+    def load_prompts_and_create_graph(self, prompts):
         self.graph = Graph(prompts)
         self.current_node = self.graph.root
-        self.conversation_intro_done = False
+
 
     def _get_audio_text_pair(self, node):
         ind = random.randint(0, len(node.content) - 1)
@@ -115,6 +120,7 @@ class GraphBasedConversationAgent(BaseAgent):
     async def generate(self, history, stream=False, synthesize=False, label_flow=None):
         try:
             if self.preprocessed:
+                logger.info(f"Current node {str(self.current_node)}")
                 if len(self.current_node.children) == 0:
                     ind = random.randint(0, len(self.current_node.content) - 1)
                     audio_pair = self.current_node.content[ind]
