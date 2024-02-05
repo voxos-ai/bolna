@@ -633,7 +633,7 @@ class TaskManager(BaseManager):
                                     self.latency_dict[message['meta_info']["request_id"]]['synthesizer'] = {"first_chunk_generation_latency": first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time'], "first_chunk_generation_timestamp": first_chunk_generation_timestamp}
                                 
                                 for chunk in yield_chunks_from_memory(message['data'], chunk_size=16384):
-                                    await self.tools["output"].handle(create_ws_data_packet(message['data'], message["meta_info"]))
+                                    await self.tools["output"].handle(create_ws_data_packet(chunk, message["meta_info"]))
                             else:
                                 if self.task_config["tools_config"]["output"]["provider"] == "twilio" and not self.connected_through_dashboard and self.synthesizer_provider == "elevenlabs":
                                     message['data'] = wav_bytes_to_pcm(message['data'])
@@ -678,7 +678,6 @@ class TaskManager(BaseManager):
                     audio_chunk = await get_raw_audio_bytes_from_base64(self.assistant_name, text,
                                                                     'pcm', local=self.is_local,
                                                                     assistant_id=self.assistant_id)
-                    #await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
                     for chunk in  yield_chunks_from_memory(audio_chunk, chunk_size=16384):
                         await self.tools["output"].handle(create_ws_data_packet(chunk, meta_info))
             elif self.synthesizer_provider in SUPPORTED_SYNTHESIZER_MODELS.keys():
