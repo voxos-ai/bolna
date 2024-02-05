@@ -287,6 +287,8 @@ def json_to_pydantic_schema(json_data):
     return dynamic_model.schema_json(indent=2)
 
 def clean_json_string(json_str):
+    if type(json_str) is not str:
+        return json_str
     if json_str.startswith("```json") and json_str.endswith("```"):
         json_str = json_str[7:-3].strip()
     return json_str

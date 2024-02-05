@@ -58,7 +58,7 @@ class GraphBasedConversationAgent(BaseAgent):
     def __init__(self, llm, prompts, context_data=None, preprocessed=True, log_dir_name=None):
         super().__init__()
         # Config
-        self.brain = llm
+        self.llm = llm
         self.context_data = context_data
         self.preprocessed = preprocessed
 
@@ -108,7 +108,7 @@ class GraphBasedConversationAgent(BaseAgent):
 
         message = [{"role": "system", "content": self.current_node.prompt}] + prev_messages
         # Get classification label from LLM
-        response = await self.brain.generate(message, True, False, request_json=True)
+        response = await self.llm.generate(message, True, False, request_json=True)
         logger.info(f"Classification response {response}")
         classification_result = json.loads(response)
         label = classification_result["classification_label"]

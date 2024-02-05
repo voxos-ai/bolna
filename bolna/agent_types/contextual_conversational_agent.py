@@ -14,7 +14,7 @@ logger = configure_logger(__name__)
 class StreamingContextualAgent(BaseAgent):
     def __init__(self, llm):
         super().__init__()
-        self.brain = llm
+        self.llm = llm
         self.conversation_completion_llm = OpenAiLLM(classification_model=os.getenv('CHECK_FOR_COMPLETION_LLM', llm.classification_model))
         self.history = [{'content': ""}]
 
@@ -31,6 +31,6 @@ class StreamingContextualAgent(BaseAgent):
         return answer['answer'].lower() == "yes"
 
     async def generate(self, history, synthesize=False):
-        async for token in self.brain.generate_stream(history, synthesize=synthesize):
+        async for token in self.llm.generate_stream(history, synthesize=synthesize):
             logger.info('Agent: {}'.format(token))
             yield token

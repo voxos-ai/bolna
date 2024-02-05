@@ -3,6 +3,7 @@ from collections import defaultdict
 import traceback
 import time
 import json
+import uuid
 from .base_manager import BaseManager
 from bolna.agent_types import *
 from bolna.providers import *
@@ -273,6 +274,8 @@ class TaskManager(BaseManager):
                 text_chunk = text_chunk[:-4]
 
         logger.info("received text from LLM for output processing: {}".format(text_chunk))
+        if "request_id" not in meta_info:
+            meta_info["request_id"] = str(uuid.uuid4())
         self.latency_dict[meta_info["request_id"]]["llm"] = { "first_buffer_latency": time.time() - meta_info["start_time"]}
         if next_step == "synthesizer" and not should_bypass_synth:
             task = asyncio.gather(self._synthesize(create_ws_data_packet(text_chunk, meta_info)))
@@ -315,13 +318,15 @@ class TaskManager(BaseManager):
 
 
             json_data = await self.tools["llm_agent"].generate(self.history)
-            if self.task_config["task_type"] == "summary":
+            if self.task_config["task_type"] == "summarization":
                 logger.info(f'Summary {json_data["summary"]}')
                 self.summarized_data = json_data["summary"]
+                logger.info(f"self.summarize {self.summarized_data}")
             else:
                 json_data = clean_json_string(json_data)
                 logger.info(f"After replacing {json_data}")
-                json_data = json.loads(json_data)
+                if type(json_data) is not dict:
+                    json_data = json.loads(json_data)
                 self.extracted_data = json_data
         logger.info("Done")
 
@@ -767,6 +772,7 @@ class TaskManager(BaseManager):
                 if self.task_config["task_type"] == "extraction":
                     output = { "extracted_data" : self.extracted_data, "task_type": "extraction"}
                 elif self.task_config["task_type"] == "summarization":
+                    logger.info(f"self.summarized_data {self.summarized_data}")
                     output = {"summary" : self.summarized_data, "task_type": "summarization"}
                 elif self.task_config["task_type"] == "webhook":
                     output = {"status" : self.webhook_response, "task_type": "webhook"}
