@@ -51,16 +51,20 @@ class DeepgramTranscriber(BaseTranscriber):
     def get_deepgram_ws_url(self):
         websocket_url = (f"wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=16000&channels=1"
                          f"&filler_words=true&endpointing={self.endpointing}")
+        self.first_audio_wav_duration = 0.5 #We're sending 8k samples with a sample rate of 16k
 
         if self.provider == 'twilio':
             websocket_url = (f"wss://api.deepgram.com/v1/listen?model=nova-2&encoding=mulaw&sample_rate=8000&channels"
                              f"=1&filler_words=true&endpointing={self.endpointing}")
             self.sampling_rate = 8000
+            self.first_audio_wav_duration = 0.1
 
         if self.provider == "playground":
             websocket_url = (f"wss://api.deepgram.com/v1/listen?model=nova-2&encoding=opus&sample_rate=8000&channels"
                              f"=1&filler_words=true&endpointing={self.endpointing}")
             self.sampling_rate = 8000
+            self.first_audio_wav_duration = 0.0 #There's no streaming from the playground 
+
         if "en" not in self.language:
             websocket_url += '&language={}'.format(self.language)
         return websocket_url
@@ -89,6 +93,9 @@ class DeepgramTranscriber(BaseTranscriber):
             'Authorization': 'Token {}'.format(self.api_key),
             'Content-Type': 'audio/webm'  # Currently we are assuming this is via browser
         }
+
+        self.current_request_id = self.generate_request_id()
+        self.meta_info['request_id'] = self.current_request_id
         start_time = time.time()
         async with self.session as session:
             async with session.post(self.api_url, data=audio_data, headers=headers) as response:
@@ -120,8 +127,14 @@ class DeepgramTranscriber(BaseTranscriber):
                 if end_of_stream:
                     break
                 self.meta_info = ws_data_packet.get('meta_info')
+                start_time = time.time()
                 transcription = await self._get_http_transcription(ws_data_packet.get('data'))
+                transcription['meta_info']["include_latency"] = True
+                transcription['meta_info']["transcriber_latency"] = time.time() - start_time
+                transcription['meta_info']['audio_duration'] = transcription['meta_info']['transcriber_duration']
+                transcription['meta_info']['last_vocal_frame_timestamp'] = start_time = time.time()
                 yield transcription
+
             if self.transcription_task is not None:
                 self.transcription_task.cancel()
         except asyncio.CancelledError:
@@ -160,7 +173,6 @@ class DeepgramTranscriber(BaseTranscriber):
                     self.audio_submitted = True
                     self.audio_submission_time = time.time()
                     self.current_request_id = self.generate_request_id()
-                    logger.info(f"Setting request id")
                     self.meta_info['request_id'] = self.current_request_id
 
                 audio_bytes = ws_data_packet['data']
@@ -202,14 +214,24 @@ class DeepgramTranscriber(BaseTranscriber):
                     logger.info(f"Full Transcriber message {msg}")
                     await self.push_to_transcriber_queue(create_ws_data_packet(curr_message, self.meta_info))
                     logger.info('User: {}'.format(curr_message))
-                    curr_message = ""
+                    
                     self.interruption_signalled = False
                     if self.audio_submitted == True:
-                        logger.info("Transcriber Latency: {}".format(time.time() - self.audio_submission_time))
+                        logger.info("Transcriber Latency: {} for request id {}".format(time.time() - self.audio_submission_time, self.current_request_id))
                         self.meta_info["start_time"] = self.audio_submission_time
                         self.meta_info["end_time"] = time.time()
                         self.audio_submitted = False
+                    if curr_message != "":
+                        self.meta_info["include_latency"] = True
+                        self.meta_info["audio_duration"] = msg['duration']  
+                        last_spoken_audio_frame = (self.audio_submission_time - self.first_audio_wav_duration) + float(msg['duration'])
+                        # abs because sometimes due to network delays duration from deepgram is higher  
+                        self.meta_info["transcriber_latency"] = abs(time.time() - last_spoken_audio_frame)  #We subtract first audio wav because user started speaking then. In this case we can calculate actual latency taken by the transcriber
+                        self.meta_info["last_vocal_frame_timestamp"] = last_spoken_audio_frame
+                    else:
+                        self.meta_info["include_latency"] = False
                     yield create_ws_data_packet("TRANSCRIBER_END", self.meta_info)
+                    curr_message = ""
             except Exception as e:
                 logger.error(f"Error while getting transcriptions {e}")
                 self.interruption_signalled = False

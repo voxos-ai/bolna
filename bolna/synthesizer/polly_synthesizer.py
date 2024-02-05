@@ -4,7 +4,7 @@ from aiobotocore.session import AioSession
 from contextlib import AsyncExitStack
 import audioop
 from bolna.helpers.logger_config import configure_logger
-from bolna.helpers.utils import create_ws_data_packet
+from bolna.helpers.utils import convert_audio_to_wav, create_ws_data_packet, pcm_to_wav_bytes, resample
 from .base_synthesizer import BaseSynthesizer
 
 logger = configure_logger(__name__)
@@ -22,6 +22,7 @@ class PollySynthesizer(BaseSynthesizer):
         self.sample_rate = str(sampling_rate)
         # @TODO: initialize client here
         self.client = None
+        self.first_chunk_generated = False
 
 
     def get_format(self, format):
@@ -68,9 +69,17 @@ class PollySynthesizer(BaseSynthesizer):
             message = await self.internal_queue.get()
             logger.info(f"Generating TTS response for message: {message}")
             meta_info, text = message.get("meta_info"), message.get("data")
-            message = await self.__generate_http(text)
+            message = await self.__generate_http(text)            
+            if self.format == "mp3":
+                message = convert_audio_to_wav(message, source_format="mp3")
+            if not self.first_chunk_generated:
+                meta_info["is_first_chunk"] = True
+                self.first_chunk_generated = True
+            else:
+                meta_info["is_first_chunk"] = False
             if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
                 meta_info["end_of_synthesizer_stream"] = True
+                self.first_chunk_generated = False
             yield create_ws_data_packet(message, meta_info)
 
     async def push(self, message):

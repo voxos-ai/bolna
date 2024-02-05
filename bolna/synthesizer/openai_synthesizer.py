@@ -19,7 +19,8 @@ class OPENAISynthesizer(BaseSynthesizer):
         api_key = kwargs.get("synthesizer_key", os.getenv("OPENAI_API_KEY"))
         self.async_client = AsyncOpenAI(api_key= api_key)
         self.model = model
-  
+        self.first_chunk_generated = False 
+
     # Ensuring we can only do wav outputs becasue mulaw conversion for others messes up twilio
     def get_format(self, format):
         return "flac"
@@ -47,12 +48,11 @@ class OPENAISynthesizer(BaseSynthesizer):
         spoken_response = await self.async_client.audio.speech.create(
             model=self.model,
             voice=self.voice,
-            response_format=self.format,
+            response_format="mp3",
             input=text
             )
 
         for chunk in spoken_response.iter_bytes(chunk_size=4096):
-            logger.info(f"Generating TTS response chunk: {chunk}")
             yield chunk
 
     async def generate(self):
@@ -63,14 +63,27 @@ class OPENAISynthesizer(BaseSynthesizer):
                 meta_info, text = message.get("meta_info"), message.get("data")
                 if self.stream:
                     async for chunk in self.__generate_stream(text):
-                        yield create_ws_data_packet(convert_audio_to_wav(chunk, 'flac'), meta_info)
+                        if not self.first_chunk_generated:
+                            meta_info["is_first_chunk"] = True
+                            self.first_chunk_generated = True
+                        yield create_ws_data_packet(convert_audio_to_wav(chunk, 'mp3'), meta_info)
+                        
+                        
                     if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
                         meta_info["end_of_synthesizer_stream"] = True
+                        self.first_chunk_generated = False
                         yield create_ws_data_packet(b"\x00", meta_info)
 
                 else:
                     logger.info(f"Generating without a stream")
                     audio = await self.__generate_http(text)
+                    if not self.first_chunk_generated:
+                        meta_info["is_first_chunk"] = True
+                        self.first_chunk_generated = True
+                    
+                    if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
+                        meta_info["end_of_synthesizer_stream"] = True
+                        self.first_chunk_generated = False 
                     yield create_ws_data_packet(convert_audio_to_wav(audio, 'flac'), meta_info)
                 
         except Exception as e:
