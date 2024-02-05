@@ -29,6 +29,7 @@ class XTTSSynthesizer(BaseSynthesizer):
         self.websocket_connection = None
         self.audio = b"" 
         self.chunk_count = 1
+        self.first_chunk_generated = False
 
     def get_format(self, format):
         return "wav"
@@ -120,18 +121,31 @@ class XTTSSynthesizer(BaseSynthesizer):
                 async for message in self.receiver():
                     logger.info(f"Received message friom server")
                     yield create_ws_data_packet(message, self.meta_info)
+                    if not self.first_chunk_generated:
+                        self.meta_info["is_first_chunk"] = True
+                        self.first_chunk_generated = True
+
                     if message == b'\x00':
                         logger.info("received null byte and hence end of stream")
                         self.meta_info["end_of_synthesizer_stream"] = True
                         yield create_ws_data_packet(message, self.meta_info)
+                        self.first_chunk_generated = False
             else:
                 while True:
                     message = await self.internal_queue.get()
                     logger.info(f"Generating TTS response for message: {message}")
                     meta_info, text = message.get("meta_info"), message.get("data")
                     audio = await self.__generate_http(text)
-                    meta_info["end_of_synthesizer_stream"] = True
+                    if not self.first_chunk_generated:
+                        meta_info["is_first_chunk"] = True
+                        self.first_chunk_generated = True
+                    
+                    if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
+                        meta_info["end_of_synthesizer_stream"] = True
+                        self.first_chunk_generated = False
+
                     yield create_ws_data_packet(audio, meta_info)
+                    
                     logger.info(f"Generated TTS response for message: {message}")
         except Exception as e:
                 logger.error(f"Error in xtts generate {e}")

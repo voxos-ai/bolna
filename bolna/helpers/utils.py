@@ -308,7 +308,9 @@ def pcm_to_wav_bytes(pcm_data, sample_rate = 16000, num_channels = 1, sample_wid
     return buffer.getvalue()
 
 def convert_audio_to_wav(audio_bytes, source_format = 'flac'):
+    logger.info(f"CONVERTING AUDIO TO WAV {source_format}")
     audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format=source_format)
+    logger.info(f"GOT audio wav {audio}")
     buffer = io.BytesIO()
     audio.export(buffer, format="wav")
     logger.info(f"SENDING BACK WAV")
