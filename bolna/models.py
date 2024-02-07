@@ -48,6 +48,7 @@ class Transcriber(BaseModel):
     sampling_rate: Optional[int] = 16000
     encoding: Optional[str] = "linear16"
     endpointing: Optional[int] = 400
+    keywords: Optional[str] = None
 
     @validator("model")
     def validate_model(cls, value):
