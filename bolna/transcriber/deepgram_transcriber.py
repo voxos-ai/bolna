@@ -44,19 +44,18 @@ class DeepgramTranscriber(BaseTranscriber):
         self.interruption_signalled = False
         self.sampling_rate = 16000
         if not self.stream:
+            self.api_url = f"https://api.deepgram.com/v1/listen?model=nova-2&filler_words=true&language={self.language}"
             self.session = aiohttp.ClientSession()
             if self.keywords is not None:
                 keyword_string = "&keywords=" + "&keywords=".join(self.keywords.split(","))
-            self.api_url = f"https://api.deepgram.com/v1/listen?model=nova-2&filler_words=true&language={self.language}{keyword_string}"
+                self.api_url = f"{self.api_url}{keyword_string}"
         self.audio_submitted = False
         self.audio_submission_time = None
         self.num_frames = 0
         self.connection_start_time = None
     def get_deepgram_ws_url(self):
-        if self.keywords is not None:
-            keyword_string = "&keywords=" + "&keywords=".join(self.keywords.split(","))
         websocket_url = (f"wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=16000&channels=1"
-                         f"&filler_words=true&endpointing={self.endpointing}{keyword_string}")
+                         f"&filler_words=true&endpointing={self.endpointing}")
         self.first_audio_wav_duration = 0.5 #We're sending 8k samples with a sample rate of 16k
 
         if self.provider == 'twilio':
@@ -74,6 +73,9 @@ class DeepgramTranscriber(BaseTranscriber):
         if "en" not in self.language:
             websocket_url += '&language={}'.format(self.language)
         
+        if self.keywords is not None:
+            keyword_string = "&keywords=" + "&keywords=".join(self.keywords.split(","))
+            websocket_url = f"{websocket_url}{keyword_string}"
         logger.info(f"Deepgram websocket url: {websocket_url}")
         return websocket_url
 
