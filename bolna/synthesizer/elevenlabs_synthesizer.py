@@ -25,7 +25,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         self.ws_url = f"wss://api.elevenlabs.io/v1/text-to-speech/{self.voice}/stream-input?model_id=eleven_multilingual_v1&optimize_streaming_latency=2&output_format={self.get_format(self.audio_format, self.sampling_rate)}"
         self.api_url = f"https://api.elevenlabs.io/v1/text-to-speech/{self.voice}?optimize_streaming_latency=3&output_format="
         self.first_chunk_generated = False
-
+        self.last_text_sent = False
     #Ensuring we only do wav output for now
     def get_format(self, format, sampling_rate):    
         #Eleven labs only allow mp3_44100_64, mp3_44100_96, mp3_44100_128, mp3_44100_192, pcm_16000, pcm_22050, pcm_24000, ulaw_8000
@@ -68,6 +68,8 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                 "flush": True
             }
             await self.websocket_connection.send(json.dumps(input_message))
+            if end_of_llm_stream:
+                self.last_text_sent = True
 
             # self.connection_open = False
 
@@ -142,12 +144,18 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                     if not self.first_chunk_generated:
                         self.meta_info["is_first_chunk"] = True
                         self.first_chunk_generated = True
-
+                    
+                    if self.last_text_sent:
+                        #Reset the last_text_sent and first_chunk converted to reset synth latency
+                        self.first_chunk_generated = False
+                        self.last_text_sent = True
+                        
                     if message == b'\x00':
                         logger.info("received null byte and hence end of stream")
                         self.meta_info["end_of_synthesizer_stream"] = True
                         yield create_ws_data_packet(resample(message), self.meta_info)
                         self.first_chunk_generated = False
+                    
             else:
                 while True:
                     message = await self.internal_queue.get()

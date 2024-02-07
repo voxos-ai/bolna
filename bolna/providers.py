@@ -12,7 +12,8 @@ SUPPORTED_SYNTHESIZER_MODELS = {
     "fourie": FourieSynthesizer
 }
 SUPPORTED_TRANSCRIBER_MODELS = {
-    'deepgram': DeepgramTranscriber
+    'deepgram': DeepgramTranscriber,
+    'whisper': DeepgramTranscriber #Seperate out a transcriber for https://github.com/bolna-ai/streaming-transcriber-server or build a deepgram compatible proxy
 }
 SUPPORTED_LLM_MODELS = {
     'openai': OpenAiLLM,

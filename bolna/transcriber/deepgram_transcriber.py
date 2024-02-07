@@ -145,7 +145,6 @@ class DeepgramTranscriber(BaseTranscriber):
             raise Exception("Something went wrong")
 
     async def __check_for_vad(self, data):
-        start_time = time.time()
         if data is None:
             return
         self.audio.append(data)
@@ -153,7 +152,6 @@ class DeepgramTranscriber(BaseTranscriber):
         audio_int16 = np.frombuffer(audio_bytes, np.int16)
         frame_np = int2float(audio_int16)
         
-
         speech_prob = self.vad_model(torch.from_numpy(frame_np.copy()), self.sampling_rate).item()
         logger.info(f"Speech probability {speech_prob}")
         if float(speech_prob) >= float(self.voice_threshold):
