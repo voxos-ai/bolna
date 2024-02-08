@@ -16,6 +16,7 @@ torch.set_num_threads(1)
 logger = configure_logger(__name__)
 load_dotenv()
 
+
 class DeepgramTranscriber(BaseTranscriber):
     def __init__(self, provider, input_queue=None, model='deepgram', stream=True, language="en", endpointing="400",
                  sampling_rate="16000", encoding="linear16", output_queue= None, keywords = None, **kwargs):
@@ -53,7 +54,9 @@ class DeepgramTranscriber(BaseTranscriber):
         self.audio_submission_time = None
         self.num_frames = 0
         self.connection_start_time = None
+
     def get_deepgram_ws_url(self):
+        keyword_string = ""
         websocket_url = (f"wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=16000&channels=1"
                          f"&filler_words=true&endpointing={self.endpointing}")
         self.first_audio_wav_duration = 0.5 #We're sending 8k samples with a sample rate of 16k
