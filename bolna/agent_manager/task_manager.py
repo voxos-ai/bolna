@@ -133,6 +133,8 @@ class TaskManager(BaseManager):
 
         # state of conversation
         self.was_long_pause = False
+        self.buffers = []
+        self.should_respond = False
 
         # Call conversations
         self.call_sid = None
@@ -542,6 +544,7 @@ class TaskManager(BaseManager):
     ########################
 
     async def _handle_transcriber_output(self, next_task, transcriber_message, meta_info):
+        logger.info(f"Next task {next_task} transcriber Message {transcriber_message}")
         if next_task == "llm":
             meta_info["origin"] = "transcriber"
             self.llm_task = asyncio.create_task(
@@ -557,69 +560,69 @@ class TaskManager(BaseManager):
         logger.info(f"Starting transcriber task")
         try:
             while True:
-                if self.stream:
-                    message = await self.transcriber_output_queue.get()
-                    if message['data'] == "transcriber_connection_closed":
+                message = await self.transcriber_output_queue.get()
+                logger.info(f"Message {message}")
+                if message["data"].strip() == "":
+                    continue
+                if message['data'] == "transcriber_connection_closed":
                         self.transcriber_duration += message['meta_info']["transcriber_duration"]
                         logger.info("transcriber connection closed")
                         break
-
+                
+                if self.stream:
                     self._set_call_details(message)
                     meta_info = message["meta_info"]
                     sequence = await self.process_transcriber_request(meta_info)
-                    if message['data'].strip() == "INTERRUPTION":
-                        logger.info(f"Processing interruption FROM INTERRUPTION")
-                        await self.process_interruption()
-                    elif message['data'] == "TRANSCRIBER_BEGIN":
+                    next_task = self._get_next_step(sequence, "transcriber")
+                    logger.info(f'got the next task {next_task}')
+                    if message['data'] == "TRANSCRIBER_BEGIN":
                         if meta_info.get("should_interrupt", False):
                             logger.info(f"Processing interruption from TRANSCRIBER_BEGIN")
                             await self.process_interruption()
-                        logger.info("starting transcriber stream")
-                        continue
                     elif message['data'] == "TRANSCRIBER_END":
-                        logger.info("transcriber stream and preparing the next step")
-                        next_task = self._get_next_step(sequence, "transcriber")
-                        logger.info(f'got the next task {next_task}')
-                        if self.was_long_pause:
-                            logger.info(
-                                f"Seems like there was a long pause {self.history[-1]['content']} , {transcriber_message}")
-                            message = self.history[-1]['content'] + " " + transcriber_message
-                            self.history = self.history[:-1]
-                            self.was_long_pause = False
-                        
                         meta_info = message['meta_info']
-                        logger.info(f"@@@@@@@@ META INFO {meta_info}")
-                        include_latency = meta_info.get("include_latency", False)
-                        if include_latency:
-                            self.latency_dict[meta_info['request_id']]["transcriber"] = {"total_latency":  meta_info["transcriber_latency"], "audio_duration": meta_info["audio_duration"], "last_vocal_frame_timestamp": meta_info["last_vocal_frame_timestamp"] }
-                        logger.info(f'invoking next_task {next_task} with transcriber_message: {transcriber_message}')
-                        if len(transcriber_message.strip()) != 0:
-                            await self._handle_transcriber_output(next_task, transcriber_message, meta_info)
+
+                        self.latency_dict[meta_info['request_id']]["transcriber"] = {"total_latency":  meta_info["transcriber_latency"], "audio_duration": meta_info["audio_duration"], "last_vocal_frame_timestamp": meta_info["last_vocal_frame_timestamp"] }
+
+                        # Since it's transcriber_end, mostly we are dealing with latency related metrics here
+                        # if self.was_long_pause:
+                        #     logger.info(
+                        #         f"Seems like there was a long pause {self.history[-1]['content']} , {transcriber_message}")
+                        #     message = self.history[-1]['content'] + " " + transcriber_message
+                        #     self.history = self.history[:-1]
+                        #     self.was_long_pause = False
+                        
                         transcriber_message = ""
                         continue
                     else:
-                        logger.info("processed text from transcriber: {}".format(message['data']))
-                        transcriber_message += message['data']
+                            logger.info(f'invoking next_task {next_task} with transcriber_message: {message["data"]}')
+                            if transcriber_message.strip() == message['data'].strip():
+                                logger.info("Transcriber message and message data are same and hence not changing anything else")
+                            elif len(message['data'].strip()) != 0:
+                                #Currently simply cancel the next task
+                                #Todo add more optimisation by just getting next x tokens or something similar
+                                if self.llm_task is not None:
+                                    self.llm_task.cancel()
+                                transcriber_message = message['data']
+                                await self._handle_transcriber_output(next_task, transcriber_message, meta_info)
+                                logger.info("Current transcript: {}. Predicting next few tokens".format(transcriber_message))
                 else:
-                    logger.info("Not a streaming conversation. Hence getting a full blown transcript")
-                    message = await self.transcriber_output_queue.get()
-                    meta_info = message['meta_info']
-                    logger.info(f"message from transcriber {message}")
-                    if message['data'] == "transcriber_connection_closed":
-                        self.transcriber_duration += message['meta_info']["transcriber_duration"]
-                        logger.info("transcriber connection closed")
-                        break
-                    include_latency = meta_info.get("include_latency", False)
-                    if include_latency:
-                        self.latency_dict[meta_info['request_id']]["transcriber"] = {"total_latency":  meta_info["transcriber_latency"], "audio_duration": meta_info["audio_duration"], "last_vocal_frame_timestamp": meta_info["last_vocal_frame_timestamp"] }
-
-                    sequence = message["meta_info"]["sequence"]
-                    next_task = self._get_next_step(sequence, "transcriber")
-                    self.transcriber_duration += message["meta_info"]["transcriber_duration"] if "transcriber_duration" in message["meta_info"] else 0
-                    await self._handle_transcriber_output(next_task, message['data'], message["meta_info"])
+                    await self.__process_http_transcription(message)
+        
         except Exception as e:
             traceback.print_exc()
             logger.error(f"Error in transcriber {e}")
+    
+    async def __process_http_transcription(self, message):
+        meta_info = message['meta_info']
+        include_latency = meta_info.get("include_latency", False)
+        if include_latency:
+            self.latency_dict[meta_info['request_id']]["transcriber"] = {"total_latency":  meta_info["transcriber_latency"], "audio_duration": meta_info["audio_duration"], "last_vocal_frame_timestamp": meta_info["last_vocal_frame_timestamp"] }
+
+        sequence = message["meta_info"]["sequence"]
+        next_task = self._get_next_step(sequence, "transcriber")
+        self.transcriber_duration += message["meta_info"]["transcriber_duration"] if "transcriber_duration" in message["meta_info"] else 0
+        await self._handle_transcriber_output(next_task, message['data'], message["meta_info"])
 
     async def __listen_synthesizer(self):
         try:
