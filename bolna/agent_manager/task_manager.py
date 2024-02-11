@@ -1,5 +1,6 @@
 import asyncio
 from collections import defaultdict
+import queue
 import traceback
 import time
 import json
@@ -39,14 +40,16 @@ class TaskManager(BaseManager):
         self.llm_queue = asyncio.Queue()
         self.synthesizer_queue = asyncio.Queue()
         self.transcriber_output_queue = asyncio.Queue()
-
+        self.queues = {
+            "transcriber": self.audio_queue,
+            "llm": self.llm_queue,
+            "synthesizer": self.synthesizer_queue
+        }
         self.pipelines = task['toolchain']['pipelines']
         self.textual_chat_agent = False
         if task['toolchain']['pipelines'][0] == "llm" and task["tools_config"]["llm_agent"][
             "agent_task"] == "conversation":
             self.textual_chat_agent = False
-
-        self.start_time = time.time()
 
         # Assistant persistance stuff
         self.assistant_id = assistant_id
@@ -57,62 +60,14 @@ class TaskManager(BaseManager):
 
         # Prompts
         self.prompts, self.system_prompt = {}, {}
-
         self.input_parameters = input_parameters
-
-        self.queues = {
-            "transcriber": self.audio_queue,
-            "llm": self.llm_queue,
-            "synthesizer": self.synthesizer_queue
-        }
-
-        if task_id == 0:
-            if self.task_config["tools_config"]["input"]["provider"] in SUPPORTED_INPUT_HANDLERS.keys():
-                logger.info(f"Connected through dashboard {connected_through_dashboard}")
-                input_kwargs = {"queues": self.queues,
-                                "websocket": self.websocket,
-                                "input_types": get_required_input_types(task),
-                                "mark_set": self.mark_set,
-                                "connected_through_dashboard": self.connected_through_dashboard}  
-                                                          
-                if connected_through_dashboard:
-                    logger.info("Connected through dashboard and hence using default input handler")
-                    # If connected through dashboard get basic dashboard class
-                    input_handler_class = SUPPORTED_INPUT_HANDLERS.get("default")
-                    input_kwargs['queue'] = input_queue
-                else:
-                    input_handler_class = SUPPORTED_INPUT_HANDLERS.get(
-                        self.task_config["tools_config"]["input"]["provider"])
-
-                    if self.task_config['tools_config']['input']['provider'] == 'default':
-                        input_kwargs['queue'] = input_queue
-                self.tools["input"] = input_handler_class(**input_kwargs)
-            else:
-                raise "Other input handlers not supported yet"
-        output_kwargs = {"websocket": self.websocket}  
         
-        if self.task_config["tools_config"]["output"] is None:
-            logger.info("Not setting up any output handler as it is none")
-        elif self.task_config["tools_config"]["output"]["provider"] in SUPPORTED_OUTPUT_HANDLERS.keys():
-            if connected_through_dashboard:
-                logger.info("Connected through dashboard and hence using default output handler")
-                output_handler_class = SUPPORTED_OUTPUT_HANDLERS.get("default")
-                output_kwargs['queue'] = output_queue
-            else:
-                output_handler_class = SUPPORTED_OUTPUT_HANDLERS.get(self.task_config["tools_config"]["output"]["provider"])
-            
-                if self.task_config["tools_config"]["output"]["provider"] == "twilio":
-                    output_kwargs['mark_set'] = self.mark_set
-                    logger.info(f"Making sure that the sampling rate for output handler is 8000")
-                    self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 8000
-                    self.task_config['tools_config']['synthesizer']['audio_format'] = 'pcm'
-                else:
-                    self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 24000
-                    output_kwargs['queue'] = output_queue
 
-            self.tools["output"] = output_handler_class(**output_kwargs)
-        else:
-            raise "Other input handlers not supported yet"
+        #IO HANDLERS
+        if task_id == 0:
+            self.__setup_input_handlers(connected_through_dashboard, input_queue)
+        self.__setup_output_handlers(connected_through_dashboard, output_queue)
+
 
         # Current conversation state
         self.current_request_id = None
@@ -144,29 +99,98 @@ class TaskManager(BaseManager):
         self.transcriber_duration = 0
         self.synthesizer_characters = 0
         self.ended_by_assistant = False
+        self.start_time = time.time()
 
+        #Tasks
         self.extracted_data = None
         self.summarized_data = None
         logger.info(f"TASK CONFIG {self.task_config['tools_config'] }")
         self.stream = ( self.task_config["tools_config"]['synthesizer'] is not None and self.task_config["tools_config"]["synthesizer"]["stream"]) and not connected_through_dashboard
         #self.stream = not connected_through_dashboard #Currently we are allowing only realtime conversation based usecases. Hence it'll always be true unless connected through dashboard
         self.is_local = False
-
-        # Memory
-        self.cache = cache
-        logger.info("task initialization completed")
-
-        # Sequence id for interruption
-        self.curr_sequence_id = 0
-        self.sequence_ids = set()
         if self.task_config["tools_config"]["llm_agent"] is not None:
             llm_config = {
                 "streaming_model": self.task_config["tools_config"]["llm_agent"]["streaming_model"],
                 "classification_model": self.task_config["tools_config"]["llm_agent"]["classification_model"],
                 "max_tokens": self.task_config["tools_config"]["llm_agent"]["max_tokens"]
             }
+        
+        # Output stuff
+        self.output_task = None
+        self.buffered_output_queue = asyncio.Queue()
 
+        # Memory
+        self.cache = cache
+        logger.info("task initialization completed")
+
+        self.kwargs = kwargs
+        # Sequence id for interruption
+        self.curr_sequence_id = 0
+        self.sequence_ids = set()
+        
         # setting transcriber
+        self.__setup_transcriber()
+        # setting synthesizer
+        self.__setup_synthesizer(llm_config)
+        # setting llm
+        llm = self.__setup_llm(llm_config)
+        #Setup tasks
+        self.__setup_tasks(llm)
+        
+
+
+    def __setup_output_handlers(self, connected_through_dashboard, output_queue):
+        output_kwargs = {"websocket": self.websocket}  
+        
+        if self.task_config["tools_config"]["output"] is None:
+            logger.info("Not setting up any output handler as it is none")
+        elif self.task_config["tools_config"]["output"]["provider"] in SUPPORTED_OUTPUT_HANDLERS.keys():
+            if connected_through_dashboard:
+                logger.info("Connected through dashboard and hence using default output handler")
+                output_handler_class = SUPPORTED_OUTPUT_HANDLERS.get("default")
+                output_kwargs['queue'] = output_queue
+            else:
+                output_handler_class = SUPPORTED_OUTPUT_HANDLERS.get(self.task_config["tools_config"]["output"]["provider"])
+            
+                if self.task_config["tools_config"]["output"]["provider"] == "twilio":
+                    output_kwargs['mark_set'] = self.mark_set
+                    logger.info(f"Making sure that the sampling rate for output handler is 8000")
+                    self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 8000
+                    self.task_config['tools_config']['synthesizer']['audio_format'] = 'pcm'
+                else:
+                    self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 24000
+                    output_kwargs['queue'] = output_queue
+
+            self.tools["output"] = output_handler_class(**output_kwargs)
+        else:
+            raise "Other input handlers not supported yet"
+
+
+    def __setup_input_handlers(self, connected_through_dashboard, input_queue):
+            if self.task_config["tools_config"]["input"]["provider"] in SUPPORTED_INPUT_HANDLERS.keys():
+                logger.info(f"Connected through dashboard {connected_through_dashboard}")
+                input_kwargs = {"queues": self.queues,
+                                "websocket": self.websocket,
+                                "input_types": get_required_input_types(self.task_config),
+                                "mark_set": self.mark_set,
+                                "connected_through_dashboard": self.connected_through_dashboard}  
+                                                          
+                if connected_through_dashboard:
+                    logger.info("Connected through dashboard and hence using default input handler")
+                    # If connected through dashboard get basic dashboard class
+                    input_handler_class = SUPPORTED_INPUT_HANDLERS.get("default")
+                    input_kwargs['queue'] = input_queue
+                else:
+                    input_handler_class = SUPPORTED_INPUT_HANDLERS.get(
+                        self.task_config["tools_config"]["input"]["provider"])
+
+                    if self.task_config['tools_config']['input']['provider'] == 'default':
+                        input_kwargs['queue'] = input_queue
+                self.tools["input"] = input_handler_class(**input_kwargs)
+            else:
+                raise "Other input handlers not supported yet"
+
+    def __setup_transcriber(self):
         if self.task_config["tools_config"]["transcriber"] is not None:
             provider = "playground" if self.connected_through_dashboard else self.task_config["tools_config"]["input"][
                 "provider"]
@@ -177,8 +201,9 @@ class TaskManager(BaseManager):
                     self.task_config["tools_config"]["transcriber"]["stream"] = False
                 transcriber_class = SUPPORTED_TRANSCRIBER_MODELS.get(
                     self.task_config["tools_config"]["transcriber"]["model"])
-                self.tools["transcriber"] = transcriber_class(provider, **self.task_config["tools_config"]["transcriber"], **kwargs)
-        # setting synthesizer
+                self.tools["transcriber"] = transcriber_class(provider, **self.task_config["tools_config"]["transcriber"], **self.kwargs)
+
+    def __setup_synthesizer(self, llm_config):
         logger.info(f"Synthesizer config: {self.task_config['tools_config']['synthesizer']}")
         if self.task_config["tools_config"]["synthesizer"] is not None:
             self.synthesizer_provider = self.task_config["tools_config"]["synthesizer"].pop("provider")
@@ -187,18 +212,19 @@ class TaskManager(BaseManager):
             if self.connected_through_dashboard:
                 self.task_config["tools_config"]["synthesizer"]["audio_format"] = "mp3" # Hard code mp3 if we're connected through dashboard
                 self.task_config["tools_config"]["synthesizer"]["stream"] = False #Hardcode stream to be False as we don't want to get blocked by a __listen_synthesizer co-routine
-            self.tools["synthesizer"] = synthesizer_class(**self.task_config["tools_config"]["synthesizer"], **provider_config, **kwargs)
+            self.tools["synthesizer"] = synthesizer_class(**self.task_config["tools_config"]["synthesizer"], **provider_config, **self.kwargs)
             llm_config["buffer_size"] = self.task_config["tools_config"]["synthesizer"].get('buffer_size')
 
-        # setting llm
+    def __setup_llm(self, llm_config):
         if self.task_config["tools_config"]["llm_agent"] is not None:
             if self.task_config["tools_config"]["llm_agent"]["family"] in SUPPORTED_LLM_MODELS.keys():
                 llm_class = SUPPORTED_LLM_MODELS.get(self.task_config["tools_config"]["llm_agent"]["family"])
                 logger.info(f"LLM CONFIG {llm_config}")
-                llm = llm_class(**llm_config, **kwargs)
+                llm = llm_class(**llm_config, **self.kwargs)
+                return llm
             else:
                 raise Exception(f'LLM {self.task_config["tools_config"]["llm_agent"]["family"]} not supported')
-
+    def __setup_tasks(self, llm):
         if self.task_config["task_type"] == "conversation":
             if self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "streaming":
                 self.tools["llm_agent"] = StreamingContextualAgent(llm)
@@ -530,7 +556,10 @@ class TaskManager(BaseManager):
         logger.info(f"Handling interruption sequenxce ids {self.sequence_ids}")
         self.sequence_ids = set() #Remove all the sequence ids so subsequent won't be processed
         await self.tools["output"].handle_interruption()
-        
+        if self.output_task is not None:
+            logger.info("Closing output task")
+            self.output_task.cancel()
+
         if self.llm_task is not None:
             self.llm_task.cancel()
             self.llm_task = None
@@ -580,18 +609,9 @@ class TaskManager(BaseManager):
                             logger.info(f"Processing interruption from TRANSCRIBER_BEGIN")
                             await self.process_interruption()
                     elif message['data'] == "TRANSCRIBER_END":
+                        self.output_task = asyncio.create_task(self.__process_ouput_loop())
                         meta_info = message['meta_info']
-
-                        self.latency_dict[meta_info['request_id']]["transcriber"] = {"total_latency":  meta_info["transcriber_latency"], "audio_duration": meta_info["audio_duration"], "last_vocal_frame_timestamp": meta_info["last_vocal_frame_timestamp"] }
-
-                        # Since it's transcriber_end, mostly we are dealing with latency related metrics here
-                        # if self.was_long_pause:
-                        #     logger.info(
-                        #         f"Seems like there was a long pause {self.history[-1]['content']} , {transcriber_message}")
-                        #     message = self.history[-1]['content'] + " " + transcriber_message
-                        #     self.history = self.history[:-1]
-                        #     self.was_long_pause = False
-                        
+                        self.latency_dict[meta_info['request_id']]["transcriber"] = {"total_latency":  meta_info["transcriber_latency"], "audio_duration": meta_info["audio_duration"], "last_vocal_frame_timestamp": meta_info["last_vocal_frame_timestamp"] }                        
                         transcriber_message = ""
                         continue
                     else:
@@ -603,7 +623,7 @@ class TaskManager(BaseManager):
                                 #Todo add more optimisation by just getting next x tokens or something similar
                                 if self.llm_task is not None:
                                     self.llm_task.cancel()
-                                transcriber_message = message['data']
+                                transcriber_message += message['data']
                                 await self._handle_transcriber_output(next_task, transcriber_message, meta_info)
                                 logger.info("Current transcript: {}. Predicting next few tokens".format(transcriber_message))
                 else:
@@ -641,7 +661,8 @@ class TaskManager(BaseManager):
                                     self.latency_dict[message['meta_info']["request_id"]]['synthesizer'] = {"first_chunk_generation_latency": first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time'], "first_chunk_generation_timestamp": first_chunk_generation_timestamp}
                                 
                                 for chunk in yield_chunks_from_memory(message['data'], chunk_size=16384):
-                                    await self.tools["output"].handle(create_ws_data_packet(chunk, message["meta_info"]))
+                                    self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, message["meta_info"]))
+                                    #await self.tools["output"].handle()
                             else:
                                 if self.task_config["tools_config"]["output"]["provider"] == "twilio" and not self.connected_through_dashboard and self.synthesizer_provider == "elevenlabs":
                                     message['data'] = wav_bytes_to_pcm(message['data'])
@@ -650,7 +671,8 @@ class TaskManager(BaseManager):
                                     first_chunk_generation_timestamp = time.time()
                                     self.latency_dict[message['meta_info']["request_id"]]['synthesizer'] = {"first_chunk_generation_latency": first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time'], "first_chunk_generation_timestamp": first_chunk_generation_timestamp}
                                 
-                                await self.tools["output"].handle(message)
+                                self.buffered_output_queue.put_nowait(message)
+                                #await self.tools["output"].handle(message)
                         else:
                             logger.info("Stream is not enabled and hence sending entire audio")
                             first_chunk_generation_timestamp = time.time()
@@ -698,6 +720,18 @@ class TaskManager(BaseManager):
                 logger.info("other synthesizer models not supported yet")
         except Exception as e:
             logger.error(f"Error in synthesizer: {e}")
+
+
+    ######################################
+    # Output handling
+    ######################################
+            
+    #Currently this loop only closes in case of interruption 
+    # but it shouldn't be the case. 
+    async def __process_ouput_loop(self):
+        while True:
+            message = await self.buffered_output_queue.get()
+            await self.tools["output"].handle(message)
 
     async def run(self):
         """
