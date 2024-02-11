@@ -228,18 +228,22 @@ class DeepgramTranscriber(BaseTranscriber):
                     continue
 
                 transcript = msg['channel']['alternatives'][0]['transcript']
+                if transcript and len(transcript.strip()) == 0:
+                    continue
 
-                self.update_meta_info()
-                if transcript and len(transcript.strip()) != 0:
-                    if self.process_interim_results and msg["is_final"] == True:    
-                        logger.info(f"Is final interim Transcriber message {msg}")           
-                        curr_message = self.__get_speaker_transcript(msg)
-                        self.meta_info["is_final"] = False
-                        # Check if we need to send back real convers
-                        yield create_ws_data_packet(curr_message, self.meta_info)
-                    else:
-                        #If we're not processing interim results
-                        curr_message += " " + transcript
+
+                if self.process_interim_results and msg["is_final"] == True:    
+                    logger.info(f"Is final interim Transcriber message {msg}")
+                    curr_message = self.__get_speaker_transcript(msg)
+                    self.meta_info["is_final"] = False
+                    # Check if we need to send back real convers
+                    yield create_ws_data_packet(curr_message, self.meta_info)
+                else:
+                    #If we're not processing interim results
+                    # Yield current transcript
+                    curr_message = transcript
+                    yield create_ws_data_packet(curr_message, self.meta_info)
+
 
 
                 if msg["speech_final"]  or not self.stream:
