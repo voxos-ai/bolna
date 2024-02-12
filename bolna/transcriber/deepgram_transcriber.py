@@ -1,4 +1,5 @@
 import asyncio
+import traceback
 import numpy as np
 import torch
 import websockets
@@ -58,18 +59,18 @@ class DeepgramTranscriber(BaseTranscriber):
     def get_deepgram_ws_url(self):
         keyword_string = ""
         websocket_url = (f"wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=16000&channels=1"
-                         f"&filler_words=true&endpointing={self.endpointing}")
+                         f"&filler_words=true&endpointing={self.endpointing}&vad_events=true")
         self.first_audio_wav_duration = 0.5 #We're sending 8k samples with a sample rate of 16k
 
         if self.provider == 'twilio':
             websocket_url = (f"wss://api.deepgram.com/v1/listen?model=nova-2&encoding=mulaw&sample_rate=8000&channels"
-                             f"=1&filler_words=true&endpointing={self.endpointing}{keyword_string}")
+                             f"=1&filler_words=true&endpointing={self.endpointing}{keyword_string}&vad_events=true")
             self.sampling_rate = 8000
             self.first_audio_wav_duration = 0.1
 
         if self.provider == "playground":
             websocket_url = (f"wss://api.deepgram.com/v1/listen?model=nova-2&encoding=opus&sample_rate=8000&channels"
-                             f"=1&filler_words=true&endpointing={self.endpointing}{keyword_string}")
+                             f"=1&filler_words=true&endpointing={self.endpointing}{keyword_string}&vad_events=true")
             self.sampling_rate = 8000
             self.first_audio_wav_duration = 0.0 #There's no streaming from the playground 
 
@@ -209,18 +210,20 @@ class DeepgramTranscriber(BaseTranscriber):
                     self.meta_info["transcriber_duration"] = msg["duration"]
                     yield create_ws_data_packet("transcriber_connection_closed", self.meta_info)
                     return
+                elif msg['type'] == "SpeechStarted":
+                    logger.info(f"Got a VAD signal from the deepgram server")
+                    if not self.on_device_vad:
+                        logger.info("Not on device vad and hence inetrrupting")
+                        self.meta_info["should_interrupt"] = True
+                        yield create_ws_data_packet("TRANSCRIBER_BEGIN", self.meta_info)
+                        await asyncio.sleep(0.1)
+                        continue
 
                 transcript = msg['channel']['alternatives'][0]['transcript']
 
-                logger.info(f"$$$$$$ $$$$$$$$$$$$ $$$$$$$$$$$ $$$$$$$$ Got a message from deepdram {msg}")
                 self.update_meta_info()
 
-                if transcript and len(transcript.strip()) != 0:
-                    if curr_message == "":
-                        if not self.on_device_vad:
-                            logger.info("Not on device vad and hence inetrrupting")
-                            self.meta_info["should_interrupt"] = True
-                        yield create_ws_data_packet("TRANSCRIBER_BEGIN", self.meta_info)
+                if transcript and len(transcript.strip()) != 0:                        
                     curr_message += " " + transcript
 
                 if msg["speech_final"]  or not self.stream:
@@ -249,6 +252,7 @@ class DeepgramTranscriber(BaseTranscriber):
                     yield create_ws_data_packet("TRANSCRIBER_END", self.meta_info)
                     curr_message = ""
             except Exception as e:
+                traceback.print_exc()
                 logger.error(f"Error while getting transcriptions {e}")
                 self.interruption_signalled = False
                 yield create_ws_data_packet("TRANSCRIBER_END", self.meta_info)
