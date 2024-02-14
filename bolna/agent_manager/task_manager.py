@@ -358,6 +358,17 @@ class TaskManager(BaseManager):
                 self.extracted_data = json_data
         logger.info("Done")
 
+    async def __process_end_of_conversation(self):
+        logger.info("Got end of conversation. I'm stopping now")
+        self.conversation_ended = True
+        self.ended_by_assistant = True
+        await self.tools["input"].stop_handler()
+        logger.info("Stopped input handler")
+        if "transcriber" in self.tools and not self.connected_through_dashboard:
+            logger.info("Stopping transcriber")
+            await self.tools["transcriber"].toggle_connection()
+            await asyncio.sleep(5)  # Making sure whatever message was passed is over
+
     async def _process_conversation_preprocessed_task(self, message, sequence, meta_info):
         if self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "preprocessed":
             llm_response = ""
@@ -370,16 +381,10 @@ class TaskManager(BaseManager):
             async for text_chunk in self.tools['llm_agent'].generate(self.history, stream=True, synthesize=True,
                                                                      label_flow=self.label_flow):
                 if text_chunk == "<end_of_conversation>":
-                    logger.info("Got end of conversation. I'm stopping now")
-                    self.conversation_ended = True
-                    await asyncio.sleep(5) #Make sure that the message is passed over and complete before cutting the handler
-                    await self.tools["input"].stop_handler()
-                    logger.info("Stopped input handler")
-                    if "transcriber" in self.tools and not self.connected_through_dashboard:
-                        logger.info("Stopping transcriber")
-                        await self.tools["transcriber"].toggle_connection()
-                        await asyncio.sleep(5)  # Making sure whatever message was passed is over
+                    meta_info["end_of_conversation"] = True
+                    self.buffered_output_queue.put_nowait(create_ws_data_packet("<end_of_conversation>", meta_info))
                     return
+                
                 logger.info(f"Text chunk {text_chunk}")
                 if is_valid_md5(text_chunk):
                     self.synthesizer_tasks.append(asyncio.create_task(
@@ -440,7 +445,6 @@ class TaskManager(BaseManager):
                 if self.stream:
                     if end_of_llm_stream:
                         meta_info["end_of_llm_stream"] = True
-                    
                     await self._handle_llm_output(next_step, text_chunk, should_bypass_synth, meta_info)
                     
             if not self.stream:
@@ -455,15 +459,7 @@ class TaskManager(BaseManager):
             #answer = await self.tools["llm_agent"].check_for_completion(self.history)
             answer = False
             if answer:
-                logger.info("Got end of conversation. I'm stopping now")
-                self.conversation_ended = True
-                self.ended_by_assistant = True
-                await self.tools["input"].stop_handler()
-                logger.info("Stopped input handler")
-                if "transcriber" in self.tools and not self.connected_through_dashboard:
-                    logger.info("Stopping transcriber")
-                    await self.tools["transcriber"].toggle_connection()
-                    await asyncio.sleep(5)  # Making sure whatever message was passed is over
+                await self.__process_end_of_conversation()
                 return
 
             self.llm_processed_request_ids.add(self.current_request_id)
@@ -559,6 +555,7 @@ class TaskManager(BaseManager):
         if self.output_task is not None:
             logger.info("Closing output task")
             self.output_task.cancel()
+            self.output_task = None
 
         if self.llm_task is not None:
             self.llm_task.cancel()
@@ -609,7 +606,15 @@ class TaskManager(BaseManager):
                             logger.info(f"Processing interruption from TRANSCRIBER_BEGIN")
                             await self.process_interruption()
                     elif message['data'] == "TRANSCRIBER_END":
-                        self.output_task = asyncio.create_task(self.__process_ouput_loop())
+                        logger.info(f"Starting the TRANSCRIBER_END TASK")
+                        if self.output_task is None:
+                            logger.info(f"Output task was none and hence starting it")
+                            self.output_task = asyncio.create_task(self.__process_ouput_loop())
+                        
+                        if self._is_preprocessed_flow():
+                            logger.info(f"It's a preprocessed flow and hence updating current node")
+                            self.tools['llm_agent'].update_current_node()
+
                         meta_info = message['meta_info']
                         self.latency_dict[meta_info['request_id']]["transcriber"] = {"total_latency":  meta_info["transcriber_latency"], "audio_duration": meta_info["audio_duration"], "last_vocal_frame_timestamp": meta_info["last_vocal_frame_timestamp"] }                        
                         transcriber_message = ""
@@ -626,6 +631,8 @@ class TaskManager(BaseManager):
                                 transcriber_message += message['data']
                                 await self._handle_transcriber_output(next_task, transcriber_message, meta_info)
                                 logger.info("Current transcript: {}. Predicting next few tokens".format(transcriber_message))
+                            else:
+                                logger.info(f"Got a null message")
                 else:
                     await self.__process_http_transcription(message)
         
@@ -686,6 +693,29 @@ class TaskManager(BaseManager):
             traceback.print_exc()
             logger.error(f"Error in synthesizer {e}")
 
+    async def __send_preprocessed_audio(self, meta_info, text):            
+            #TODO: Either load IVR audio into memory before call or user s3 iter_cunks
+            # This will help with interruption in IVR
+            if self.connected_through_dashboard or self.task_config['tools_config']['output'] == "default":
+                audio_chunk = await get_raw_audio_bytes_from_base64(self.assistant_name, text,
+                                                                self.task_config["tools_config"]["output"][
+                                                                    "format"], local=self.is_local,
+                                                                assistant_id=self.assistant_id)
+                
+                await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
+            else:
+                audio_chunk = await get_raw_audio_bytes_from_base64(self.assistant_name, text,
+                                                                'pcm', local=self.is_local,
+                                                                assistant_id=self.assistant_id)
+
+                if not self.buffered_output_queue.empty():
+                    logger.info(f"Output queue was not empty and hence emptying it")
+                    self.buffered_output_queue = asyncio.Queue()
+                for chunk in  yield_chunks_from_memory(audio_chunk, chunk_size=16384):
+                    logger.debug("Sending chunk to output queue")
+                    message = create_ws_data_packet(chunk, meta_info)
+                    self.buffered_output_queue.put_nowait(message)
+
     async def _synthesize(self, message):
         meta_info = message["meta_info"]
         text = message["data"]
@@ -693,23 +723,9 @@ class TaskManager(BaseManager):
         meta_info["synthesizer_start_time"] = time.time()
         try:
             if meta_info["is_md5_hash"]:
-                logger.info('sending preprocessed audio response to {}'.format(
-                    self.task_config["tools_config"]["output"]["provider"]))
-                
-                #TODO: Either load IVR audio into memory before call or user s3 iter_cunks
-                # This will help with interruption in IVR
-                if self.connected_through_dashboard or self.task_config['tools_config']['output'] == "default":
-                    audio_chunk = await get_raw_audio_bytes_from_base64(self.assistant_name, text,
-                                                                    self.task_config["tools_config"]["output"][
-                                                                        "format"], local=self.is_local,
-                                                                    assistant_id=self.assistant_id)
-                    await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
-                else:
-                    audio_chunk = await get_raw_audio_bytes_from_base64(self.assistant_name, text,
-                                                                    'pcm', local=self.is_local,
-                                                                    assistant_id=self.assistant_id)
-                    for chunk in  yield_chunks_from_memory(audio_chunk, chunk_size=16384):
-                        await self.tools["output"].handle(create_ws_data_packet(chunk, meta_info))
+                logger.info('sending preprocessed audio response to {}'.format(self.task_config["tools_config"]["output"]["provider"]))
+                await self.__send_preprocessed_audio(meta_info, text)
+
             elif self.synthesizer_provider in SUPPORTED_SYNTHESIZER_MODELS.keys():
                 self.sequence_ids.add(meta_info["sequence_id"])
                 logger.info(f"After adding into sequence id {self.sequence_ids}")
@@ -730,8 +746,13 @@ class TaskManager(BaseManager):
     # but it shouldn't be the case. 
     async def __process_ouput_loop(self):
         while True:
+            logger.info(f"Yielding to output handler")
             message = await self.buffered_output_queue.get()
-            await self.tools["output"].handle(message)
+            if "end_of_conversation" in message['meta_info']:
+                await self.__process_end_of_conversation()
+            else:
+                await self.tools["output"].handle(message)
+                
 
     async def run(self):
         """

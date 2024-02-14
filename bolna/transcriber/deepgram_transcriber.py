@@ -70,18 +70,18 @@ class DeepgramTranscriber(BaseTranscriber):
 
     def get_deepgram_ws_url(self):
         websocket_url = (f"wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=16000&channels=1"
-                         f"&filler_words=true&endpointing={self.endpointing}&interim_results={self.process_interim_results}&vad_events=true&diarize=true")
+                         f"&filler_words=true&endpointing={self.endpointing}&interim_results={self.process_interim_results}&diarize=true")
         self.first_audio_wav_duration = 0.5 #We're sending 8k samples with a sample rate of 16k
 
         if self.provider == 'twilio':
             websocket_url = (f"wss://api.deepgram.com/v1/listen?model=nova-2&encoding=mulaw&sample_rate=8000&channels"
-                             f"=1&filler_words=true&endpointing={self.endpointing}&interim_results={self.process_interim_results}&vad_events=true&diarize=true")
+                             f"=1&filler_words=true&endpointing={self.endpointing}&interim_results={self.process_interim_results}&diarize=true")
             self.sampling_rate = 8000
             self.first_audio_wav_duration = 0.1
 
         if self.provider == "playground":
             websocket_url = (f"wss://api.deepgram.com/v1/listen?model=nova-2&encoding=opus&sample_rate=8000&channels"
-                             f"=1&filler_words=true&endpointing={self.endpointing}&interim_results={self.process_interim_results}&vad_events=true&diarize=true")
+                             f"=1&filler_words=true&endpointing={self.endpointing}&interim_results={self.process_interim_results}&diarize=true")
             self.sampling_rate = 8000
             self.first_audio_wav_duration = 0.0 #There's no streaming from the playground 
 
@@ -221,30 +221,35 @@ class DeepgramTranscriber(BaseTranscriber):
                     self.meta_info["transcriber_duration"] = msg["duration"]
                     yield create_ws_data_packet("transcriber_connection_closed", self.meta_info)
                     return
-                if msg["type"] == "SpeechStarted":
-                    if not self.on_device_vad:
-                        logger.info("Not on device vad and hence inetrrupting")
-                        yield create_ws_data_packet("TRANSCRIBER_BEGIN", self.meta_info)
-                    continue
+                # if msg["type"] == "SpeechStarted":
+                #     if not self.on_device_vad:
+                #         logger.info("Not on device vad and hence inetrrupting")
+                #         yield create_ws_data_packet("TRANSCRIBER_BEGIN", self.meta_info)
+                #     continue
 
                 transcript = msg['channel']['alternatives'][0]['transcript']
-                if transcript and len(transcript.strip()) == 0:
+                if transcript and len(transcript.strip()) == 0 or transcript == "":
                     continue
-
+                logger.info(f"Got a transcript: {len(transcript)} {len(transcript.strip())}")
+                if curr_message == "":
+                    if not self.on_device_vad:
+                        logger.info("Not on device vad and hence inetrrupting")
+                        self.meta_info["should_interrupt"] = True
+                    yield create_ws_data_packet("TRANSCRIBER_BEGIN", self.meta_info)
+                    await asyncio.sleep(0.1)
 
                 if self.process_interim_results and msg["is_final"] == True:    
                     logger.info(f"Is final interim Transcriber message {msg}")
                     curr_message = self.__get_speaker_transcript(msg)
                     self.meta_info["is_final"] = False
                     # Check if we need to send back real convers
-                    yield create_ws_data_packet(curr_message, self.meta_info)
+                    # yield create_ws_data_packet(curr_message, self.meta_info)
                 else:
                     #If we're not processing interim results
                     # Yield current transcript
                     curr_message = transcript
+                    logger.info(f"Yielding interim-message {curr_message}")
                     yield create_ws_data_packet(curr_message, self.meta_info)
-
-
 
                 if msg["speech_final"]  or not self.stream:
                     logger.info(f"Full Transcriber message {msg}")
