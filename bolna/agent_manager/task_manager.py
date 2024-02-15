@@ -85,6 +85,7 @@ class TaskManager(BaseManager):
         # Setup IO SERVICE, TRANSCRIBER, LLM, SYNTHESIZER
         self.llm_task = None
         self.synthesizer_tasks = []
+        self.synthesizer_task = None
 
         # state of conversation
         self.was_long_pause = False
@@ -385,26 +386,24 @@ class TaskManager(BaseManager):
                 if is_valid_md5(text_chunk):
                     self.synthesizer_tasks.append(asyncio.create_task(
                         self._synthesize(create_ws_data_packet(text_chunk, meta_info, is_md5_hash=True))))
-                # #Check if transcriber_end is received, if yes, update history with the required transcript
-                #     if self.callee_speaking == False:
-                #         logger.info(f"Callee isn't speaking any more, so update the history")
-                #         self.history.append(self.interim_history[-1].copy())
-                #         logger.info(f"Final History {self.history}")
                 else:
                     self.synthesizer_tasks.append(asyncio.create_task(
                         self._synthesize(create_ws_data_packet(text_chunk, meta_info, is_md5_hash=False))))
-                    
+            
+            logger.info(f"Interim history after the LLM task {self.interim_history}")
+
+            #Essentially check if last two are assistants
+            logger.info(f"Appending assistant message to the backend")
             if len(self.history) > 0 and self.history[-1]['role'] == "user":
-                logger.info(f"Adding the assistant data here as the final role was user")
+                logger.info(f"Last message was user, and hence appending to it")
                 self.history.append(self.interim_history[-1].copy())
+            elif len(self.history) > 1 and self.history[-1]['role'] == "assistant" and self.history[-2]['role'] == "assistant":
+                logger.info("Last two are assistants and hence changing the last one")
+                self.history[-1] = self.interim_history[-1].copy()
             else:
-                logger.info(f'Last message was assistant. So, update maybe? So checck if last two are assistants as well, else, simpl;y append and we will figure out soon')
-                if len(self.history) > 1 and self.history[-2]['role'] == "assistant":
-                    logger.info(f"Last two messages are assistant and hence updating the last essage")
-                    self.history[-1]['content'] = self.interim_history[-1]['content']
-                elif len(self.history) > 0:
-                    logger.info(f"Only the last message is assistant and hence appending")
-                    self.history.append(self.interim_history[-1].copy())
+                self.history.append(self.interim_history[-1].copy())
+                logger.info(f"Current history {self.history}, current interim history {self.interim_history} but it falls in else part")
+
 
     async def _process_conversation_formulaic_task(self, message, sequence, meta_info):
         start_time = time.time()
@@ -609,6 +608,7 @@ class TaskManager(BaseManager):
                     next_task = self._get_next_step(sequence, "transcriber")
                     logger.info(f'got the next task {next_task}')
                     if message['data'] == "TRANSCRIBER_BEGIN":
+                        logger.info(f"Current history{self.history}")
                         self.interim_history = self.history.copy()
                         self.callee_speaking = True
                         response_started = False #This signifies if we've gotten the first bit of interim text for the given response or not
@@ -627,25 +627,18 @@ class TaskManager(BaseManager):
 
                         self.callee_speaking = False
 
-                        logger.info(f"Current history {self.history}")
                         assistant_message = None
 
-                        if len(self.history) == 0:
-                            self.history.append({'role': 'user', 'content': message['data']})
-                        elif len(self.history)  == 1:
-                            assistant_message = self.history[-1]
-                            self.history = [{'role': 'user', 'content': message['data']}, assistant_message]
-                        else:
-                            if self.history[-1]['role'] == self.history[-2]['role'] and self.history[-1]['role'] == "asssitant":
-                                assistant_message = self.history[-1]
-                                self.history = self.history[:-1]
-                            self.history.append({'role': 'user', 'content': message['data']})
+                        # If last two messages are humans
 
-                            if assistant_message is not None:
-                                self.history.append(assistant_message)
+                        if ((len(self.history)  == 1 and self.history[-1]['role'] == "assistant")) or (len(self.history)  > 1 and self.history[-1]['role'] == 'assistant' and self.history[-2]['role'] == 'assistant'):
+                            assistant_message = self.history[-1].copy()
+                            self.history = self.history[:-1]
 
-                        logger.info(f"New History {self.history}")
-
+                        self.history.append({'role': 'user', 'content': message['data']})
+                        if assistant_message is not None:
+                            self.history.append(assistant_message)
+                        
                         meta_info = message['meta_info']
                         self.latency_dict[meta_info['request_id']]["transcriber"] = {"total_latency":  meta_info["transcriber_latency"], "audio_duration": meta_info["audio_duration"], "last_vocal_frame_timestamp": meta_info["last_vocal_frame_timestamp"] }                        
                         transcriber_message = ""
@@ -656,25 +649,27 @@ class TaskManager(BaseManager):
                                 logger.info("Transcriber message and message data are same and hence not changing anything else")
                             elif len(message['data'].strip()) != 0:
                                 #Currently simply cancel the next task
-                                #Todo add more optimisation by just getting next x tokens or something similar
+                                #TODO add more optimisation by just getting next x tokens or something similar
                                 if self.llm_task is not None:
                                     self.llm_task.cancel()
                                 transcriber_message += message['data']
 
                                 if not response_started:
                                     response_started = True
-                                    self.interim_history.append({'role': 'user', 'content': message['data']})
                                 else:
-                                    #We have already updated response to interim transcript 
+                                    #In this case user has already started speaking
+                                    # Hence check the previous message if it's user or assistant
+                                    # If it's user, simply change user's message
+                                    # If it's assistant remover assistant message and append user
                                     if self.interim_history[-1]['role'] == 'assistant':
                                         self.interim_history = self.interim_history[:-1]
+                                    else:
+                                        self.interim_history = self.interim_history[:-2]
 
-                                    #Update the content of user to latest content available
-                                    
-                                    self.interim_history[-1]['content'] = message['data']
-
-                                await self._handle_transcriber_output(next_task, transcriber_message, meta_info)
+                                self.interim_history.append({'role': 'user', 'content': message['data']})
                                 logger.info("Current transcript: {}. Predicting next few tokens".format(transcriber_message))
+                                await self._handle_transcriber_output(next_task, transcriber_message, meta_info)
+                                
                             else:
                                 logger.info(f"Got a null message")
                 else:
