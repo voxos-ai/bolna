@@ -1,6 +1,5 @@
 import asyncio
 from collections import defaultdict
-import queue
 import traceback
 import time
 import json
@@ -79,6 +78,7 @@ class TaskManager(BaseManager):
         # Need to maintain current conversation history and overall persona/history kinda thing. 
         # Soon we will maintain a seperate history for this 
         self.history = [] if conversation_history is None else conversation_history 
+        self.interim_history = self.history.copy()
         logger.info(f'History {self.history}')
         self.label_flow = []
 
@@ -370,6 +370,20 @@ class TaskManager(BaseManager):
             await self.tools["transcriber"].toggle_connection()
             await asyncio.sleep(5)  # Making sure whatever message was passed is over
 
+    def __update_transcripts(self):
+        #Essentially check if last two are assistants
+        logger.info(f"Appending assistant message to the backend")
+        if len(self.history) > 0 and self.history[-1]['role'] == "user":
+            logger.info(f"Last message was user, and hence appending to it")
+            self.history.append(self.interim_history[-1].copy())
+        elif len(self.history) > 1 and self.history[-1]['role'] == "assistant" and self.history[-2]['role'] == "assistant":
+            logger.info("Last two are assistants and hence changing the last one")
+            self.history[-1] = self.interim_history[-1].copy()
+        else:
+            self.history.append(self.interim_history[-1].copy())
+            logger.info(f"Current history {self.history}, current interim history {self.interim_history} but it falls in else part")
+
+
     async def _process_conversation_preprocessed_task(self, message, sequence, meta_info):
         if self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "preprocessed":
             llm_response = ""
@@ -391,18 +405,7 @@ class TaskManager(BaseManager):
                         self._synthesize(create_ws_data_packet(text_chunk, meta_info, is_md5_hash=False))))
             
             logger.info(f"Interim history after the LLM task {self.interim_history}")
-
-            #Essentially check if last two are assistants
-            logger.info(f"Appending assistant message to the backend")
-            if len(self.history) > 0 and self.history[-1]['role'] == "user":
-                logger.info(f"Last message was user, and hence appending to it")
-                self.history.append(self.interim_history[-1].copy())
-            elif len(self.history) > 1 and self.history[-1]['role'] == "assistant" and self.history[-2]['role'] == "assistant":
-                logger.info("Last two are assistants and hence changing the last one")
-                self.history[-1] = self.interim_history[-1].copy()
-            else:
-                self.history.append(self.interim_history[-1].copy())
-                logger.info(f"Current history {self.history}, current interim history {self.interim_history} but it falls in else part")
+            self.__update_transcripts()
 
 
     async def _process_conversation_formulaic_task(self, message, sequence, meta_info):
@@ -443,7 +446,7 @@ class TaskManager(BaseManager):
             logger.info("It was a cache hit and hence simply returning")
             await self._handle_llm_output(next_step, cache_response, should_bypass_synth, meta_info)
         else:
-            async for llm_message in self.tools['llm_agent'].generate(self.history, synthesize=True):
+            async for llm_message in self.tools['llm_agent'].generate(self.interim_history, synthesize=True):
                 text_chunk, end_of_llm_stream = llm_message
                 logger.info(f"###### time to get the first chunk {time.time() - start_time} {text_chunk}")
                 llm_response += " " + text_chunk
@@ -458,7 +461,8 @@ class TaskManager(BaseManager):
         if self.current_request_id in self.llm_rejected_request_ids:
             logger.info("User spoke while LLM was generating response")
         else:
-            self.history.append({"role": "assistant", "content": llm_response})
+            self.interim_history.append({"role": "assistant", "content": llm_response})
+            self.__update_transcripts()
 
             # TODO : Write a better check for completion prompt 
             #answer = await self.tools["llm_agent"].check_for_completion(self.history)
@@ -577,6 +581,7 @@ class TaskManager(BaseManager):
     async def _handle_transcriber_output(self, next_task, transcriber_message, meta_info):
         logger.info(f"Next task {next_task} transcriber Message {transcriber_message}")
         if next_task == "llm":
+            logger.info(f"Running llm Tasks")
             meta_info["origin"] = "transcriber"
             self.llm_task = asyncio.create_task(
                 self._run_llm_task(create_ws_data_packet(transcriber_message, meta_info)))
@@ -626,7 +631,6 @@ class TaskManager(BaseManager):
                             self.tools['llm_agent'].update_current_node()
 
                         self.callee_speaking = False
-
                         assistant_message = None
 
                         # If last two messages are humans
@@ -647,11 +651,14 @@ class TaskManager(BaseManager):
                             logger.info(f'invoking next_task {next_task} with transcriber_message: {message["data"]}')
                             if transcriber_message.strip() == message['data'].strip():
                                 logger.info("Transcriber message and message data are same and hence not changing anything else")
+
                             elif len(message['data'].strip()) != 0:
                                 #Currently simply cancel the next task
                                 #TODO add more optimisation by just getting next x tokens or something similar
                                 if self.llm_task is not None:
+                                    logger.info(f"Cancelling LLM Task")
                                     self.llm_task.cancel()
+                                    self.llm_task = None
                                 transcriber_message += message['data']
 
                                 if not response_started:
@@ -705,7 +712,7 @@ class TaskManager(BaseManager):
                                 if message['meta_info']['is_first_chunk']:
                                     first_chunk_generation_timestamp = time.time()
                                     self.latency_dict[message['meta_info']["request_id"]]['synthesizer'] = {"first_chunk_generation_latency": first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time'], "first_chunk_generation_timestamp": first_chunk_generation_timestamp}
-                                
+                                logger.info(f"Simply Storing in buffered output queue for now")
                                 for chunk in yield_chunks_from_memory(message['data'], chunk_size=16384):
                                     self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, message["meta_info"]))
                                     #await self.tools["output"].handle()
