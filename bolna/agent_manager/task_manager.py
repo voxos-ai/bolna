@@ -569,10 +569,25 @@ class TaskManager(BaseManager):
         if self.llm_task is not None:
             self.llm_task.cancel()
             self.llm_task = None
-            self.was_long_pause = True     
+            self.was_long_pause = True  
         self.synthesizer_task.cancel()
         self.synthesizer_task = asyncio.create_task(self.__listen_synthesizer())
         logger.info(f"Restarted synthesizer")
+    
+    def __clean_up_downstream_tasks(self):
+        logger.info(f"Cleaning up downstream tasks sequenxce ids {self.sequence_ids}")
+        self.sequence_ids = set()
+        if self.llm_task is not None:
+            logger.info(f"Cancelling LLM Task")
+            self.llm_task.cancel()
+            self.llm_task = None
+
+        self.synthesizer_task.cancel()
+        self.synthesizer_task = asyncio.create_task(self.__listen_synthesizer())
+        logger.info(f"Restarted synthesizer")
+        if not self.buffered_output_queue.empty():
+            logger.info(f"Output queue was not empty and hence emptying it")
+            self.buffered_output_queue = asyncio.Queue()
 
     ########################
     # Transcriber task
@@ -580,6 +595,7 @@ class TaskManager(BaseManager):
 
     async def _handle_transcriber_output(self, next_task, transcriber_message, meta_info):
         logger.info(f"Next task {next_task} transcriber Message {transcriber_message}")
+        
         if next_task == "llm":
             logger.info(f"Running llm Tasks")
             meta_info["origin"] = "transcriber"
@@ -655,10 +671,8 @@ class TaskManager(BaseManager):
                             elif len(message['data'].strip()) != 0:
                                 #Currently simply cancel the next task
                                 #TODO add more optimisation by just getting next x tokens or something similar
-                                if self.llm_task is not None:
-                                    logger.info(f"Cancelling LLM Task")
-                                    self.llm_task.cancel()
-                                    self.llm_task = None
+                                self.__clean_up_downstream_tasks()
+                                
                                 transcriber_message += message['data']
 
                                 if not response_started:

@@ -80,6 +80,7 @@ class PollySynthesizer(BaseSynthesizer):
             if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
                 meta_info["end_of_synthesizer_stream"] = True
                 self.first_chunk_generated = False
+            meta_info['text']=  text
             yield create_ws_data_packet(message, meta_info)
 
     async def push(self, message):
