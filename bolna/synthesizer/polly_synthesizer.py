@@ -1,3 +1,4 @@
+import asyncio
 from dotenv import load_dotenv
 from botocore.exceptions import BotoCoreError, ClientError
 from aiobotocore.session import AioSession
@@ -30,7 +31,7 @@ class PollySynthesizer(BaseSynthesizer):
             return "pcm"
         else:
             return "mp3"
-
+                
     @staticmethod
     async def create_client(service: str, session: AioSession, exit_stack: AsyncExitStack):
         # creates AWS session from system environment credentials & config

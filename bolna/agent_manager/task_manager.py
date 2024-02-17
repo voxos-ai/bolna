@@ -91,6 +91,7 @@ class TaskManager(BaseManager):
         self.was_long_pause = False
         self.buffers = []
         self.should_respond = False
+        self.start_response = False
 
         # Call conversations
         self.call_sid = None
@@ -437,15 +438,14 @@ class TaskManager(BaseManager):
 
         start_time = time.time()
         should_bypass_synth = 'bypass_synth' in meta_info and meta_info['bypass_synth'] == True
-        next_step = self._get_next_step(sequence, "llm")
-        self.curr_sequence_id +=1
-        meta_info["sequence_id"] = self.curr_sequence_id
+        next_step = self._get_next_step(sequence, "llm")        
         meta_info['start_time'] = time.time()
         cache_response =  self.cache.get(get_md5_hash(message['data'])) if self.cache is not None else None
         if cache_response is not None:
             logger.info("It was a cache hit and hence simply returning")
             await self._handle_llm_output(next_step, cache_response, should_bypass_synth, meta_info)
         else:
+            #messages = [self.interim_history[0], {'role': 'user', 'content': format_messages(self.history)}]
             async for llm_message in self.tools['llm_agent'].generate(self.interim_history, synthesize=True):
                 text_chunk, end_of_llm_stream = llm_message
                 logger.info(f"###### time to get the first chunk {time.time() - start_time} {text_chunk}")
@@ -521,6 +521,10 @@ class TaskManager(BaseManager):
     async def _run_llm_task(self, message):
         logger.info("running llm based agent")
         sequence, meta_info = self._extract_sequence_and_meta(message)
+        self.curr_sequence_id +=1
+        meta_info["sequence_id"] = self.curr_sequence_id
+        self.sequence_ids.add(meta_info["sequence_id"])
+        logger.info(f"After adding into sequence id {self.sequence_ids}")
 
         try:
             if self._is_extraction_task() or self._is_summarization_task():
@@ -559,21 +563,25 @@ class TaskManager(BaseManager):
 
     async def process_interruption(self):
         logger.info(f"Handling interruption sequenxce ids {self.sequence_ids}")
-        self.sequence_ids = set() #Remove all the sequence ids so subsequent won't be processed
         await self.tools["output"].handle_interruption()
-        if self.output_task is not None:
-            logger.info("Closing output task")
-            self.output_task.cancel()
-            self.output_task = None
+        self.__clean_up_downstream_tasks()
 
-        if self.llm_task is not None:
-            self.llm_task.cancel()
-            self.llm_task = None
-            self.was_long_pause = True  
-        self.synthesizer_task.cancel()
-        self.synthesizer_task = asyncio.create_task(self.__listen_synthesizer())
-        logger.info(f"Restarted synthesizer")
+        # self.sequence_ids = set() #Remove all the sequence ids so subsequent won't be processed
+
+        # if self.output_task is not None:
+        #     logger.info("Closing output task")
+        #     self.output_task.cancel()
+        #     self.output_task = None
+
+        # if self.llm_task is not None:
+        #     self.llm_task.cancel()
+        #     self.llm_task = None
+        #     self.was_long_pause = True  
+        # self.synthesizer_task.cancel()
+        # self.synthesizer_task = asyncio.create_task(self.__listen_synthesizer())
+        # logger.info(f"Restarted synthesizer")
     
+
     def __clean_up_downstream_tasks(self):
         logger.info(f"Cleaning up downstream tasks sequenxce ids {self.sequence_ids}")
         self.sequence_ids = set()
@@ -588,6 +596,8 @@ class TaskManager(BaseManager):
         if not self.buffered_output_queue.empty():
             logger.info(f"Output queue was not empty and hence emptying it")
             self.buffered_output_queue = asyncio.Queue()
+        # if "synthesizer" in self.tools:
+        #     self.tools["synthesizer"].clear_internal_queue()
 
     ########################
     # Transcriber task
@@ -629,6 +639,8 @@ class TaskManager(BaseManager):
                     next_task = self._get_next_step(sequence, "transcriber")
                     logger.info(f'got the next task {next_task}')
                     if message['data'] == "TRANSCRIBER_BEGIN":
+                        logger.info(f"Not starting the response until we get utterance end")
+                        self.start_response = False #Make start response as false
                         logger.info(f"Current history{self.history}")
                         self.interim_history = self.history.copy()
                         self.callee_speaking = True
@@ -638,10 +650,10 @@ class TaskManager(BaseManager):
                             await self.process_interruption()
                     elif "speech_final" in meta_info and meta_info['speech_final'] and message['data'] != "":
                         logger.info(f"Starting the TRANSCRIBER_END TASK")
+                        self.start_response = True
                         if self.output_task is None:
                             logger.info(f"Output task was none and hence starting it")
-                            self.output_task = asyncio.create_task(self.__process_ouput_loop())
-                        
+
                         if self._is_preprocessed_flow():
                             logger.info(f"It's a preprocessed flow and hence updating current node")
                             self.tools['llm_agent'].update_current_node()
@@ -667,6 +679,7 @@ class TaskManager(BaseManager):
                             logger.info(f'invoking next_task {next_task} with transcriber_message: {message["data"]}')
                             if transcriber_message.strip() == message['data'].strip():
                                 logger.info("Transcriber message and message data are same and hence not changing anything else")
+                                continue
 
                             elif len(message['data'].strip()) != 0:
                                 #Currently simply cancel the next task
@@ -782,18 +795,22 @@ class TaskManager(BaseManager):
         meta_info["type"] = "audio"
         meta_info["synthesizer_start_time"] = time.time()
         try:
-            if meta_info["is_md5_hash"]:
-                logger.info('sending preprocessed audio response to {}'.format(self.task_config["tools_config"]["output"]["provider"]))
-                await self.__send_preprocessed_audio(meta_info, text)
+            if not self.conversation_ended and message["meta_info"]["sequence_id"] in self.sequence_ids:
+                if meta_info["is_md5_hash"]:
+                    logger.info('sending preprocessed audio response to {}'.format(self.task_config["tools_config"]["output"]["provider"]))
+                    await self.__send_preprocessed_audio(meta_info, text)
 
-            elif self.synthesizer_provider in SUPPORTED_SYNTHESIZER_MODELS.keys():
-                self.sequence_ids.add(meta_info["sequence_id"])
-                logger.info(f"After adding into sequence id {self.sequence_ids}")
-                logger.info('sending text to {} for generation: {} '.format(self.synthesizer_provider, text))
-                self.synthesizer_characters += len(text)
-                await self.tools["synthesizer"].push(message)
+                elif self.synthesizer_provider in SUPPORTED_SYNTHESIZER_MODELS.keys():
+                    # self.sequence_ids.add(meta_info["sequence_id"])
+                    # logger.info(f"After adding into sequence id {self.sequence_ids}")
+                    logger.info('sending text to {} for generation: {} '.format(self.synthesizer_provider, text))
+                    self.synthesizer_characters += len(text)
+                    await self.tools["synthesizer"].push(message)
+                else:
+                    logger.info("other synthesizer models not supported yet")
             else:
-                logger.info("other synthesizer models not supported yet")
+                logger.info(f"{message['meta_info']['sequence_id']} is not in sequence ids  {self.sequence_ids} and hence not synthesizing this")                
+
         except Exception as e:
             logger.error(f"Error in synthesizer: {e}")
 
@@ -804,9 +821,15 @@ class TaskManager(BaseManager):
             
     #Currently this loop only closes in case of interruption 
     # but it shouldn't be the case. 
-    async def __process_ouput_loop(self):
+    async def __process_output_loop(self):
         while True:
             logger.info(f"Yielding to output handler")
+            if self.start_response == False:
+                while not self.start_response:
+                    logger.info("Start response is false and hence sleeping")
+                    await asyncio.sleep(0.1) #Sleep for 100 ms while we are waiting to respond 
+
+            logger.info(f"Start response is True and hence starting to speak")
             message = await self.buffered_output_queue.get()
             if "end_of_conversation" in message['meta_info']:
                 await self.__process_end_of_conversation()
@@ -842,7 +865,9 @@ class TaskManager(BaseManager):
                         self.synthesizer_task = asyncio.create_task(self.__listen_synthesizer())
                     except asyncio.CancelledError as e:
                         logger.error(f'Synth task got cancelled {e}')
-                        traceback.print_exc()                    
+                        traceback.print_exc()
+                if self._is_conversation_task():
+                    self.output_task = asyncio.create_task(self.__process_output_loop())         
                 try:
                     await asyncio.gather(*tasks)
                 except asyncio.CancelledError as e:
