@@ -93,7 +93,6 @@ class TaskManager(BaseManager):
         self.should_respond = False
         self.start_response = False
         self.last_response_time = time.time()
-        self.utterance_end = None
 
         # Call conversations
         self.call_sid = None
@@ -311,8 +310,7 @@ class TaskManager(BaseManager):
 
     async def process_interruption(self):
         logger.info(f"Handling interruption sequenxce ids {self.sequence_ids}")
-        await self.tools["output"].handle_interruption()
-        self.__clean_up_downstream_tasks()
+        await self.__cleanup_downstream_tasks()
 
         # self.sequence_ids = set() #Remove all the sequence ids so subsequent won't be processed
 
@@ -330,8 +328,10 @@ class TaskManager(BaseManager):
         # logger.info(f"Restarted synthesizer")
     
 
-    def __clean_up_downstream_tasks(self):
-        logger.info(f"Cleaning up downstream tasks sequenxce ids {self.sequence_ids}")
+    async def __cleanup_downstream_tasks(self):
+        start_time = time.time()
+        await self.tools["output"].handle_interruption()
+        logger.info(f"Cleaning up downstream tasks sequenxce ids {self.sequence_ids}. Time taken to send a clear message {time.time() - start_time}")
         self.sequence_ids = set()
         if self.llm_task is not None:
             logger.info(f"Cancelling LLM Task")
@@ -459,7 +459,9 @@ class TaskManager(BaseManager):
         logger.info("received text from LLM for output processing: {} which belongs to sequence id".format(text_chunk))
         if "request_id" not in meta_info:
             meta_info["request_id"] = str(uuid.uuid4())
-        self.latency_dict[meta_info["request_id"]]["llm"] = { "first_buffer_latency": time.time() - meta_info["start_time"]}
+        first_buffer_latency = time.time() - meta_info["llm_start_time"]
+        #self.latency_dict[meta_info["request_id"]]["llm"] = first_buffer_latency
+        meta_info["llm_first_buffer_generation_latency"] = first_buffer_latency
         if next_step == "synthesizer" and not should_bypass_synth:
             task = asyncio.gather(self._synthesize(create_ws_data_packet(text_chunk, meta_info)))
             self.synthesizer_tasks.append(asyncio.ensure_future(task))
@@ -520,7 +522,7 @@ class TaskManager(BaseManager):
         start_time = time.time()
         should_bypass_synth = 'bypass_synth' in meta_info and meta_info['bypass_synth'] == True
         next_step = self._get_next_step(sequence, "llm")        
-        meta_info['start_time'] = time.time()
+        meta_info['llm_start_time'] = time.time()
         cache_response =  self.cache.get(get_md5_hash(message['data'])) if self.cache is not None else None
         if cache_response is not None:
             logger.info("It was a cache hit and hence simply returning")
@@ -687,7 +689,7 @@ class TaskManager(BaseManager):
                             self.history.append(assistant_message)
                         
                         meta_info = message['meta_info']
-                        self.latency_dict[meta_info['request_id']]["transcriber"] = {"total_latency":  meta_info["transcriber_latency"], "audio_duration": meta_info["audio_duration"], "last_vocal_frame_timestamp": meta_info["last_vocal_frame_timestamp"] }                        
+                        #self.latency_dict[meta_info['request_id']]["transcriber"] = {"total_latency":  meta_info["transcriber_latency"], "audio_duration": meta_info["audio_duration"], "last_vocal_frame_timestamp": meta_info["last_vocal_frame_timestamp"] }                        
                         transcriber_message = ""
                         continue
                     else:
@@ -699,9 +701,9 @@ class TaskManager(BaseManager):
                             elif len(message['data'].strip()) != 0:
                                 #Currently simply cancel the next task
                                 #TODO add more optimisation by just getting next x tokens or something similar
-                                self.__clean_up_downstream_tasks()
+                                await self.__cleanup_downstream_tasks()
                                 self.last_response_time = time.time()
-                                transcriber_message += message['data']
+                                transcriber_message = message['data']
 
                                 if not response_started:
                                     response_started = True
@@ -716,8 +718,7 @@ class TaskManager(BaseManager):
                                         self.interim_history = self.interim_history[:-2]
 
                                 self.interim_history.append({'role': 'user', 'content': message['data']})
-                                self.utterance_end = meta_info["utterance_end"]
-                                logger.info("Current transcript: {}. Current utterance_end = {} Predicting next few tokens".format(transcriber_message, self.utterance_end))
+                                logger.info("Current transcript: {} Predicting next few tokens".format(transcriber_message))
                                 meta_info = self.__get_updated_meta_info(meta_info)
                                 await self._handle_transcriber_output(next_task, transcriber_message, meta_info)
                                 
@@ -755,27 +756,31 @@ class TaskManager(BaseManager):
             while True:
                 logger.info("Listening to synthesizer")
                 async for message in self.tools["synthesizer"].generate():
+                    meta_info = message["meta_info"]
                     if not self.conversation_ended and message["meta_info"]["sequence_id"] in self.sequence_ids:
                         logger.info(f"{message['meta_info']['sequence_id'] } is in sequence ids  {self.sequence_ids} and hence removing the sequence ids ")
                         if self.stream:   
                             if self.synthesizer_provider == "polly":
                                 if message['meta_info']['is_first_chunk']:
                                     first_chunk_generation_timestamp = time.time()
-                                    self.latency_dict[message['meta_info']["request_id"]]['synthesizer'] = {"first_chunk_generation_latency": first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time'], "first_chunk_generation_timestamp": first_chunk_generation_timestamp}
+                                    #self.latency_dict[message['meta_info']["request_id"]]['synthesizer'] = {"first_chunk_generation_latency": first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time'], "first_chunk_generation_timestamp": first_chunk_generation_timestamp}
+                                    meta_info["synthesizer_first_chunk_latency"] = first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time']
                                 logger.info(f"Simply Storing in buffered output queue for now")
                                 for chunk in yield_chunks_from_memory(message['data'], chunk_size=16384):
-                                    self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, message["meta_info"]))
+                                    self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, meta_info))
                                     #await self.tools["output"].handle()
+                                
                             else:
                                 if self.task_config["tools_config"]["output"]["provider"] == "twilio" and not self.connected_through_dashboard and self.synthesizer_provider == "elevenlabs":
                                     message['data'] = wav_bytes_to_pcm(message['data'])
                                 
                                 if "is_first_chunk" in  message['meta_info'] and message['meta_info']['is_first_chunk']:
                                     first_chunk_generation_timestamp = time.time()
-                                    self.latency_dict[message['meta_info']["request_id"]]['synthesizer'] = {"first_chunk_generation_latency": first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time'], "first_chunk_generation_timestamp": first_chunk_generation_timestamp}
+                                    #self.latency_dict[message['meta_info']["request_id"]]['synthesizer'] = {"first_chunk_generation_latency": first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time'], "first_chunk_generation_timestamp": first_chunk_generation_timestamp}
                                 
                                 self.buffered_output_queue.put_nowait(message)
                                 #await self.tools["output"].handle(message)
+                            
                         else:
                             logger.info("Stream is not enabled and hence sending entire audio")
                             first_chunk_generation_timestamp = time.time()
@@ -783,7 +788,8 @@ class TaskManager(BaseManager):
                             await self.tools["output"].handle(message)
                     else:
                         logger.info(f"{message['meta_info']['sequence_id']} is not in sequence ids  {self.sequence_ids} and hence not sending to output")                
-                        await asyncio.sleep(0.5)
+                    logger.info(f"Sleeping for 300 ms")
+                    await asyncio.sleep(0.3) #Sleeping for 100ms after receiving every chunk so other tasks can execute
 
         except Exception as e:
             traceback.print_exc()
@@ -845,22 +851,40 @@ class TaskManager(BaseManager):
     #Currently this loop only closes in case of interruption 
     # but it shouldn't be the case. 
     async def __process_output_loop(self):
-        while True:
-            logger.info(f"Yielding to output handler")
-            while self.utterance_end is not None and self.utterance_end + 500 > time.time():
-                logger.info("Endpointing time hasn't passed yet")
-                await asyncio.sleep(0.1) #Sleep for 100 ms while we are waiting to respond 
-
-            message = await self.buffered_output_queue.get()
-            logger.info("Start response is True and hence starting to speak {}".format(message['meta_info']['text']))
-
-            if "end_of_conversation" in message['meta_info']:
-                await self.__process_end_of_conversation()
-            elif 'sequence_id' in message['meta_info'] and message["meta_info"]["sequence_id"] in self.sequence_ids:
-                await self.tools["output"].handle(message)
-            else:
-                logger.info(f'{message["meta_info"]["sequence_id"]} is not in {self.sequence_ids} and hence not speaking')
+        try:
+            while True:
+                logger.info(f"Yielding to output handler")
+                message = await self.buffered_output_queue.get()
+                logger.info("Start response is True and hence starting to speak {} Current sequence ids".format(message['meta_info'], self.sequence_ids))
+                if "end_of_conversation" in message['meta_info']:
+                    await self.__process_end_of_conversation()
                 
+                if 'sequence_id' in message['meta_info'] and message["meta_info"]["sequence_id"] in self.sequence_ids:
+                    await self.tools["output"].handle(message)
+                else:
+                    logger.info(f'{message["meta_info"]["sequence_id"]} is not in {self.sequence_ids} and hence not speaking')
+                    continue
+
+                if "is_first_chunk" in  message['meta_info'] and message['meta_info']['is_first_chunk']:
+                    latency_metrics = {
+                        "transcriber": { 
+                            "utterance_end": message['meta_info']['utterance_end'], 
+                            "latency": message["meta_info"]["transcriber_latency"]
+                            }, 
+                        "llm": {
+                            "first_llm_buffer_latency" : message["meta_info"]["llm_first_buffer_generation_latency"]
+                            }, 
+                        "synthesizer": {
+                            "synthesizer_first_chunk_latency": message["meta_info"]["synthesizer_first_chunk_latency"]
+                            },
+                        "overall_first_byte_latency": time.time() - message['meta_info']['utterance_end']
+                        }
+                    if message['meta_info']["request_id"] not in self.latency_dict:
+                        self.latency_dict[message['meta_info']["request_id"]] = latency_metrics
+                        logger.info("LATENCY METRICS FOR {} are {}".format(message['meta_info']["request_id"], latency_metrics))
+        except Exception as e:
+            traceback.print_exc()
+            logger.error(f'Error in processing message output')
 
     async def run(self):
         """
@@ -930,6 +954,7 @@ class TaskManager(BaseManager):
             if "synthesizer" in self.tools and self.synthesizer_task is not None:   
                 self.synthesizer_task.cancel()
             if self.task_id == 0:
+                logger.info(f"OVERALL LATENCY DICT {self.latency_dict}")
                 output = {"messages": self.history, "conversation_time": time.time() - self.start_time,
                           "label_flow": self.label_flow, "call_sid": self.call_sid, "stream_sid": self.stream_sid,
                           "transcriber_duration": self.transcriber_duration,

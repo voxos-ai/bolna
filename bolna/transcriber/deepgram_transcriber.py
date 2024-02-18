@@ -243,7 +243,6 @@ class DeepgramTranscriber(BaseTranscriber):
                     transcription_completion_time = time.time()
                     self.meta_info["transcription_completion_time"] = transcription_completion_time
                     # abs because sometimes it's negative. Got to debug that further  
-                    self.meta_info["transcriber_latency"] = abs(transcription_completion_time - last_spoken_audio_frame)  #We subtract first audio wav because user started speaking then. In this case we can calculate actual latency taken by the transcriber
                     self.meta_info["last_vocal_frame_timestamp"] = last_spoken_audio_frame
                     if curr_message == "":
                         continue
@@ -290,6 +289,8 @@ class DeepgramTranscriber(BaseTranscriber):
                     logger.info(f"Yielding interim-message current_message = {curr_message}")
                     self.meta_info["include_latency"] = False
                     self.meta_info["utterance_end"] = self.__calculate_utterance_end(msg)
+                    self.meta_info["time_received"] = time.time()
+                    self.meta_info["transcriber_latency"] =  self.meta_info["time_received"] - self.meta_info["utterance_end"] 
                     yield create_ws_data_packet(curr_message, self.meta_info)
                     # #If the current message is empty no need to send anything to the task manager
                     # if curr_message == "":
@@ -311,7 +312,7 @@ class DeepgramTranscriber(BaseTranscriber):
             'Authorization': 'Token {}'.format(os.getenv('DEEPGRAM_AUTH_TOKEN'))
         }
         deepgram_ws = websockets.connect(websocket_url, extra_headers=extra_headers)
-        self.connection_start_time = time.time() + 0.2 #Thinking connection time will take 200ms
+        self.connection_start_time = time.time()
         return deepgram_ws
 
     async def run(self):
@@ -324,7 +325,7 @@ class DeepgramTranscriber(BaseTranscriber):
                     final_word =  alternative['words'][-1]
                     utterance_end =  final_word['end'] + self.connection_start_time
                     logger.info(f"Final word ended at {utterance_end}")
-        return None
+        return utterance_end
 
     async def transcribe(self):
         try:
