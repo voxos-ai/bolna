@@ -74,19 +74,19 @@ class DeepgramTranscriber(BaseTranscriber):
     def get_deepgram_ws_url(self):
         websocket_url = (f"wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=16000&channels=1"
                          f"&filler_words=true&interim_results={self.process_interim_results}&diarize=true&utterance_end_ms=1000")
-        self.first_audio_wav_duration = 0.5 #We're sending 8k samples with a sample rate of 16k
+        self.audio_frame_duration = 0.5 #We're sending 8k samples with a sample rate of 16k
 
         if self.provider == 'twilio':
             websocket_url = (f"wss://api.deepgram.com/v1/listen?model=nova-2&encoding=mulaw&sample_rate=8000&channels"
                              f"=1&filler_words=true&interim_results={self.process_interim_results}&diarize=true&utterance_end_ms=1000")
             self.sampling_rate = 8000
-            self.first_audio_wav_duration = 0.1
+            self.audio_frame_duration = 0.2  #With twilio we are sending 100ms at a time
 
         if self.provider == "playground":
             websocket_url = (f"wss://api.deepgram.com/v1/listen?model=nova-2&encoding=opus&sample_rate=8000&channels"
                              f"=1&filler_words=true&interim_results={self.process_interim_results}&diarize=true&utterance_end_ms=1000")
             self.sampling_rate = 8000
-            self.first_audio_wav_duration = 0.0 #There's no streaming from the playground 
+            self.audio_frame_duration = 0.0 #There's no streaming from the playground 
 
         if "en" not in self.language:
             websocket_url += '&language={}'.format(self.language)
@@ -221,6 +221,12 @@ class DeepgramTranscriber(BaseTranscriber):
         async for msg in ws:
             try:
                 msg = json.loads(msg)
+
+                #If connection start time is None, connection start time is the duratons of frame submitted till now minus current time
+                if self.connection_start_time is None:
+                    self.connection_start_time = (time.time() - (self.num_frames * self.audio_frame_duration))
+                    logger.info(f"Connecton start time {self.connection_start_time} {self.num_frames} and {self.audio_frame_duration}")
+
                 logger.info(f"###### ######### ############# Message from the transcriber {msg}")
                 if msg['type'] == "Metadata":
                     logger.info(f"Got a summary object {msg}")
@@ -278,8 +284,9 @@ class DeepgramTranscriber(BaseTranscriber):
                     logger.info(f"Is final interim Transcriber message {msg}")
                     #curr_message = self.__get_speaker_transcript(msg)
                     finalized_transcript += " " + transcript #Just get the whole transcript as there's mismatch at times
-                    self.meta_info["is_final"] = False
-                    #yield create_ws_data_packet(curr_message, self.meta_info)
+                    self.meta_info["is_final"] = True
+                    if transcript.strip() != curr_message.strip():
+                        yield create_ws_data_packet(curr_message, self.meta_info)
                 else:
                     #If we're not processing interim results
                     # Yield current transcript
@@ -312,7 +319,6 @@ class DeepgramTranscriber(BaseTranscriber):
             'Authorization': 'Token {}'.format(os.getenv('DEEPGRAM_AUTH_TOKEN'))
         }
         deepgram_ws = websockets.connect(websocket_url, extra_headers=extra_headers)
-        self.connection_start_time = time.time()
         return deepgram_ws
 
     async def run(self):
@@ -323,7 +329,7 @@ class DeepgramTranscriber(BaseTranscriber):
             for alternative in data['channel']['alternatives']:
                 if 'words' in alternative:
                     final_word =  alternative['words'][-1]
-                    utterance_end =  final_word['end'] + self.connection_start_time
+                    utterance_end = self.connection_start_time + final_word['end'] 
                     logger.info(f"Final word ended at {utterance_end}")
         return utterance_end
 

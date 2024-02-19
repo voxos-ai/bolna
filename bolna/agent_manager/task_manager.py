@@ -445,6 +445,9 @@ class TaskManager(BaseManager):
         elif len(self.history) > 1 and self.history[-1]['role'] == "assistant" and self.history[-2]['role'] == "assistant":
             logger.info("Last two are assistants and hence changing the last one")
             self.history[-1] = self.interim_history[-1].copy()
+        elif len(self.history) == 2 and self.history[1]['role'] == "assistant" and self.history[0]['role'] == "system":
+            logger.info(f"Assistant response is already appended to the history")
+            self.history = [self.history[0], self.interim_history[1].copy(), self.history[1]]
         else:
             self.history.append(self.interim_history[-1].copy())
             logger.info(f"Current history {self.history}, current interim history {self.interim_history} but it falls in else part")
@@ -680,10 +683,12 @@ class TaskManager(BaseManager):
 
                         # If last two messages are humans
 
-                        if ((len(self.history)  == 1 and self.history[-1]['role'] == "assistant")) or (len(self.history)  > 1 and self.history[-1]['role'] == 'assistant' and self.history[-2]['role'] == 'assistant'):
+                        if ((len(self.history)  == 1 and self.history[-1]['role'] == "assistant")) or (len(self.history)  > 1 and self.history[-1]['role'] == 'assistant' and (self.history[-2]['role'] in ['assistant', 'system'] )):
                             assistant_message = self.history[-1].copy()
                             self.history = self.history[:-1]
+                    
 
+                        logger.info(f"APPENDING USER statement {message['data']}")
                         self.history.append({'role': 'user', 'content': message['data']})
                         if assistant_message is not None:
                             self.history.append(assistant_message)
@@ -716,7 +721,7 @@ class TaskManager(BaseManager):
                                         self.interim_history = self.interim_history[:-1]
                                     else:
                                         self.interim_history = self.interim_history[:-2]
-
+                                 
                                 self.interim_history.append({'role': 'user', 'content': message['data']})
                                 logger.info("Current transcript: {} Predicting next few tokens".format(transcriber_message))
                                 meta_info = self.__get_updated_meta_info(meta_info)
