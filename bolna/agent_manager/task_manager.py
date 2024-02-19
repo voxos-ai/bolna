@@ -33,6 +33,7 @@ class TaskManager(BaseManager):
         self.task_config = task
         self.context_data = context_data
         self.connected_through_dashboard = connected_through_dashboard
+        self.callee_silent = True
 
         # Set up communication queues between processes
         self.audio_queue = asyncio.Queue()
@@ -68,12 +69,6 @@ class TaskManager(BaseManager):
         self.__setup_output_handlers(connected_through_dashboard, output_queue)
 
 
-        # Current conversation state
-        self.current_request_id = None
-        self.previous_request_id = None
-        self.llm_rejected_request_ids = set()
-        self.llm_processed_request_ids = set()
-
         # Agent stuff
         # Need to maintain current conversation history and overall persona/history kinda thing. 
         # Soon we will maintain a seperate history for this 
@@ -88,11 +83,19 @@ class TaskManager(BaseManager):
         self.synthesizer_task = None
 
         # state of conversation
+        self.current_request_id = None
+        self.previous_request_id = None
+        self.llm_rejected_request_ids = set()
+        self.llm_processed_request_ids = set()
         self.was_long_pause = False
         self.buffers = []
         self.should_respond = False
         self.start_response = False
         self.last_response_time = time.time()
+        self.is_an_ivr_call = self._is_conversation_task() and self._is_preprocessed_flow() and not self.connected_through_dashboard
+        self.consider_next_transcript_after = time.time()
+        self.duration_to_prevent_accidental_interruption = 3 if self.is_an_ivr_call else 1.5
+        self.callee_speaking = False
 
         # Call conversations
         self.call_sid = None
@@ -347,7 +350,10 @@ class TaskManager(BaseManager):
         # if "synthesizer" in self.tools:
         #     self.tools["synthesizer"].clear_internal_queue()
     
-    def __get_updated_meta_info(self, meta_info):
+    def __get_updated_meta_info(self, meta_info = None):
+        #This is used in case there's silence from callee's side
+        if meta_info is None:
+            meta_info = self.tools["transcriber"].get_meta_info()
         meta_info_copy = meta_info.copy()
         self.curr_sequence_id +=1
         meta_info_copy["sequence_id"] = self.curr_sequence_id
@@ -625,7 +631,9 @@ class TaskManager(BaseManager):
             skip_append_to_data = False
         return sequence
 
-    async def _handle_transcriber_output(self, next_task, transcriber_message, meta_info):        
+    async def _handle_transcriber_output(self, next_task, transcriber_message, meta_info):
+        if time.time() < self.consider_next_transcript_after:
+            logger.info("Not considering transcript as we're still in cool down period")
         if next_task == "llm":
             logger.info(f"Running llm Tasks")
             meta_info["origin"] = "transcriber"
@@ -659,6 +667,7 @@ class TaskManager(BaseManager):
                     next_task = self._get_next_step(sequence, "transcriber")
                     #logger.info(f'got the next task {next_task}')
                     if message['data'] == "TRANSCRIBER_BEGIN":
+                        self.callee_silent = False
                         #logger.info(f"Not starting the response until we get utterance end")
                         self.start_response = False #Make start response as false
                         #logger.info(f"Current history{self.history}")
@@ -818,6 +827,7 @@ class TaskManager(BaseManager):
                 if not self.buffered_output_queue.empty():
                     logger.info(f"Output queue was not empty and hence emptying it")
                     self.buffered_output_queue = asyncio.Queue()
+
                 for chunk in  yield_chunks_from_memory(audio_chunk, chunk_size=16384):
                     logger.debug("Sending chunk to output queue")
                     message = create_ws_data_packet(chunk, meta_info)
@@ -853,6 +863,16 @@ class TaskManager(BaseManager):
     # Output handling
     ############################################################
             
+    async def __handle_initial_silence(self):
+        logger.info(f"Checking for initial silence")
+        await asyncio.sleep(5)
+        if self.callee_silent:
+            logger.info(f"Calee was silent and hence speaking Hello on callee's behalf")
+            meta_info = self.__get_updated_meta_info()
+            sequence = meta_info["sequence"]
+            next_task = self._get_next_step(sequence, "transcriber")
+            await self._handle_transcriber_output(next_task, "Hello", meta_info)
+            
     #Currently this loop only closes in case of interruption 
     # but it shouldn't be the case. 
     async def __process_output_loop(self):
@@ -861,6 +881,8 @@ class TaskManager(BaseManager):
                 logger.info(f"Yielding to output handler")
                 message = await self.buffered_output_queue.get()
                 logger.info("Start response is True and hence starting to speak {} Current sequence ids".format(message['meta_info'], self.sequence_ids))
+                
+                
                 if "end_of_conversation" in message['meta_info']:
                     await self.__process_end_of_conversation()
                 
@@ -871,8 +893,9 @@ class TaskManager(BaseManager):
                     continue
 
                 if "is_first_chunk" in  message['meta_info'] and message['meta_info']['is_first_chunk']:
+                    self.consider_next_transcript_after = time.time() + self.duration_to_prevent_accidental_interruption
                     latency_metrics = {
-                        "transcriber": { 
+                        "transcriber": {
                             "utterance_end": message['meta_info']['utterance_end'], 
                             "latency": message["meta_info"]["transcriber_latency"]
                             }, 
@@ -892,18 +915,13 @@ class TaskManager(BaseManager):
             logger.error(f'Error in processing message output')
 
     async def run(self):
-        """
-        Run will start a listener that will continuously listen to the websocket
-        - If type is "audio": it'll pass it to transcriber
-            - Transcriber will pass it deepgram
-            - Deepgram will respond
-    
-        """
+        
         try:
             if self.task_id == 0:
                 # Create transcriber and synthesizer tasks
                 logger.info("starting task_id {}".format(self.task_id))
                 tasks = [asyncio.create_task(self.tools['input'].handle())]
+                self.background_check_task = asyncio.create_task(self.__handle_initial_silence())
                 if "transcriber" in self.tools:
                     tasks.append(asyncio.create_task(self._listen_transcriber()))
                     self.transcriber_task = asyncio.create_task(self.tools["transcriber"].run())

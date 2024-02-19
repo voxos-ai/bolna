@@ -143,6 +143,9 @@ class DeepgramTranscriber(BaseTranscriber):
 
         return False
 
+    def get_meta_info(self):
+        return self.meta_info
+    
     async def sender(self, ws=None):
         try:
             while True:
