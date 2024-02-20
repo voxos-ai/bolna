@@ -1,3 +1,4 @@
+import asyncio
 from dotenv import load_dotenv
 from botocore.exceptions import BotoCoreError, ClientError
 from aiobotocore.session import AioSession
@@ -30,7 +31,7 @@ class PollySynthesizer(BaseSynthesizer):
             return "pcm"
         else:
             return "mp3"
-
+                
     @staticmethod
     async def create_client(service: str, session: AioSession, exit_stack: AsyncExitStack):
         # creates AWS session from system environment credentials & config
@@ -80,6 +81,7 @@ class PollySynthesizer(BaseSynthesizer):
             if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
                 meta_info["end_of_synthesizer_stream"] = True
                 self.first_chunk_generated = False
+            meta_info['text']=  text
             yield create_ws_data_packet(message, meta_info)
 
     async def push(self, message):

@@ -1,4 +1,5 @@
 import asyncio
+from collections import deque
 import aiohttp
 import websockets
 from websockets.exceptions import ConnectionClosed
@@ -30,7 +31,8 @@ class XTTSSynthesizer(BaseSynthesizer):
         self.audio = b"" 
         self.chunk_count = 1
         self.first_chunk_generated = False
-
+        self.text_queue = deque()
+        
     def get_format(self, format):
         return "wav"
 
@@ -116,26 +118,32 @@ class XTTSSynthesizer(BaseSynthesizer):
                 self.websocket_connection = await websockets.connect(self.ws_url)
                 logger.info("Connected to the server")
     async def generate(self):
+        should_pop_meta_info = True
         try:
             if self.stream:
                 async for message in self.receiver():
                     logger.info(f"Received message friom server")
                     yield create_ws_data_packet(message, self.meta_info)
+                    
                     if not self.first_chunk_generated:
                         self.meta_info["is_first_chunk"] = True
                         self.first_chunk_generated = True
-
+                    if should_pop_meta_info:
+                        meta_info = self.text_queue.popleft()
+                        should_pop_meta_info = False
                     if message == b'\x00':
                         logger.info("received null byte and hence end of stream")
                         self.meta_info["end_of_synthesizer_stream"] = True
                         yield create_ws_data_packet(message, self.meta_info)
                         self.first_chunk_generated = False
+                        should_pop_meta_info = True
             else:
                 while True:
                     message = await self.internal_queue.get()
                     logger.info(f"Generating TTS response for message: {message}")
                     meta_info, text = message.get("meta_info"), message.get("data")
                     audio = await self.__generate_http(text)
+                    meta_info['text']=  text
                     if not self.first_chunk_generated:
                         meta_info["is_first_chunk"] = True
                         self.first_chunk_generated = True
@@ -158,5 +166,6 @@ class XTTSSynthesizer(BaseSynthesizer):
             end_of_llm_stream =  "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]
             self.meta_info = meta_info
             self.sender_task = asyncio.create_task(self.sender(text, end_of_llm_stream))
+            self.text_queue.append(meta_info)
         else:
             self.internal_queue.put_nowait(message)

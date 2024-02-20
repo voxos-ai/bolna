@@ -69,6 +69,7 @@ class GraphBasedConversationAgent(BaseAgent):
     def load_prompts_and_create_graph(self, prompts):
         self.graph = Graph(prompts)
         self.current_node = self.graph.root
+        self.current_node_interim = self.graph.root #Handle interim node because we are dealing with interim results 
 
 
     def _get_audio_text_pair(self, node):
@@ -114,9 +115,12 @@ class GraphBasedConversationAgent(BaseAgent):
         label = classification_result["classification_label"]
         for child in self.current_node.children:
             if child.node_label.strip().lower() == label.strip().lower():
-                self.current_node = child
+                self.current_node_interim = child
                 return self._get_audio_text_pair(child)
 
+    def update_current_node(self):
+        self.current_node = self.current_node_interim
+        
     async def generate(self, history, stream=False, synthesize=False, label_flow=None):
         try:
             if self.preprocessed:

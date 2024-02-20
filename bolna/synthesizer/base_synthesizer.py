@@ -11,6 +11,10 @@ class BaseSynthesizer:
         self.buffer_size = buffer_size
         self.internal_queue = asyncio.Queue()
 
+    def clear_internal_queue(self):
+        logger.info(f"Clearing out internal queue")
+        self.internal_queue = asyncio.Queue()
+        
     def generate(self, text):
         pass
 

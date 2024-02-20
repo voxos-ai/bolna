@@ -52,6 +52,9 @@ class OpenAiLLM(BaseLLM):
             self.model_args["frequency_penalty"] = kwargs["frequency_penalty"]
 
     async def generate_stream(self, messages, classification_task=False, synthesize=True, request_json=False):
+        if len(messages) == 0:
+            raise Exception("No messages provided")
+        
         response_format = self.get_response_format(request_json)
 
         answer, buffer = "", ""

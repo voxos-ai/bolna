@@ -1,8 +1,9 @@
+from collections import deque
 import os
 from dotenv import load_dotenv
 import audioop
 from bolna.helpers.logger_config import configure_logger
-from bolna.helpers.utils import convert_audio_to_wav, create_ws_data_packet, pcm_to_wav_bytes
+from bolna.helpers.utils import convert_audio_to_wav, create_ws_data_packet, pcm_to_wav_bytes, resample
 from .base_synthesizer import BaseSynthesizer
 from openai import AsyncOpenAI
 import io
@@ -11,19 +12,22 @@ logger = configure_logger(__name__)
 load_dotenv()
 
 class OPENAISynthesizer(BaseSynthesizer):
-    def __init__(self, voice, audio_format="mp3", model = "tts-1", stream=False, buffer_size=400, **kwargs):
+    def __init__(self, voice, audio_format="mp3", model = "tts-1", stream=False, sampling_rate=8000, buffer_size=400, **kwargs):
         super().__init__(stream, buffer_size)
         self.format = self.get_format(audio_format.lower())
         self.voice = voice
-        self.sample_rate = 24000
+        self.sample_rate = sampling_rate
         api_key = kwargs.get("synthesizer_key", os.getenv("OPENAI_API_KEY"))
         self.async_client = AsyncOpenAI(api_key= api_key)
         self.model = model
         self.first_chunk_generated = False 
-
+        self.text_queue = deque()
+        self.stream = False
+        logger.info(f"self sampling rate {self.sample_rate}")
+        
     # Ensuring we can only do wav outputs becasue mulaw conversion for others messes up twilio
     def get_format(self, format):
-        return "flac"
+        return "mp3"
     
     async def synthesize(self, text):
         #This is used for one off synthesis mainly for use cases like voice lab and IVR
@@ -61,13 +65,13 @@ class OPENAISynthesizer(BaseSynthesizer):
                 message = await self.internal_queue.get()
                 logger.info(f"Generating TTS response for message: {message}")
                 meta_info, text = message.get("meta_info"), message.get("data")
+                meta_info["text"] = text
                 if self.stream:
                     async for chunk in self.__generate_stream(text):
                         if not self.first_chunk_generated:
                             meta_info["is_first_chunk"] = True
                             self.first_chunk_generated = True
-                        yield create_ws_data_packet(convert_audio_to_wav(chunk, 'mp3'), meta_info)
-                        
+                        yield create_ws_data_packet(resample(convert_audio_to_wav(chunk, 'mp3'), self.sample_rate, format="wav"), meta_info)
                         
                     if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
                         meta_info["end_of_synthesizer_stream"] = True
@@ -84,8 +88,9 @@ class OPENAISynthesizer(BaseSynthesizer):
                     if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
                         meta_info["end_of_synthesizer_stream"] = True
                         self.first_chunk_generated = False 
-                    yield create_ws_data_packet(convert_audio_to_wav(audio, 'flac'), meta_info)
-                
+                    
+                    yield create_ws_data_packet(resample(convert_audio_to_wav(audio, 'mp3'), self.sample_rate, format="wav"), meta_info)
+
         except Exception as e:
                 logger.error(f"Error in openai generate {e}")
 
