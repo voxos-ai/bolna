@@ -482,6 +482,7 @@ class TaskManager(BaseManager):
             llm_response = ""
             start_time = time.time()
             logger.info(f"Starting LLM Agent")
+            self.interim_history.append({'role': 'user', 'content': message['data']})
             async for text_chunk in self.tools['llm_agent'].generate(self.interim_history, stream=True, synthesize=True,
                                                                      label_flow=self.label_flow):
                 if text_chunk == "<end_of_conversation>":
@@ -538,6 +539,7 @@ class TaskManager(BaseManager):
             await self._handle_llm_output(next_step, cache_response, should_bypass_synth, meta_info)
         else:
             #messages = [self.interim_history[0], {'role': 'user', 'content': format_messages(self.history)}]
+            self.interim_history.append({'role': 'user', 'content': message['data']})
             async for llm_message in self.tools['llm_agent'].generate(self.interim_history, synthesize=True):
                 text_chunk, end_of_llm_stream = llm_message
                 logger.info(f"###### time to get the first chunk {time.time() - start_time} {text_chunk}")
@@ -580,6 +582,7 @@ class TaskManager(BaseManager):
                 await self.tools["output"].handle(bos_packet)
                 await self._run_llm_task(
                     create_ws_data_packet(ws_data_packet['data'], meta_info))  # In case s3 is down and it's an audio processing job, this might produce blank message on the frontend of playground.
+                self.history.append({'role': 'user', 'content': ws_data_packet['data']})
                 eos_packet = create_ws_data_packet("<end_of_stream>", meta_info)
                 await self.tools["output"].handle(eos_packet)
 
@@ -731,8 +734,6 @@ class TaskManager(BaseManager):
                                         self.interim_history = self.interim_history[:-1]
                                     else:
                                         self.interim_history = self.interim_history[:-2]
-                                 
-                                self.interim_history.append({'role': 'user', 'content': message['data']})
                                 logger.info("Current transcript: {} Predicting next few tokens".format(transcriber_message))
                                 meta_info = self.__get_updated_meta_info(meta_info)
                                 await self._handle_transcriber_output(next_task, transcriber_message, meta_info)
@@ -757,6 +758,7 @@ class TaskManager(BaseManager):
         sequence = message["meta_info"]["sequence"]
         next_task = self._get_next_step(sequence, "transcriber")
         self.transcriber_duration += message["meta_info"]["transcriber_duration"] if "transcriber_duration" in message["meta_info"] else 0
+        self.history.append({'role': 'user', 'content': message['data']})
         await self._handle_transcriber_output(next_task, message['data'], meta_info)
 
 
