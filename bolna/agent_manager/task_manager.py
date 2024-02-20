@@ -575,11 +575,12 @@ class TaskManager(BaseManager):
             try:
                 ws_data_packet = await self.queues["llm"].get()
                 logger.info(f"ws_data_packet {ws_data_packet}")
-                bos_packet = create_ws_data_packet("<beginning_of_stream>", ws_data_packet['meta_info'])
+                meta_info = self.__get_updated_meta_info(ws_data_packet['meta_info'])
+                bos_packet = create_ws_data_packet("<beginning_of_stream>", meta_info)
                 await self.tools["output"].handle(bos_packet)
                 await self._run_llm_task(
-                    ws_data_packet)  # In case s3 is down and it's an audio processing job, this might produce blank message on the frontend of playground.
-                eos_packet = create_ws_data_packet("<end_of_stream>", ws_data_packet['meta_info'])
+                    create_ws_data_packet(ws_data_packet['data'], meta_info))  # In case s3 is down and it's an audio processing job, this might produce blank message on the frontend of playground.
+                eos_packet = create_ws_data_packet("<end_of_stream>", meta_info)
                 await self.tools["output"].handle(eos_packet)
 
             except Exception as e:
@@ -739,6 +740,7 @@ class TaskManager(BaseManager):
                             else:
                                 logger.info(f"Got a null message")
                 else:
+                    logger.info(f"Processing http transcription for message {message}")
                     await self.__process_http_transcription(message)
         
         except Exception as e:
@@ -747,7 +749,7 @@ class TaskManager(BaseManager):
     
     
     async def __process_http_transcription(self, message):
-        meta_info = message['meta_info']
+        meta_info = self.__get_updated_meta_info(message["meta_info"])
         include_latency = meta_info.get("include_latency", False)
         if include_latency:
             self.latency_dict[meta_info['request_id']]["transcriber"] = {"total_latency":  meta_info["transcriber_latency"], "audio_duration": meta_info["audio_duration"], "last_vocal_frame_timestamp": meta_info["last_vocal_frame_timestamp"] }
@@ -755,7 +757,7 @@ class TaskManager(BaseManager):
         sequence = message["meta_info"]["sequence"]
         next_task = self._get_next_step(sequence, "transcriber")
         self.transcriber_duration += message["meta_info"]["transcriber_duration"] if "transcriber_duration" in message["meta_info"] else 0
-        await self._handle_transcriber_output(next_task, message['data'], message["meta_info"])
+        await self._handle_transcriber_output(next_task, message['data'], meta_info)
 
 
     #################################################################
@@ -764,7 +766,7 @@ class TaskManager(BaseManager):
 
     async def __listen_synthesizer(self):
         try:
-            if self.stream and self.synthesizer_provider != "polly":
+            if self.stream and self.synthesizer_provider != "polly" and not self.is_an_ivr_call: 
                 logger.info("Opening websocket connection to synthesizer")
                 await self.tools["synthesizer"].open_connection()
             while True:
@@ -790,9 +792,13 @@ class TaskManager(BaseManager):
                                 
                                 if "is_first_chunk" in  message['meta_info'] and message['meta_info']['is_first_chunk']:
                                     first_chunk_generation_timestamp = time.time()
+                                    meta_info["synthesizer_first_chunk_latency"] = first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time']
                                     #self.latency_dict[message['meta_info']["request_id"]]['synthesizer'] = {"first_chunk_generation_latency": first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time'], "first_chunk_generation_timestamp": first_chunk_generation_timestamp}
                                 
-                                self.buffered_output_queue.put_nowait(message)
+                                for chunk in yield_chunks_from_memory(message['data'], chunk_size=16384):
+                                    self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, meta_info))
+
+                                #self.buffered_output_queue.put_nowait(message)
                                 #await self.tools["output"].handle(message)
                             
                         else:
@@ -856,6 +862,7 @@ class TaskManager(BaseManager):
                 logger.info(f"{message['meta_info']['sequence_id']} is not in sequence ids  {self.sequence_ids} and hence not synthesizing this")                
 
         except Exception as e:
+            traceback.print_exc()
             logger.error(f"Error in synthesizer: {e}")
 
 
@@ -921,7 +928,8 @@ class TaskManager(BaseManager):
                 # Create transcriber and synthesizer tasks
                 logger.info("starting task_id {}".format(self.task_id))
                 tasks = [asyncio.create_task(self.tools['input'].handle())]
-                self.background_check_task = asyncio.create_task(self.__handle_initial_silence())
+                if not self.connected_through_dashboard:
+                    self.background_check_task = asyncio.create_task(self.__handle_initial_silence())
                 if "transcriber" in self.tools:
                     tasks.append(asyncio.create_task(self._listen_transcriber()))
                     self.transcriber_task = asyncio.create_task(self.tools["transcriber"].run())
