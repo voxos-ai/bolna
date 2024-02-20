@@ -38,7 +38,6 @@ def calculate_total_cost_of_llm_from_transcript(messages, cost_per_input_token, 
             else:
                 completion_check_output_tokens += completion_wrong_answer_tokens
 
-
     total_cost = (total_input_tokens * cost_per_input_token) + (total_output_tokens * cost_per_output_token)
     llm_token_usage[model] = {
         "input": total_input_tokens,
