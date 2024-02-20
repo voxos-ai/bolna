@@ -8,6 +8,7 @@ from collections import defaultdict
 from datetime import datetime, timezone, timedelta 
 from dotenv import load_dotenv 
 from dateutil import parser
+import copy
 
 load_dotenv()
 logger = configure_logger(__name__)
@@ -56,7 +57,7 @@ def calculate_total_cost_of_llm_from_transcript(messages, cost_per_input_token, 
     return round(total_cost, 5), llm_token_usage
 
 def update_extraction_details(current_high_level_assistant_analytics_data, run_details):
-    if "extracted_data" not in run_details:
+    if "extracted_data" not in run_details or not run_details['extracted_data']
         return None
     extraction_data = run_details['extracted_data']
     for index, key in enumerate(extraction_data.keys()):
@@ -125,7 +126,7 @@ def update_conversation_details(current_high_level_assistant_analytics_data, con
 def update_high_level_assistant_analytics_data(current_high_level_assistant_analytics_data, run_details):
     logger.info(f"run details {run_details}")
     if current_high_level_assistant_analytics_data == None:
-        current_high_level_assistant_analytics_data = HIGH_LEVEL_ASSISTANT_ANALYTICS_DATA
+        current_high_level_assistant_analytics_data =  copy.deepcopy(HIGH_LEVEL_ASSISTANT_ANALYTICS_DATA)
     
     update_execution_details(current_high_level_assistant_analytics_data, run_details)
     update_extraction_details(current_high_level_assistant_analytics_data, run_details)
