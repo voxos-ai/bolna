@@ -27,7 +27,7 @@ class OPENAISynthesizer(BaseSynthesizer):
         
     # Ensuring we can only do wav outputs becasue mulaw conversion for others messes up twilio
     def get_format(self, format):
-        return "flac"
+        return "mp3"
     
     async def synthesize(self, text):
         #This is used for one off synthesis mainly for use cases like voice lab and IVR
