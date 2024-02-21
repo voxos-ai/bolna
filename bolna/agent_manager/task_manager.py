@@ -481,8 +481,8 @@ class TaskManager(BaseManager):
         if self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "preprocessed":
             llm_response = ""
             start_time = time.time()
-            logger.info(f"Starting LLM Agent")
             self.interim_history.append({'role': 'user', 'content': message['data']})
+            logger.info(f"Starting LLM Agent {self.interim_history}")
             async for text_chunk in self.tools['llm_agent'].generate(self.interim_history, stream=True, synthesize=True,
                                                                      label_flow=self.label_flow):
                 if text_chunk == "<end_of_conversation>":
@@ -568,8 +568,7 @@ class TaskManager(BaseManager):
 
             self.llm_processed_request_ids.add(self.current_request_id)
             llm_response = ""
-
-    # This is used only in the case it's a text based chatbot
+    
     async def _listen_llm_input_queue(self):
         logger.info(
             f"Starting listening to LLM queue as either Connected to dashboard = {self.connected_through_dashboard} or  it's a textual chat agent {self.textual_chat_agent}")
