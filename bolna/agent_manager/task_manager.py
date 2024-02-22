@@ -11,6 +11,7 @@ from bolna.helpers.utils import convert_audio_to_wav, create_ws_data_packet, is_
     get_required_input_types, format_messages, get_prompt_responses, merge_wav_bytes, pcm_to_wav_bytes, update_prompt_with_context, get_md5_hash, clean_json_string, wav_bytes_to_pcm, yield_chunks_from_memory
 from bolna.helpers.logger_config import configure_logger
 from datetime import datetime
+import copy
 
 asyncio.get_event_loop().set_debug(True)
 logger = configure_logger(__name__)
@@ -73,7 +74,7 @@ class TaskManager(BaseManager):
         # Need to maintain current conversation history and overall persona/history kinda thing. 
         # Soon we will maintain a seperate history for this 
         self.history = [] if conversation_history is None else conversation_history 
-        self.interim_history = self.history.copy()
+        self.interim_history = copy.deepcopy(self.history.copy())
         logger.info(f'History {self.history}')
         self.label_flow = []
 
@@ -266,8 +267,9 @@ class TaskManager(BaseManager):
             return
         self.is_local = local
         if "prompt" in self.task_config["tools_config"]["llm_agent"]:
+            today = datetime.now().strftime("%A, %B %d, %Y")
             self.prompts = {
-                "system_prompt": self.task_config["tools_config"]["llm_agent"]["prompt"]
+                "system_prompt": f'{self.task_config["tools_config"]["llm_agent"]["prompt"]} \n### Date\n Today\'s Date is {today}'
             }
             logger.info(f"Prompt given in llm_agent and hence storing the prompt")
         else:
@@ -296,7 +298,9 @@ class TaskManager(BaseManager):
             self.history =  [] if len(self.history) == 0 else self.history
         else:
             self.history =  [self.system_prompt] if len(self.history) == 0 else [self.system_prompt] + self.history
-    
+
+        self.interim_history = copy.deepcopy(self.history)
+
     def __process_stop_words(self, text_chunk, meta_info):
          #THis is to remove stop words. Really helpful in smaller 7B models
         if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"] and "user" in text_chunk[-5:].lower():
@@ -459,6 +463,11 @@ class TaskManager(BaseManager):
             logger.info(f"Current history {self.history}, current interim history {self.interim_history} but it falls in else part")
 
 
+    def __update_preprocessed_tree_node(self):    
+        logger.info(f"It's a preprocessed flow and hence updating current node")
+        self.tools['llm_agent'].update_current_node()
+
+
 
     ##############################################################
     # LLM task
@@ -481,8 +490,8 @@ class TaskManager(BaseManager):
         if self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "preprocessed":
             llm_response = ""
             start_time = time.time()
-            logger.info(f"Starting LLM Agent")
             self.interim_history.append({'role': 'user', 'content': message['data']})
+            logger.info(f"Starting LLM Agent {self.interim_history}")
             async for text_chunk in self.tools['llm_agent'].generate(self.interim_history, stream=True, synthesize=True,
                                                                      label_flow=self.label_flow):
                 if text_chunk == "<end_of_conversation>":
@@ -568,8 +577,7 @@ class TaskManager(BaseManager):
 
             self.llm_processed_request_ids.add(self.current_request_id)
             llm_response = ""
-
-    # This is used only in the case it's a text based chatbot
+    
     async def _listen_llm_input_queue(self):
         logger.info(
             f"Starting listening to LLM queue as either Connected to dashboard = {self.connected_through_dashboard} or  it's a textual chat agent {self.textual_chat_agent}")
@@ -580,9 +588,12 @@ class TaskManager(BaseManager):
                 meta_info = self.__get_updated_meta_info(ws_data_packet['meta_info'])
                 bos_packet = create_ws_data_packet("<beginning_of_stream>", meta_info)
                 await self.tools["output"].handle(bos_packet)
-                await self._run_llm_task(
-                    create_ws_data_packet(ws_data_packet['data'], meta_info))  # In case s3 is down and it's an audio processing job, this might produce blank message on the frontend of playground.
+                self.interim_history = self.history.copy()
                 self.history.append({'role': 'user', 'content': ws_data_packet['data']})
+                await self._run_llm_task(
+                    create_ws_data_packet(ws_data_packet['data'], meta_info))
+                if self._is_preprocessed_flow():
+                    self.__update_preprocessed_tree_node()
                 eos_packet = create_ws_data_packet("<end_of_stream>", meta_info)
                 await self.tools["output"].handle(eos_packet)
 
@@ -675,7 +686,8 @@ class TaskManager(BaseManager):
                         #logger.info(f"Not starting the response until we get utterance end")
                         self.start_response = False #Make start response as false
                         #logger.info(f"Current history{self.history}")
-                        self.interim_history = self.history.copy()
+                        #self.interim_history = self.history.copy()
+                        self.interim_history = copy.deepcopy(self.history)
                         self.callee_speaking = True
                         response_started = False #This signifies if we've gotten the first bit of interim text for the given response or not
                         if meta_info.get("should_interrupt", False):
@@ -688,8 +700,7 @@ class TaskManager(BaseManager):
                             logger.info(f"Output task was none and hence starting it")
 
                         if self._is_preprocessed_flow():
-                            logger.info(f"It's a preprocessed flow and hence updating current node")
-                            self.tools['llm_agent'].update_current_node()
+                            self.__update_preprocessed_tree_node()
 
                         self.callee_speaking = False
                         assistant_message = None
@@ -759,6 +770,9 @@ class TaskManager(BaseManager):
         next_task = self._get_next_step(sequence, "transcriber")
         self.transcriber_duration += message["meta_info"]["transcriber_duration"] if "transcriber_duration" in message["meta_info"] else 0
         self.history.append({'role': 'user', 'content': message['data']})
+        if self._is_preprocessed_flow():
+            self.__update_preprocessed_tree_node()
+
         await self._handle_transcriber_output(next_task, message['data'], meta_info)
 
 
