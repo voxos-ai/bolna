@@ -17,6 +17,7 @@ torch.set_num_threads(1)
 logger = configure_logger(__name__)
 load_dotenv()
 
+
 class DeepgramTranscriber(BaseTranscriber):
     def __init__(self, provider, input_queue=None, model='deepgram', stream=True, language="en", endpointing="400",
                  sampling_rate="16000", encoding="linear16", output_queue= None, keywords = None, **kwargs):
