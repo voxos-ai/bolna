@@ -57,7 +57,7 @@ def calculate_total_cost_of_llm_from_transcript(messages, cost_per_input_token, 
     return round(total_cost, 5), llm_token_usage
 
 def update_extraction_details(current_high_level_assistant_analytics_data, run_details):
-    if "extracted_data" not in run_details or not run_details['extracted_data']
+    if "extracted_data" not in run_details or not run_details['extracted_data']:
         return None
     extraction_data = run_details['extracted_data']
     for index, key in enumerate(extraction_data.keys()):
