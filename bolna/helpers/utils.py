@@ -15,6 +15,7 @@ import wave
 import io
 import numpy as np
 from scipy.io import wavfile
+import aiofiles
 
 import torch
 import torchaudio
@@ -206,12 +207,14 @@ def get_required_input_types(task):
     return input_types
 
 
-def format_messages(messages):
+def format_messages(messages, use_system_prompt = False):
     formatted_string = ""
     for message in messages:
         role = message['role']
         content = message['content']
 
+        if use_system_prompt and role == 'system':
+            formatted_string += "system: " + content + "\n"
         if role == 'assistant':
             formatted_string += "assistant: " + content + "\n"
         elif role == 'user':
@@ -364,3 +367,39 @@ def merge_wav_bytes(wav_files_bytes):
     combined.export(buffer, format="wav")
     return buffer.getvalue()
 
+
+'''
+Message type
+1. Component
+2. Request/Response
+3. conversation_leg_id
+4. data
+5. num_input_tokens
+6. num_output_tokens 
+7. num_characters 
+8. is_final
+'''
+async def write_request_logs(message, run_id):
+    logger.info(f"Message {message}")
+    row = [ message['time'], message["component"], message["direction"], message["leg_id"], message['sequence_id'], message['model']]
+    if message["component"] == "llm":
+        component_details = [message['data'], message.get('input_tokens', 0), message.get('output_tokens', 0), None, None]
+    elif message["component"] == "transcriber":
+        component_details = [message['data'], None, None, None, message.get('is_final', False)]
+    elif message["component"] == "synthesizer":
+        component_details = [message['data'], None, None, len(message['data']), None]
+    
+    row = row + component_details
+    
+    header = "Time,Component,Direction,Leg ID,Sequence ID,Model,Data,Input Tokens,Output Tokens,Characters,Final Transcript\n"
+    log_string = ','.join(['"' + str(item).replace('"', '""') + '"' if item is not None else '' for item in row]) + '\n'    
+    log_dir = f"./logs/{run_id.split('/')[0]}"
+    os.makedirs(log_dir, exist_ok=True)
+    log_file_path = f"{log_dir}/{run_id.split('/')[1]}.vsv"
+    file_exists = os.path.exists(log_file_path)
+    
+    async with aiofiles.open(log_file_path, mode='a') as log_file:
+        if not file_exists:
+            await log_file.write(header+log_string)
+        else:    
+            await log_file.write(log_string)

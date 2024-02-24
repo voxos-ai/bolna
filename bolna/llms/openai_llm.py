@@ -1,6 +1,8 @@
+import asyncio
 import os
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
+
 from .llm import BaseLLM
 from bolna.helpers.logger_config import configure_logger
 
@@ -66,6 +68,7 @@ class OpenAiLLM(BaseLLM):
         model_args["stream"] = True
         model_args["stop"] = ["User:"]
         async for chunk in await self.async_client.chat.completions.create(**model_args):
+            logger.info(f"CHUNK IN DICTIONARY FORMAT {chunk.__dict__}")
             if text_chunk := chunk.choices[0].delta.content:
                 answer += text_chunk
                 buffer += text_chunk
@@ -84,6 +87,7 @@ class OpenAiLLM(BaseLLM):
         else:
             yield answer, True
         self.started_streaming = False
+
 
     async def generate(self, messages, classification_task=False, stream=False, synthesize=True, request_json=False):
         response_format = self.get_response_format(request_json)

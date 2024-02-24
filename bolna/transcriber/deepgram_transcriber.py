@@ -247,13 +247,9 @@ class DeepgramTranscriber(BaseTranscriber):
                     self.meta_info['speech_final'] = True
                     self.audio_submitted = False
                     self.meta_info["include_latency"] = True
-                    self.meta_info["audio_duration"] = 10
-                    last_spoken_audio_frame = self.connection_start_time + 10
-                    self.meta_info["audio_start_time"] = self.audio_submission_time 
-                    transcription_completion_time = time.time()
-                    self.meta_info["transcription_completion_time"] = transcription_completion_time
-                    # abs because sometimes it's negative. Got to debug that further  
-                    self.meta_info["last_vocal_frame_timestamp"] = last_spoken_audio_frame
+                    self.meta_info["utterance_end"] = self.connection_start_time + msg['last_word_end']
+                    self.meta_info["time_received"] = time.time()
+                    self.meta_info["transcriber_latency"] =  None
                     if curr_message == "":
                         continue
                     logger.info(f"Signalling the Task manager to start speaking")
@@ -290,6 +286,9 @@ class DeepgramTranscriber(BaseTranscriber):
                     finalized_transcript += " " + transcript #Just get the whole transcript as there's mismatch at times
                     self.meta_info["is_final"] = True
                     if transcript.strip() != curr_message.strip():
+                        self.meta_info["utterance_end"] = self.__calculate_utterance_end(msg)
+                        self.meta_info["time_received"] = time.time()
+                        self.meta_info["transcriber_latency"] =  self.meta_info["time_received"] - self.meta_info["utterance_end"] 
                         yield create_ws_data_packet(curr_message, self.meta_info)
                 else:
                     #If we're not processing interim results
