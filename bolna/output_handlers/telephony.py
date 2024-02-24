@@ -26,6 +26,9 @@ class TelephonyOutputHandler(DefaultOutputHandler):
     async def form_media_message(self, audio_data):
         pass
 
+    async def form_mark_message(self, mark_id):
+        pass
+
     async def handle(self, ws_data_packet):
         try:
             audio_chunk = ws_data_packet.get('data')
@@ -39,27 +42,12 @@ class TelephonyOutputHandler(DefaultOutputHandler):
 
                 if audio_chunk and self.stream_sid and len(audio_chunk) != 1:
                     media_message = await self.form_media_message(audio_chunk)
-                    #audio = audioop.lin2ulaw(audio_chunk, 2)
-                    #base64_audio = base64.b64encode(audio).decode("utf-8")
-                    # message = {
-                    #     'event': 'media',
-                    #     'streamSid': self.stream_sid,
-                    #     'media': {
-                    #         'payload': base64_audio
-                    #     }
-                    # }
-
                     await self.websocket.send_text(json.dumps(media_message))
 
                     mark_id = str(uuid.uuid4())
                     self.mark_set.add(mark_id)
-                    mark_message = {
-                        "event": "mark",
-                        "streamSid": self.stream_sid,
-                        "mark": {
-                            "name": mark_id
-                        }
-                    }
+
+                    mark_message = await self.form_mark_message(mark_id)
                     await self.websocket.send_text(json.dumps(mark_message))
             except Exception as e:
                 traceback.print_exc()

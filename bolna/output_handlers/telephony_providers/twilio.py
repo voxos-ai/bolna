@@ -39,6 +39,17 @@ class TwilioOutputHandler(TelephonyOutputHandler):
 
         return message
 
+    async def form_mark_message(self, mark_id):
+        mark_message = {
+            "event": "mark",
+            "streamSid": self.stream_sid,
+            "mark": {
+                "name": mark_id
+            }
+        }
+
+        return mark_message
+
     @staticmethod
     async def send_sms(self, message_text, call_number):
         message = twilio_client.messages.create(

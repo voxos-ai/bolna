@@ -33,3 +33,14 @@ class ExotelOutputHandler(TelephonyOutputHandler):
         }
 
         return message
+
+    async def form_mark_message(self, mark_id):
+        mark_message = {
+            "event": "mark",
+            "stream_sid": self.stream_sid,
+            "mark": {
+                "name": mark_id
+            }
+        }
+
+        return mark_message

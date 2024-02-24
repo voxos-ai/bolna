@@ -79,12 +79,12 @@ class DeepgramTranscriber(BaseTranscriber):
 
         if self.provider in ('twilio', 'exotel'):
             self.sampling_rate = 8000
-            self.audio_frame_duration = 0.2  # With twilio we are sending 100ms at a time
+            self.audio_frame_duration = 0.2  # With telephony we are sending 100ms at a time
 
             if self.provider == 'twilio':
                 self.encoding = 'mulaw'
 
-            websocket_url = (f"wss://api.deepgram.com/v1/listen?model=nova-2&encoding={self.encoding}&sample_rate=8000&channels"
+            websocket_url = (f"wss://api.deepgram.com/v1/listen?model=nova-2&encoding={self.encoding}&sample_rate={self.sampling_rate}&channels"
                              f"=1&filler_words=true&interim_results={self.process_interim_results}&diarize=true&utterance_end_ms=1000")
 
         if self.provider == "playground":

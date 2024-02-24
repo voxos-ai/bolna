@@ -58,8 +58,7 @@ class TelephonyInputHandler(DefaultInputHandler):
                     media_audio = base64.b64decode(media_data['payload'])
                     media_ts = int(media_data["timestamp"])
 
-                    #if packet['media']['track'] == 'inbound' or 'chunk' in packet['media']:
-                    if 'chunk' in packet['media']:
+                    if 'chunk' in packet['media'] or ('track' in packet['media'] and packet['media']['track'] == 'inbound'):
                         meta_info = {
                             'io': self.io_provider,
                             'call_sid': self.call_sid,
@@ -75,6 +74,7 @@ class TelephonyInputHandler(DefaultInputHandler):
                         self.last_media_received = media_ts
                         buffer.append(media_audio)
                         self.message_count += 1
+
                         # Send 100 ms of audio to deepgram
                         if self.message_count == 10:
                             merged_audio = b''.join(buffer)
