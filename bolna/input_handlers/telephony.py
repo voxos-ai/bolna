@@ -3,19 +3,15 @@ from .default import DefaultInputHandler
 import asyncio
 import base64
 import json
-from twilio.rest import Client
 from dotenv import load_dotenv
-import os
 from bolna.helpers.utils import create_ws_data_packet
 from bolna.helpers.logger_config import configure_logger
 
 logger = configure_logger(__name__)
 load_dotenv()
 
-twilio_client = Client(os.getenv('TWILIO_ACCOUNT_SID'), os.getenv('TWILIO_AUTH_TOKEN'))
 
-
-class TwilioInputHandler(DefaultInputHandler):
+class TelephonyInputHandler(DefaultInputHandler):
     def __init__(self, queues, websocket=None, input_types=None, mark_set=None, connected_through_dashboard=False):
         super().__init__(queues, websocket, input_types, connected_through_dashboard)
         self.stream_sid = None
@@ -24,11 +20,10 @@ class TwilioInputHandler(DefaultInputHandler):
         self.message_count = 0
         self.mark_set = mark_set
         self.last_media_received = 0
+        self.io_provider = None
 
     async def call_start(self, packet):
-        start = packet['start']
-        self.call_sid = start['callSid']
-        self.stream_sid = start['streamSid']
+        pass
 
     async def process_mark_message(self, packet):
         if packet["mark"]["name"] in self.mark_set:
@@ -62,10 +57,10 @@ class TwilioInputHandler(DefaultInputHandler):
                     media_data = packet['media']
                     media_audio = base64.b64decode(media_data['payload'])
                     media_ts = int(media_data["timestamp"])
-                    
-                    if packet['media']['track'] == 'inbound':
+
+                    if 'chunk' in packet['media'] or ('track' in packet['media'] and packet['media']['track'] == 'inbound'):
                         meta_info = {
-                            'io': 'twilio',
+                            'io': self.io_provider,
                             'call_sid': self.call_sid,
                             'stream_sid': self.stream_sid,
                             'sequence': self.input_types['audio']
@@ -79,7 +74,8 @@ class TwilioInputHandler(DefaultInputHandler):
                         self.last_media_received = media_ts
                         buffer.append(media_audio)
                         self.message_count += 1
-                        #Send 100 ms of audio to deepgram
+
+                        # Send 100 ms of audio to deepgram
                         if self.message_count == 10:
                             merged_audio = b''.join(buffer)
                             buffer = []

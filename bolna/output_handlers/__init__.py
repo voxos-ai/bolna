@@ -1,2 +1,3 @@
 from .default import DefaultOutputHandler
-from .twilio import TwilioOutputHandler
+from .telephony_providers.twilio import TwilioOutputHandler
+from .telephony_providers.exotel import ExotelOutputHandler
