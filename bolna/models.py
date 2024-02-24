@@ -10,8 +10,6 @@ def validate_attribute(value, allowed_values):
     return value
 
 
-
-
 class PollyConfig(BaseModel):
     voice: str
     engine: str
@@ -31,15 +29,18 @@ class ElevenLabsConfig(BaseModel):
     model: str
     sampling_rate: Optional[str] = "16000"
 
+
 class OpenAIConfig(BaseModel):
     voice: str
     model: str
     sampling_rate: Optional[str] ="24000"
 
+
 class FourieConfig(BaseModel):
     voice_id: str
     gender: str
     voice: str
+
 
 class Transcriber(BaseModel):
     model: str
@@ -70,13 +71,14 @@ class Synthesizer(BaseModel):
     def validate_model(cls, value):
         return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai"])
 
+
 class IOModel(BaseModel):
     provider: str
     format: str
 
     @validator("provider")
     def validate_provider(cls, value):
-        return validate_attribute(value, ["twilio", "default", "database"])
+        return validate_attribute(value, ["twilio", "default", "database", "exotel"])
 
 
 class LLM(BaseModel):
