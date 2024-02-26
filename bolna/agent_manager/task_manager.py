@@ -172,28 +172,28 @@ class TaskManager(BaseManager):
             raise "Other input handlers not supported yet"
 
     def __setup_input_handlers(self, connected_through_dashboard, input_queue):
-            if self.task_config["tools_config"]["input"]["provider"] in SUPPORTED_INPUT_HANDLERS.keys():
-                logger.info(f"Connected through dashboard {connected_through_dashboard}")
-                input_kwargs = {"queues": self.queues,
-                                "websocket": self.websocket,
-                                "input_types": get_required_input_types(self.task_config),
-                                "mark_set": self.mark_set,
-                                "connected_through_dashboard": self.connected_through_dashboard}  
-                                                          
-                if connected_through_dashboard:
-                    logger.info("Connected through dashboard and hence using default input handler")
-                    # If connected through dashboard get basic dashboard class
-                    input_handler_class = SUPPORTED_INPUT_HANDLERS.get("default")
-                    input_kwargs['queue'] = input_queue
-                else:
-                    input_handler_class = SUPPORTED_INPUT_HANDLERS.get(
-                        self.task_config["tools_config"]["input"]["provider"])
+        if self.task_config["tools_config"]["input"]["provider"] in SUPPORTED_INPUT_HANDLERS.keys():
+            logger.info(f"Connected through dashboard {connected_through_dashboard}")
+            input_kwargs = {"queues": self.queues,
+                            "websocket": self.websocket,
+                            "input_types": get_required_input_types(self.task_config),
+                            "mark_set": self.mark_set,
+                            "connected_through_dashboard": self.connected_through_dashboard}
 
-                    if self.task_config['tools_config']['input']['provider'] == 'default':
-                        input_kwargs['queue'] = input_queue
-                self.tools["input"] = input_handler_class(**input_kwargs)
+            if connected_through_dashboard:
+                logger.info("Connected through dashboard and hence using default input handler")
+                # If connected through dashboard get basic dashboard class
+                input_handler_class = SUPPORTED_INPUT_HANDLERS.get("default")
+                input_kwargs['queue'] = input_queue
             else:
-                raise "Other input handlers not supported yet"
+                input_handler_class = SUPPORTED_INPUT_HANDLERS.get(
+                    self.task_config["tools_config"]["input"]["provider"])
+
+                if self.task_config['tools_config']['input']['provider'] == 'default':
+                    input_kwargs['queue'] = input_queue
+            self.tools["input"] = input_handler_class(**input_kwargs)
+        else:
+            raise "Other input handlers not supported yet"
 
     def __setup_transcriber(self):
         if self.task_config["tools_config"]["transcriber"] is not None:
