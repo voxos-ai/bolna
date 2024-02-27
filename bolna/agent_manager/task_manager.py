@@ -22,7 +22,7 @@ logger = configure_logger(__name__)
 class TaskManager(BaseManager):
     def __init__(self, assistant_name, task_id, task, ws, input_parameters=None, context_data=None,
                  assistant_id=None, run_id=None, connected_through_dashboard=False, 
-                 cache =  None, input_queue = None, conversation_history = None, output_queue = None, **kwargs):
+                 cache =  None, input_queue = None, conversation_history = None, output_queue = None, yield_chunks = True, **kwargs):
         super().__init__()
         # Latency and logging 
         self.latency_dict = defaultdict(dict)
@@ -36,7 +36,9 @@ class TaskManager(BaseManager):
         self.task_config = task
         self.context_data = context_data
         self.connected_through_dashboard = connected_through_dashboard
+        self.enforce_streaming = kwargs.get("enforce_streaming", False)
         self.callee_silent = True
+        self.yield_chunks = yield_chunks
 
         # Set up communication queues between processes
         self.audio_queue = asyncio.Queue()
@@ -115,7 +117,7 @@ class TaskManager(BaseManager):
         self.extracted_data = None
         self.summarized_data = None
         logger.info(f"TASK CONFIG {self.task_config['tools_config'] }")
-        self.stream = ( self.task_config["tools_config"]['synthesizer'] is not None and self.task_config["tools_config"]["synthesizer"]["stream"]) and not connected_through_dashboard
+        self.stream = ( self.task_config["tools_config"]['synthesizer'] is not None and self.task_config["tools_config"]["synthesizer"]["stream"]) and (self.enforce_streaming or not self.connected_through_dashboard)
         #self.stream = not connected_through_dashboard #Currently we are allowing only realtime conversation based usecases. Hence it'll always be true unless connected through dashboard
         self.is_local = False
         if self.task_config["tools_config"]["llm_agent"] is not None:
@@ -208,7 +210,8 @@ class TaskManager(BaseManager):
             self.task_config['tools_config']["transcriber"]["output_queue"] = self.transcriber_output_queue
             if self.task_config["tools_config"]["transcriber"]["model"] in SUPPORTED_TRANSCRIBER_MODELS.keys():
                 if self.connected_through_dashboard:
-                    self.task_config["tools_config"]["transcriber"]["stream"] = False
+                    self.task_config["tools_config"]["transcriber"]["stream"] = True if self.enforce_streaming else False
+                    logger.info(f'self.task_config["tools_config"]["transcriber"]["stream"] {self.task_config["tools_config"]["transcriber"]["stream"]} self.enforce_streaming {self.enforce_streaming}')
                 transcriber_class = SUPPORTED_TRANSCRIBER_MODELS.get(
                     self.task_config["tools_config"]["transcriber"]["model"])
                 self.tools["transcriber"] = transcriber_class(provider, **self.task_config["tools_config"]["transcriber"], **self.kwargs)
@@ -221,7 +224,8 @@ class TaskManager(BaseManager):
             provider_config = self.task_config["tools_config"]["synthesizer"].pop("provider_config")
             if self.connected_through_dashboard:
                 self.task_config["tools_config"]["synthesizer"]["audio_format"] = "mp3" # Hard code mp3 if we're connected through dashboard
-                self.task_config["tools_config"]["synthesizer"]["stream"] = False #Hardcode stream to be False as we don't want to get blocked by a __listen_synthesizer co-routine
+                self.task_config["tools_config"]["synthesizer"]["stream"] = True if self.enforce_streaming else False #Hardcode stream to be False as we don't want to get blocked by a __listen_synthesizer co-routine
+                
             self.tools["synthesizer"] = synthesizer_class(**self.task_config["tools_config"]["synthesizer"], **provider_config, **self.kwargs)
             llm_config["buffer_size"] = self.task_config["tools_config"]["synthesizer"].get('buffer_size')
 
@@ -458,7 +462,7 @@ class TaskManager(BaseManager):
         log = {}
         log['direction'] = direction
         log['data'] = message
-        log['leg_id'] = meta_info['request_id']
+        log['leg_id'] = meta_info['request_id'] if "request_id" in meta_info else "1234"
         log['time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log['component'] = component
         log['sequence_id'] = meta_info['sequence_id']
@@ -810,9 +814,13 @@ class TaskManager(BaseManager):
                                     #self.latency_dict[message['meta_info']["request_id"]]['synthesizer'] = {"first_chunk_generation_latency": first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time'], "first_chunk_generation_timestamp": first_chunk_generation_timestamp}
                                     meta_info["synthesizer_first_chunk_latency"] = first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time']
                                 logger.info(f"Simply Storing in buffered output queue for now")
-                                for chunk in yield_chunks_from_memory(message['data'], chunk_size=16384):
-                                    self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, meta_info))
-                                    #await self.tools["output"].handle()
+
+                                if self.yield_chunks:
+                                    for chunk in yield_chunks_from_memory(message['data'], chunk_size=16384):
+                                        self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, meta_info))
+                                
+                                else:
+                                    self.buffered_output_queue.put_nowait(message)
                                 
                             else:
                                 if self.task_config["tools_config"]["output"]["provider"] == "twilio" and not self.connected_through_dashboard and self.synthesizer_provider == "elevenlabs":
@@ -823,10 +831,11 @@ class TaskManager(BaseManager):
                                     meta_info["synthesizer_first_chunk_latency"] = first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time']
                                     #self.latency_dict[message['meta_info']["request_id"]]['synthesizer'] = {"first_chunk_generation_latency": first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time'], "first_chunk_generation_timestamp": first_chunk_generation_timestamp}
                                 
-                                for chunk in yield_chunks_from_memory(message['data'], chunk_size=16384):
-                                    self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, meta_info))
-
-                                #self.buffered_output_queue.put_nowait(message)
+                                if self.yield_chunks:
+                                    for chunk in yield_chunks_from_memory(message['data'], chunk_size=16384):
+                                        self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, meta_info))
+                                else:
+                                    self.buffered_output_queue.put_nowait(message)
                                 #await self.tools["output"].handle(message)
                             
                         else:
@@ -862,8 +871,12 @@ class TaskManager(BaseManager):
                     logger.info(f"Output queue was not empty and hence emptying it")
                     self.buffered_output_queue = asyncio.Queue()
 
-                for chunk in  yield_chunks_from_memory(audio_chunk, chunk_size=16384):
-                    logger.debug("Sending chunk to output queue")
+                if self.yield_chunks:
+                    for chunk in  yield_chunks_from_memory(audio_chunk, chunk_size=16384):
+                        logger.debug("Sending chunk to output queue")
+                        message = create_ws_data_packet(chunk, meta_info)
+                        self.buffered_output_queue.put_nowait(message)
+                else:
                     message = create_ws_data_packet(chunk, meta_info)
                     self.buffered_output_queue.put_nowait(message)
 

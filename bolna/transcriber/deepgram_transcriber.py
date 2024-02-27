@@ -74,20 +74,23 @@ class DeepgramTranscriber(BaseTranscriber):
 
     def get_deepgram_ws_url(self):
         websocket_url = (f"wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=16000&channels=1"
-                         f"&filler_words=true&interim_results={self.process_interim_results}&diarize=true&utterance_end_ms=1000")
+                         f"&filler_words=true&interim_results={self.process_interim_results}&language={self.language}&diarize=true&utterance_end_ms=1000")
         self.audio_frame_duration = 0.5 #We're sending 8k samples with a sample rate of 16k
 
         if self.provider == 'twilio':
             websocket_url = (f"wss://api.deepgram.com/v1/listen?model=nova-2&encoding=mulaw&sample_rate=8000&channels"
-                             f"=1&filler_words=true&interim_results={self.process_interim_results}&diarize=true&utterance_end_ms=1000")
+                             f"=1&filler_words=true&language={self.language}&interim_results={self.process_interim_results}&diarize=true&utterance_end_ms=1000")
             self.sampling_rate = 8000
-            self.audio_frame_duration = 0.2  #With twilio we are sending 100ms at a time
+            self.audio_frame_duration = 0.2  #With twilio we are sending 200ms at a time
 
         if self.provider == "playground":
-            websocket_url = (f"wss://api.deepgram.com/v1/listen?model=nova-2&encoding=opus&sample_rate=8000&channels"
-                             f"=1&filler_words=true&interim_results={self.process_interim_results}&diarize=true&utterance_end_ms=1000")
+            logger.info(f"CONNECTED THROUGH PLAYGROUND")
+            websocket_url = (f"wss://api.deepgram.com/v1/listen?model=nova-2&filler_words=true&interim_results={self.process_interim_results}&diarize=true&utterance_end_ms=1000")
             self.sampling_rate = 8000
             self.audio_frame_duration = 0.0 #There's no streaming from the playground 
+            
+            self.sampling_rate = 8000
+            self.audio_frame_duration = 0.2 #With twilio we are sending 200ms at a time
 
         if "en" not in self.language:
             websocket_url += '&language={}'.format(self.language)
@@ -212,6 +215,7 @@ class DeepgramTranscriber(BaseTranscriber):
                 if end_of_stream:
                     break
                 self.num_frames +=1
+                logger.info(f"SENDING TO DG")
                 await ws.send(ws_data_packet.get('data'))
 
         except Exception as e:
