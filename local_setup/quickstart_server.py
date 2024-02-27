@@ -14,13 +14,11 @@ from bolna.providers import *
 from bolna.prompts import *
 from bolna.helpers.logger_config import configure_logger
 from bolna.models import *
-#from bolna.memory.cache import InmemoryScalarCache
 from bolna.llms import LiteLLM
 from litellm import token_counter
 from datetime import datetime, timezone
 from bolna.agent_manager.assistant_manager import AssistantManager
 
-PREPROCESS_DIR = "agent_data"
 load_dotenv()
 logger = configure_logger(__name__)
 
@@ -30,6 +28,7 @@ active_websockets: List[WebSocket] = []
 
 app = FastAPI()
 BUCKET_NAME = os.getenv('BUCKET_NAME')
+PREPROCESS_DIR = "agent_data"
 
 # Set up CORS middleware options
 app.add_middleware(
@@ -44,7 +43,6 @@ app.add_middleware(
 class CreateAgentPayload(BaseModel):
     agent_config: AgentModel
     agent_prompts: Optional[Dict[str, Dict[str, str]]]
-
 
 
 @app.on_event("startup")
@@ -85,8 +83,6 @@ async def generate_audio_from_text(text, synthesizer_config):
     return audio_data
 
 
-
-
 async def process_and_store_audio(conversation_graph, assistant_id, synthesizer_config):
     audio_bytes = {}
     for node_key, node_value in conversation_graph['task_1'].items():
@@ -120,7 +116,6 @@ async def process_and_store_audio(conversation_graph, assistant_id, synthesizer_
     await store_file(BUCKET_NAME, f"{assistant_id}/conversation_details.json", conversation_graph, "json", local=True, preprocess_dir="agent_data")
 
 
-
 def get_follow_up_prompts(prompt_json, tasks):
     for ind, task in enumerate(tasks):
         task_id = ind
@@ -134,6 +129,7 @@ def get_follow_up_prompts(prompt_json, tasks):
             prompt_json['serialized_prompts'][f'task_{task_id + 2}'] = {"system_prompt": SUMMARIZATION_PROMPT}
     logger.info(f"returning {prompt_json}")
     return prompt_json
+
 
 def create_prompts_for_followup_tasks(tasks, prompt_json):
     if tasks is not None and len(tasks) > 0:
@@ -159,11 +155,12 @@ async def background_process_and_store(conversation_type, assistant_id, assistan
         traceback.print_exc()
         logger.error(f"Error while storing conversation details to s3: {e}")
 
+
 @app.post("/agent")
 #Loading.
 async def create_agent(agent_data: CreateAgentPayload):
     agent_uuid = str(uuid.uuid4())
-    data_for_db = agent_data.agent_config.dict()
+    data_for_db = agent_data.agent_config.model_dump()
     data_for_db["assistant_status"] = "seeding"
     agent_prompts = agent_data.agent_prompts
     logger.info(f'Data for DB {data_for_db}')
@@ -172,7 +169,7 @@ async def create_agent(agent_data: CreateAgentPayload):
         logger.info("Setting up follow up tasks")
         for index, task in enumerate(data_for_db['tasks']):
             if task['task_type'] == "extraction":
-                extraction_prompt_llm =  os.getenv("EXTRACTION_PROMPT_GENERATION_MODEL")
+                extraction_prompt_llm = os.getenv("EXTRACTION_PROMPT_GENERATION_MODEL")
                 extraction_prompt_generation_llm = LiteLLM(streaming_model = extraction_prompt_llm, max_tokens = 2000)
                 extraction_prompt = await extraction_prompt_generation_llm.generate(messages = [{'role':'system', 'content': EXTRACTION_PROMPT_GENERATION_PROMPT}, {'role': 'user', 'content': data_for_db["tasks"][index]['tools_config']["llm_agent"]['extraction_details']}])
                 data_for_db["tasks"][index]["tools_config"]["llm_agent"]['extraction_json'] = extraction_prompt
@@ -183,35 +180,6 @@ async def create_agent(agent_data: CreateAgentPayload):
                                 agent_uuid, agent_prompts, synthesizer_config = data_for_db['tasks'][0]['tools_config']['synthesizer'], tasks = data_for_db['tasks']))
 
     return {"agent_id": agent_uuid, "state": "created"}
-
-
-@app.put("/agent/{agent_uuid}")
-async def edit_agent(agent_uuid: str, agent_data: CreateAgentPayload):
-    user_id = agent_data.user_id
-    existing_data = await redis_client.mget(agent_uuid)
-    if not existing_data:
-        raise HTTPException(status_code=404, detail="Agent not found")
-
-    updated_data = agent_data.assistant_config.dict()
-    updated_data["assistant_status"] = "updating"
-    assistant_prompts = agent_data.assistant_prompts
-
-    if len(updated_data['tasks']) > 0:
-        logger.info("Setting up follow up tasks")
-        for index, task in enumerate(updated_data['tasks']):
-            if task['task_type'] == "extraction":
-                extraction_prompt_llm =  os.getenv("EXTRACTION_PROMPT_GENERATION_MODEL")
-                extraction_prompt_generation_llm = LiteLLM(streaming_model = extraction_prompt_llm, max_tokens = 2000)
-                extraction_prompt = await extraction_prompt_generation_llm.generate(messages = [{'role':'system', 'content': EXTRACTION_PROMPT_GENERATION_PROMPT}, {'role': 'user', 'content': updated_data["tasks"][index]['tools_config']["llm_agent"]['extraction_details']}])
-                updated_data["tasks"][index]["tools_config"]["llm_agent"]['extraction_json'] = extraction_prompt
-
-                logger.info(f"Extraction task. Hencegot the extraction prompt {extraction_prompt}")
-    background_process_and_store_task = asyncio.create_task(
-        background_process_and_store(updated_data['tasks'][0]['tools_config']['llm_agent']['agent_flow_type'],
-                                     assistant_prompts.dict(), agent_uuid, user_id, synthesizer_config = updated_data['tasks'][0]['tools_config']['synthesizer'], tasks=updated_data['tasks']))
-    redis_task = await redis_client.set(agent_uuid, json.dumps(updated_data))
-
-    return {"agent_id": agent_uuid, "state": "updated"}
 
 
 ############################################################################################# 
@@ -235,7 +203,7 @@ async def websocket_endpoint(agent_id: str, websocket: WebSocket, user_agent: st
     assistant_manager = AssistantManager(agent_config, websocket, agent_id)
     
     try:
-        async for index, task_output in assistant_manager.run(local = True):
+        async for index, task_output in assistant_manager.run(local=True):
             logger.info(task_output)
     except WebSocketDisconnect:
         active_websockets.remove(websocket)
