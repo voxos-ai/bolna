@@ -5,6 +5,7 @@ import traceback
 from .base_agent import BaseAgent
 from bolna.constants import USERS_KEY_ORDER
 from bolna.helpers.logger_config import configure_logger
+from bolna.helpers.utils import update_prompt_with_context, get_md5_hash
 
 logger = configure_logger(__name__)
 
@@ -71,15 +72,13 @@ class GraphBasedConversationAgent(BaseAgent):
         self.current_node = self.graph.root
         self.current_node_interim = self.graph.root #Handle interim node because we are dealing with interim results 
 
-
     def _get_audio_text_pair(self, node):
         ind = random.randint(0, len(node.content) - 1)
         audio_pair = node.content[ind]
-        if "audio" not in audio_pair:
-            recipient_data = self.context_data.get('recipient_data', {})
-            # @TODO: Need to make this dynamic
-            audio_pair["text"] = audio_pair["text"].format(' '.join([recipient_data.get(k, '') for k in USERS_KEY_ORDER]))
-            audio_pair["audio"] = recipient_data.get('audio')
+        contextual_text = update_prompt_with_context(audio_pair['text'], self.context_data)
+        if contextual_text != audio_pair['text']:
+            audio_pair['text'] = contextual_text
+            audio_pair['audio'] = get_md5_hash(contextual_text)
         return audio_pair
 
     async def _get_next_formulaic_agent_next_step(self, history, stream=True, synthesize=False):
