@@ -26,6 +26,7 @@ class TaskManager(BaseManager):
         super().__init__()
         # Latency and logging 
         self.latency_dict = defaultdict(dict)
+        self.kwargs = kwargs
 
 
         logger.info(f"doing task {task}")
@@ -39,7 +40,8 @@ class TaskManager(BaseManager):
         self.enforce_streaming = kwargs.get("enforce_streaming", False)
         self.callee_silent = True
         self.yield_chunks = yield_chunks
-
+        self.kwargs["process_interim_results"] = "true" if task.get("optimize_latency", False) == True else "false"
+        logger.info(f"Processing interim results {self.kwargs['process_interim_results'] }")
         # Set up communication queues between processes
         self.audio_queue = asyncio.Queue()
         self.llm_queue = asyncio.Queue()
@@ -135,7 +137,6 @@ class TaskManager(BaseManager):
         self.cache = cache
         logger.info("task initialization completed")
 
-        self.kwargs = kwargs
         # Sequence id for interruption
         self.curr_sequence_id = 0
         self.sequence_ids = set()
@@ -499,7 +500,7 @@ class TaskManager(BaseManager):
             self.interim_history.append({'role': 'user', 'content': message['data']})
             logger.info(f"Starting LLM Agent {self.interim_history}")
             #Expose get current classification_response method from the agent class and use it for the response log
-            self.__convert_to_request_log(message = format_messages(self.interim_history), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["classification_model"])
+            self.__convert_to_request_log(message = format_messages(self.interim_history, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["classification_model"])
             async for text_chunk in self.tools['llm_agent'].generate(self.interim_history, stream=True, synthesize=True,
                                                                      label_flow=self.label_flow):
                 if text_chunk == "<end_of_conversation>":
@@ -558,7 +559,7 @@ class TaskManager(BaseManager):
             #messages = [self.interim_history[0], {'role': 'user', 'content': format_messages(self.history)}]
             self.interim_history.append({'role': 'user', 'content': message['data']})
             ### TODO CHECK IF THIS IS EVEN REQUIRED
-            self.__convert_to_request_log(message=format_messages(self.interim_history), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["streaming_model"])
+            self.__convert_to_request_log(message=format_messages(self.interim_history, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["streaming_model"])
             
             async for llm_message in self.tools['llm_agent'].generate(self.interim_history, synthesize=True):
                 text_chunk, end_of_llm_stream = llm_message
@@ -931,7 +932,6 @@ class TaskManager(BaseManager):
                 message = await self.buffered_output_queue.get()
                 logger.info("Start response is True and hence starting to speak {} Current sequence ids".format(message['meta_info'], self.sequence_ids))
                 
-                
                 if "end_of_conversation" in message['meta_info']:
                     await self.__process_end_of_conversation()
                 
@@ -941,7 +941,7 @@ class TaskManager(BaseManager):
                     logger.info(f'{message["meta_info"]["sequence_id"]} is not in {self.sequence_ids} and hence not speaking')
                     continue
 
-                if "is_first_chunk" in  message['meta_info'] and message['meta_info']['is_first_chunk']:
+                if "is_first_chunk" in message['meta_info'] and message['meta_info']['is_first_chunk']:
                     meta_info = message['meta_info']
                     self.consider_next_transcript_after = time.time() + self.duration_to_prevent_accidental_interruption
                     utterance_end = meta_info.get("utterance_end", None)
