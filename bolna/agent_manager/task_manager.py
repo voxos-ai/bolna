@@ -21,13 +21,12 @@ logger = configure_logger(__name__)
 
 class TaskManager(BaseManager):
     def __init__(self, assistant_name, task_id, task, ws, input_parameters=None, context_data=None,
-                 assistant_id=None, run_id=None, connected_through_dashboard=False, 
-                 cache =  None, input_queue = None, conversation_history = None, output_queue = None, yield_chunks = True, **kwargs):
+                 assistant_id=None, run_id=None, connected_through_dashboard=False,cache =  None, 
+                 input_queue = None, conversation_history = None, output_queue = None, yield_chunks = True, **kwargs):
         super().__init__()
         # Latency and logging 
         self.latency_dict = defaultdict(dict)
         self.kwargs = kwargs
-
 
         logger.info(f"doing task {task}")
         self.task_id = task_id
@@ -122,6 +121,7 @@ class TaskManager(BaseManager):
         self.stream = ( self.task_config["tools_config"]['synthesizer'] is not None and self.task_config["tools_config"]["synthesizer"]["stream"]) and (self.enforce_streaming or not self.connected_through_dashboard)
         #self.stream = not connected_through_dashboard #Currently we are allowing only realtime conversation based usecases. Hence it'll always be true unless connected through dashboard
         self.is_local = False
+        llm_config = None
         if self.task_config["tools_config"]["llm_agent"] is not None:
             llm_config = {
                 "streaming_model": self.task_config["tools_config"]["llm_agent"]["streaming_model"],
@@ -165,7 +165,7 @@ class TaskManager(BaseManager):
             else:
                 output_handler_class = SUPPORTED_OUTPUT_HANDLERS.get(self.task_config["tools_config"]["output"]["provider"])
             
-                if self.task_config["tools_config"]["output"]["provider"] == "twilio":
+                if self.task_config["tools_config"]["output"]["provider"] in SUPPORTED_OUTPUT_TELEPHONY_HANDLERS.keys():
                     output_kwargs['mark_set'] = self.mark_set
                     logger.info(f"Making sure that the sampling rate for output handler is 8000")
                     self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 8000
@@ -178,30 +178,29 @@ class TaskManager(BaseManager):
         else:
             raise "Other input handlers not supported yet"
 
-
     def __setup_input_handlers(self, connected_through_dashboard, input_queue):
-            if self.task_config["tools_config"]["input"]["provider"] in SUPPORTED_INPUT_HANDLERS.keys():
-                logger.info(f"Connected through dashboard {connected_through_dashboard}")
-                input_kwargs = {"queues": self.queues,
-                                "websocket": self.websocket,
-                                "input_types": get_required_input_types(self.task_config),
-                                "mark_set": self.mark_set,
-                                "connected_through_dashboard": self.connected_through_dashboard}  
-                                                          
-                if connected_through_dashboard:
-                    logger.info("Connected through dashboard and hence using default input handler")
-                    # If connected through dashboard get basic dashboard class
-                    input_handler_class = SUPPORTED_INPUT_HANDLERS.get("default")
-                    input_kwargs['queue'] = input_queue
-                else:
-                    input_handler_class = SUPPORTED_INPUT_HANDLERS.get(
-                        self.task_config["tools_config"]["input"]["provider"])
+        if self.task_config["tools_config"]["input"]["provider"] in SUPPORTED_INPUT_HANDLERS.keys():
+            logger.info(f"Connected through dashboard {connected_through_dashboard}")
+            input_kwargs = {"queues": self.queues,
+                            "websocket": self.websocket,
+                            "input_types": get_required_input_types(self.task_config),
+                            "mark_set": self.mark_set,
+                            "connected_through_dashboard": self.connected_through_dashboard}
 
-                    if self.task_config['tools_config']['input']['provider'] == 'default':
-                        input_kwargs['queue'] = input_queue
-                self.tools["input"] = input_handler_class(**input_kwargs)
+            if connected_through_dashboard:
+                logger.info("Connected through dashboard and hence using default input handler")
+                # If connected through dashboard get basic dashboard class
+                input_handler_class = SUPPORTED_INPUT_HANDLERS.get("default")
+                input_kwargs['queue'] = input_queue
             else:
-                raise "Other input handlers not supported yet"
+                input_handler_class = SUPPORTED_INPUT_HANDLERS.get(
+                    self.task_config["tools_config"]["input"]["provider"])
+
+                if self.task_config['tools_config']['input']['provider'] == 'default':
+                    input_kwargs['queue'] = input_queue
+            self.tools["input"] = input_handler_class(**input_kwargs)
+        else:
+            raise "Other input handlers not supported yet"
 
     def __setup_transcriber(self):
         if self.task_config["tools_config"]["transcriber"] is not None:
@@ -228,7 +227,8 @@ class TaskManager(BaseManager):
                 self.task_config["tools_config"]["synthesizer"]["stream"] = True if self.enforce_streaming else False #Hardcode stream to be False as we don't want to get blocked by a __listen_synthesizer co-routine
                 
             self.tools["synthesizer"] = synthesizer_class(**self.task_config["tools_config"]["synthesizer"], **provider_config, **self.kwargs)
-            llm_config["buffer_size"] = self.task_config["tools_config"]["synthesizer"].get('buffer_size')
+            if self.task_config["tools_config"]["llm_agent"] is not None:
+                llm_config["buffer_size"] = self.task_config["tools_config"]["synthesizer"].get('buffer_size')
 
     def __setup_llm(self, llm_config):
         if self.task_config["tools_config"]["llm_agent"] is not None:
@@ -824,7 +824,7 @@ class TaskManager(BaseManager):
                                     self.buffered_output_queue.put_nowait(message)
                                 
                             else:
-                                if self.task_config["tools_config"]["output"]["provider"] == "twilio" and not self.connected_through_dashboard and self.synthesizer_provider == "elevenlabs":
+                                if self.task_config["tools_config"]["output"]["provider"] in SUPPORTED_INPUT_TELEPHONY_HANDLERS.keys() and not self.connected_through_dashboard and self.synthesizer_provider == "elevenlabs":
                                     message['data'] = wav_bytes_to_pcm(message['data'])
                                 
                                 if "is_first_chunk" in  message['meta_info'] and message['meta_info']['is_first_chunk']:
@@ -931,7 +931,6 @@ class TaskManager(BaseManager):
                 logger.info(f"Yielding to output handler")
                 message = await self.buffered_output_queue.get()
                 logger.info("Start response is True and hence starting to speak {} Current sequence ids".format(message['meta_info'], self.sequence_ids))
-                
                 if "end_of_conversation" in message['meta_info']:
                     await self.__process_end_of_conversation()
                 

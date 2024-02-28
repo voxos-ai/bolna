@@ -12,6 +12,7 @@ from .base_transcriber import BaseTranscriber
 from bolna.helpers.logger_config import configure_logger
 from bolna.helpers.utils import create_ws_data_packet, int2float
 from bolna.helpers.vad import VAD
+
 torch.set_num_threads(1)
 
 logger = configure_logger(__name__)
@@ -71,17 +72,20 @@ class DeepgramTranscriber(BaseTranscriber):
 
         return ' '.join(transcript_words)
 
-
     def get_deepgram_ws_url(self):
         websocket_url = (f"wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=16000&channels=1"
                          f"&filler_words=true&language={self.language}&diarize=true")
         self.audio_frame_duration = 0.5 #We're sending 8k samples with a sample rate of 16k
 
-        if self.provider == 'twilio':
+        if self.provider in ('twilio', 'exotel'):
+            self.sampling_rate = 8000
+            self.audio_frame_duration = 0.2  # With telephony we are sending 100ms at a time
+
+            if self.provider == 'twilio':
+                self.encoding = 'mulaw'
+
             websocket_url = (f"wss://api.deepgram.com/v1/listen?model=nova-2&encoding=mulaw&sample_rate=8000&channels"
                              f"=1&filler_words=true&language={self.language}&diarize=true")
-            self.sampling_rate = 8000
-            self.audio_frame_duration = 0.2  #With twilio we are sending 200ms at a time
 
         if self.provider == "playground":
             logger.info(f"CONNECTED THROUGH PLAYGROUND")
@@ -230,7 +234,6 @@ class DeepgramTranscriber(BaseTranscriber):
             logger.error('Error while sending: ' + str(e))
             raise Exception("Something went wrong")
 
-
     async def receiver(self, ws):
         curr_message = ""
         finalized_transcript= ""
@@ -370,6 +373,7 @@ class DeepgramTranscriber(BaseTranscriber):
         self.transcription_task = asyncio.create_task(self.transcribe())
 
     def __calculate_utterance_end(self,data):
+        utterance_end = ''
         if 'channel' in data and 'alternatives' in data['channel']:
             for alternative in data['channel']['alternatives']:
                 if 'words' in alternative:
