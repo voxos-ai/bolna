@@ -41,7 +41,8 @@ class TelephonyOutputHandler(DefaultOutputHandler):
                         audio_chunk += b'\x00'
 
                 if audio_chunk and self.stream_sid and len(audio_chunk) != 1:
-                    media_message = await self.form_media_message(audio_chunk)
+                    format = meta_info.get("format", "wav")
+                    media_message = await self.form_media_message(audio_chunk, format)
                     await self.websocket.send_text(json.dumps(media_message))
 
                     mark_id = str(uuid.uuid4())
