@@ -84,6 +84,7 @@ class DeepgramTranscriber(BaseTranscriber):
             if self.provider == 'twilio':
                 self.encoding = 'mulaw'
 
+
             websocket_url = (f"wss://api.deepgram.com/v1/listen?model=nova-2&encoding=mulaw&sample_rate=8000&channels"
                              f"=1&filler_words=true&language={self.language}&diarize=true")
 

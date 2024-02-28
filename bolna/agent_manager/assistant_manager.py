@@ -36,66 +36,6 @@ class AssistantManager(BaseManager):
         self.output_queue = output_queue
         self.kwargs = kwargs
         self.conversation_history = conversation_history
-        
-    @staticmethod
-    def find_llm_output_price(outputs):
-        num_token = 0
-        for op in outputs:
-            num_token += len(enc.encode(str(op)))
-        return 0.0020 * num_token
-
-    @staticmethod
-    def find_llm_input_token_price(messages):
-        total_str = []
-        this_run = ''
-        prev_run = ''
-        num_token = 0
-        for message in messages:
-            if message['role'] == 'system':
-                this_run += message['content']
-
-            if message['role'] == 'user':
-                this_run += message['content']
-
-            if message['role'] == 'assistant':
-                num_token += len(enc.encode(str(this_run)))
-                this_run += message['content']
-
-        return 0.0010 * num_token
-
-    async def _save_meta(self, call_sid, stream_sid, messages, transcriber_characters, synthesizer_characters,
-                         label_flow):
-        logger.info(f"call sid {call_sid}, stream_sid {stream_sid}")
-        # transcriber_cost = time * 0.0043/ 60
-        # telephony_cost = cost
-        # llm_cost = input_tokens  * price + output_tokens * price
-        # tts_cost = 0 for now
-        # if polly - characters * 16/1000000
-        #     input_tokens, output_tokens
-
-        call_meta = dict()
-        call = client.calls(call_sid).fetch()
-        call_meta["telephony_cost"] = call.price
-        call_meta["duration"] = call.duration
-        call_meta["transcriber_cost"] = int(call.duration) * (0.0043 / 60)
-        call_meta["to_number"] = call.to_formatted
-        recording = client.recordings.list(call_sid=call_sid)[0]
-        call_meta["recording_url"] = recordings.media_url
-        call_meta["tts_cost"] = 0 if self.tasks[0]['tools_config']['synthesizer']['model'] != "polly" else (
-                    synthesizer_characters * 16 / 1000000)
-        call_meta["llm_cost"] = self.find_llm_input_token_price(messages) + self.find_llm_output_token_price(label_flow)
-        logger.info(f"Saving call meta {call_meta}")
-        await self.dynamodb.store_run(self.user_id, self.assistant_id, self.run_id, call_meta)
-
-    async def download_record_from_twilio_and_save_to_s3(self, recording_url):
-        response = requests.get(recording_url, auth=(account_sid, auth_token))
-        if response.status_code == 200:
-            bucket_name = 'bolna/'
-            object_key = 'user_id/agent_id/run_id.mp3'
-
-            # Upload the downloaded MP3 file to S3
-            s3.put_object(Bucket=bucket_name, Key=object_key, Body=response.content)
-            print("MP3 file uploaded to S3 successfully!")
 
     async def run(self, local=False):
         '''
@@ -116,6 +56,8 @@ class AssistantManager(BaseManager):
             self.task_states[task_id] = True
             if task_id == 0:
                 input_parameters = task_output
+                # removing context_data from non-conversational tasks
+                self.context_data = None
             logger.info(f"task_output {task_output}")
             if task["task_type"] == "extraction":
                 input_parameters["extraction_details"] = task_output["extracted_data"]

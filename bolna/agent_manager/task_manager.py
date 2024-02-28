@@ -149,6 +149,7 @@ class TaskManager(BaseManager):
         llm = self.__setup_llm(llm_config)
         #Setup tasks
         self.__setup_tasks(llm)
+
         #setup request logs
         self.request_logs = []
 

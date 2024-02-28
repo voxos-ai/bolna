@@ -18,7 +18,6 @@ class DefaultOutputHandler:
         response = {"data": None, "type": "clear"}
         await self.websocket.send_json(response)
 
-
     async def handle(self, packet):
         try:
             logger.info(f"Packet received:")
@@ -27,7 +26,6 @@ class DefaultOutputHandler:
                 if packet["meta_info"]['type'] == 'audio':
                     logger.info(f"Sending audio")
                     data = base64.b64encode(packet['data']).decode("utf-8")
-                    #logger.info(f"data -> {data}")
                 elif packet["meta_info"]['type'] == 'text':
                     logger.info(f"Sending text response {packet['data']}")
                     data = packet['data']
