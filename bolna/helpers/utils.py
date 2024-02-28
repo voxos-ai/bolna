@@ -221,7 +221,7 @@ def format_messages(messages):
 
 
 def update_prompt_with_context(prompt, context_data):
-    if not isinstance(context_data.get('recipient_data'), dict):
+    if not context_data or not isinstance(context_data.get('recipient_data'), dict):
         return prompt
     return prompt.format_map(DictWithMissing(context_data.get('recipient_data', {})))
 
