@@ -21,6 +21,7 @@ class PollySynthesizer(BaseSynthesizer):
         self.voice = voice
         self.language = language
         self.sample_rate = str(sampling_rate)
+        logger.info(f"@@@@@@@@@@@@@@ SAMPLING RATE {self.sample_rate}")
         # @TODO: initialize client here
         self.client = None
         self.first_chunk_generated = False
