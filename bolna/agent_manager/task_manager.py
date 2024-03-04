@@ -292,6 +292,7 @@ class TaskManager(BaseManager):
             enriched_prompt = self.prompts["system_prompt"]
             if self.context_data is not None:
                 enriched_prompt = update_prompt_with_context(self.prompts["system_prompt"], self.context_data)
+                self.prompts["system_prompt"] = copy.deepcopy(enriched_prompt)
             self.system_prompt = {
                 'role': "system",
                 'content': enriched_prompt
