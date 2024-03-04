@@ -393,9 +393,9 @@ async def write_request_logs(message, run_id):
     
     header = "Time,Component,Direction,Leg ID,Sequence ID,Model,Data,Input Tokens,Output Tokens,Characters,Final Transcript\n"
     log_string = ','.join(['"' + str(item).replace('"', '""') + '"' if item is not None else '' for item in row]) + '\n'    
-    log_dir = f"./logs/{run_id.split('/')[0]}"
+    log_dir = f"./logs/{run_id.split('#')[0]}"
     os.makedirs(log_dir, exist_ok=True) 
-    log_file_path = f"{log_dir}/{run_id.split('/')[1]}.csv"
+    log_file_path = f"{log_dir}/{run_id.split('#')[1]}.csv"
     file_exists = os.path.exists(log_file_path)
     
     async with aiofiles.open(log_file_path, mode='a') as log_file:
