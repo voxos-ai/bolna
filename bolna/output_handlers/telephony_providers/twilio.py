@@ -26,8 +26,9 @@ class TwilioOutputHandler(TelephonyOutputHandler):
         await self.websocket.send_text(json.dumps(message_clear))
         self.mark_set = set()
 
-    async def form_media_message(self, audio_data):
-        audio = audioop.lin2ulaw(audio_data, 2)
+    async def form_media_message(self, audio_data, format = "wav"):
+        if format != "mulaw":
+            audio = audioop.lin2ulaw(audio_data, 2)
         base64_audio = base64.b64encode(audio).decode("utf-8")
         message = {
             'event': 'media',
