@@ -380,8 +380,9 @@ Message type
 8. is_final
 '''
 async def write_request_logs(message, run_id):
+    component_details = [None, None, None, None, None]
     logger.info(f"Message {message}")
-    row = [ message['time'], message["component"], message["direction"], message["leg_id"], message['sequence_id'], message['model']]
+    row = [message['time'], message["component"], message["direction"], message["leg_id"], message['sequence_id'], message['model']]
     if message["component"] == "llm":
         component_details = [message['data'], message.get('input_tokens', 0), message.get('output_tokens', 0), None, None]
     elif message["component"] == "transcriber":
