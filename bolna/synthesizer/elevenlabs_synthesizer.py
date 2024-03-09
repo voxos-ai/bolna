@@ -18,14 +18,14 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         self.api_key = os.environ["ELEVENLABS_API_KEY"] if synthesier_key is None else synthesier_key
         self.voice = voice_id
         self.use_turbo = kwargs.get("use_turbo", False)
-        self.model = "eleven_turbo_v2" if self.use_turbo else model
+        self.model = "eleven_turbo_v2" if self.use_turbo else "eleven_multilingual_v2"
         self.stream = stream #Issue with elevenlabs streaming that we need to always send the text quickly
         self.websocket_connection = None
         self.connection_open = False
         self.sampling_rate = sampling_rate
         self.audio_format = "mp3"
         self.use_mulaw = kwargs.get("use_mulaw", False)
-        self.ws_url = f"wss://api.elevenlabs.io/v1/text-to-speech/{self.voice}/stream-input?model_id=eleven_multilingual_v1&optimize_streaming_latency=2&output_format={self.get_format(self.audio_format, self.sampling_rate)}"
+        self.ws_url = f"wss://api.elevenlabs.io/v1/text-to-speech/{self.voice}/stream-input?model_id={self.model}&optimize_streaming_latency=2&output_format={self.get_format(self.audio_format, self.sampling_rate)}"
         self.api_url = f"https://api.elevenlabs.io/v1/text-to-speech/{self.voice}?optimize_streaming_latency=2&output_format="
         self.first_chunk_generated = False
         self.last_text_sent = False
