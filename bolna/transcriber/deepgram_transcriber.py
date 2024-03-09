@@ -225,7 +225,6 @@ class DeepgramTranscriber(BaseTranscriber):
                 if end_of_stream:
                     break
                 self.num_frames +=1
-                logger.info(f"SENDING TO DG")
                 await ws.send(ws_data_packet.get('data'))
 
         except Exception as e:
