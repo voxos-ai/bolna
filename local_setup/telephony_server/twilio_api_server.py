@@ -50,17 +50,14 @@ async def close_redis_connection():
 @app.post('/make_call')
 async def make_call(request: Request):
     try:
-        request_data = await request.json()
-
-        agent_id = request_data.get('agent_id', None)
-        call_details = request_data.get('call_details', {})
+        call_details = await request.json()
+        agent_id = call_details.get('agent_id', None)
 
         if not agent_id:
             raise HTTPException(status_code=404, detail="Agent not provided")
-
+        
         if not call_details or "recipient_phone_number" not in call_details:
             raise HTTPException(status_code=404, detail="Recipient phone number not provided")
-
         user_id = str(uuid.uuid4())
         app_callback_url = os.getenv('APP_CALLBACK_URL')
         websocket_url = os.getenv('WEBSOCKET_URL')
