@@ -219,7 +219,8 @@ class TaskManager(BaseManager):
 
     def __setup_synthesizer(self, llm_config):
         logger.info(f"Synthesizer config: {self.task_config['tools_config']['synthesizer']}")
-        self.kwargs["use_turbo"] = self.task_config["tools_config"]["transcriber"]["language"] == "en"
+        if self._is_conversation_task():
+            self.kwargs["use_turbo"] = self.task_config["tools_config"]["transcriber"]["language"] == "en"
         if self.task_config["tools_config"]["synthesizer"] is not None:
             self.synthesizer_provider = self.task_config["tools_config"]["synthesizer"].pop("provider")
             synthesizer_class = SUPPORTED_SYNTHESIZER_MODELS.get(self.synthesizer_provider)
