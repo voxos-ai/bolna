@@ -7,6 +7,7 @@ import onnxruntime
 from .logger_config import configure_logger
 logger = configure_logger(__name__)
 
+
 class VAD():
 
     def __init__(self):
