@@ -4,15 +4,14 @@ import traceback
 import time
 import json
 import uuid
+import copy
+from datetime import datetime
 from .base_manager import BaseManager
 from bolna.agent_types import *
 from bolna.providers import *
-from bolna.helpers.utils import convert_audio_to_wav, create_ws_data_packet, is_valid_md5, get_raw_audio_bytes_from_base64, \
-    get_required_input_types, format_messages, get_prompt_responses, merge_wav_bytes, pcm_to_wav_bytes, update_prompt_with_context, get_md5_hash, clean_json_string, wav_bytes_to_pcm, write_request_logs, yield_chunks_from_memory
+from bolna.helpers.utils import create_ws_data_packet, is_valid_md5, get_raw_audio_bytes_from_base64, \
+    get_required_input_types, format_messages, get_prompt_responses, update_prompt_with_context, get_md5_hash, clean_json_string, wav_bytes_to_pcm, write_request_logs, yield_chunks_from_memory
 from bolna.helpers.logger_config import configure_logger
-from datetime import datetime
-import copy
-from datetime import datetime
 
 
 asyncio.get_event_loop().set_debug(True)
@@ -378,7 +377,6 @@ class TaskManager(BaseManager):
     def _is_formulaic_flow(self):
         return self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "formulaic"
 
-
     def _get_next_step(self, sequence, origin):
         try:
             return next((self.pipelines[sequence][i + 1] for i in range(len(self.pipelines[sequence]) - 1) if
@@ -641,7 +639,6 @@ class TaskManager(BaseManager):
     #################################################################
     # Transcriber task
     #################################################################
-
     async def process_transcriber_request(self, meta_info):
         if not self.current_request_id or self.current_request_id != meta_info["request_id"]:
             self.previous_request_id, self.current_request_id = self.current_request_id, meta_info["request_id"]
@@ -844,33 +841,33 @@ class TaskManager(BaseManager):
             traceback.print_exc()
             logger.error(f"Error in synthesizer {e}")
 
-    async def __send_preprocessed_audio(self, meta_info, text):            
-            #TODO: Either load IVR audio into memory before call or user s3 iter_cunks
-            # This will help with interruption in IVR
-            if self.connected_through_dashboard or self.task_config['tools_config']['output'] == "default":
-                audio_chunk = await get_raw_audio_bytes_from_base64(self.assistant_name, text,
-                                                                self.task_config["tools_config"]["output"][
-                                                                    "format"], local=self.is_local,
-                                                                assistant_id=self.assistant_id)
-                
-                await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
-            else:
-                audio_chunk = await get_raw_audio_bytes_from_base64(self.assistant_name, text,
-                                                                'pcm', local=self.is_local,
-                                                                assistant_id=self.assistant_id)
+    async def __send_preprocessed_audio(self, meta_info, text):
+        #TODO: Either load IVR audio into memory before call or user s3 iter_cunks
+        # This will help with interruption in IVR
+        if self.connected_through_dashboard or self.task_config['tools_config']['output'] == "default":
+            audio_chunk = await get_raw_audio_bytes_from_base64(self.assistant_name, text,
+                                                            self.task_config["tools_config"]["output"][
+                                                                "format"], local=self.is_local,
+                                                            assistant_id=self.assistant_id)
 
-                if not self.buffered_output_queue.empty():
-                    logger.info(f"Output queue was not empty and hence emptying it")
-                    self.buffered_output_queue = asyncio.Queue()
+            await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
+        else:
+            audio_chunk = await get_raw_audio_bytes_from_base64(self.assistant_name, text,
+                                                            'pcm', local=self.is_local,
+                                                            assistant_id=self.assistant_id)
 
-                if self.yield_chunks:
-                    for chunk in  yield_chunks_from_memory(audio_chunk, chunk_size=16384):
-                        logger.debug("Sending chunk to output queue")
-                        message = create_ws_data_packet(chunk, meta_info)
-                        self.buffered_output_queue.put_nowait(message)
-                else:
+            if not self.buffered_output_queue.empty():
+                logger.info(f"Output queue was not empty and hence emptying it")
+                self.buffered_output_queue = asyncio.Queue()
+
+            if self.yield_chunks:
+                for chunk in yield_chunks_from_memory(audio_chunk, chunk_size=16384):
+                    logger.debug("Sending chunk to output queue")
                     message = create_ws_data_packet(chunk, meta_info)
                     self.buffered_output_queue.put_nowait(message)
+            else:
+                message = create_ws_data_packet(chunk, meta_info)
+                self.buffered_output_queue.put_nowait(message)
 
     async def _synthesize(self, message):
         meta_info = message["meta_info"]
@@ -898,7 +895,6 @@ class TaskManager(BaseManager):
         except Exception as e:
             traceback.print_exc()
             logger.error(f"Error in synthesizer: {e}")
-
 
     ############################################################
     # Output handling
