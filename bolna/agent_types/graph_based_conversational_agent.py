@@ -3,11 +3,11 @@ import json
 import asyncio
 import traceback
 from .base_agent import BaseAgent
-from bolna.constants import USERS_KEY_ORDER
 from bolna.helpers.logger_config import configure_logger
 from bolna.helpers.utils import update_prompt_with_context, get_md5_hash
 
 logger = configure_logger(__name__)
+
 
 class Node:
     def __init__(self, node_id, node_label, content, classification_labels: list = None, prompt=None, milestone_check_prompt=None,
@@ -56,7 +56,7 @@ class Graph:
 
 
 class GraphBasedConversationAgent(BaseAgent):
-    def __init__(self, llm, prompts, context_data=None, preprocessed=True, log_dir_name=None):
+    def __init__(self, llm, prompts, context_data=None, preprocessed=True):
         super().__init__()
         # Config
         self.llm = llm
@@ -88,10 +88,10 @@ class GraphBasedConversationAgent(BaseAgent):
         audio_pair = self._get_audio_text_pair(self.current_node)
         self.conversation_intro_done = True
         logger.info("Conversation intro done")
-        if self.current_node.prompt == None:
+        if self.current_node.prompt is None:
             #These are convos with two step intros
             ind = random.randint(0, len(self.current_node.children) - 1)
-            self.current_node  = self.current_node.children[ind]
+            self.current_node = self.current_node.children[ind]
         return audio_pair
 
     async def _get_next_preprocessed_step(self, history):

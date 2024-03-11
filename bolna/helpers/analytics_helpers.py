@@ -1,14 +1,14 @@
 from litellm import token_counter
 import os
+from datetime import datetime, timezone
+from dotenv import load_dotenv
+from dateutil import parser
+import copy
 from .utils import format_messages
 from .logger_config import configure_logger
 from bolna.prompts import CHECK_FOR_COMPLETION_PROMPT
 from bolna.constants import HIGH_LEVEL_ASSISTANT_ANALYTICS_DATA
-from collections import defaultdict
-from datetime import datetime, timezone, timedelta 
-from dotenv import load_dotenv 
-from dateutil import parser
-import copy
+
 
 load_dotenv()
 logger = configure_logger(__name__)
@@ -56,6 +56,7 @@ def calculate_total_cost_of_llm_from_transcript(messages, cost_per_input_token, 
 
     return round(total_cost, 5), llm_token_usage
 
+
 def update_extraction_details(current_high_level_assistant_analytics_data, run_details):
     if "extracted_data" not in run_details or not run_details['extracted_data']:
         return None
@@ -69,13 +70,13 @@ def update_extraction_details(current_high_level_assistant_analytics_data, run_d
         current_high_level_assistant_analytics_data['extraction_details'][key][extraction_data[key]] +=1
     return current_high_level_assistant_analytics_data
 
+
 def update_execution_details(current_high_level_assistant_analytics_data, run_details):
     total_duration_till_now = current_high_level_assistant_analytics_data["execution_details"]["average_duration_of_conversation"] * current_high_level_assistant_analytics_data["execution_details"]["total_conversations"] 
     current_high_level_assistant_analytics_data["execution_details"]["total_conversations"] += 1
     current_high_level_assistant_analytics_data["execution_details"]["total_cost"] += run_details["total_cost"]
     current_high_level_assistant_analytics_data["execution_details"]["average_duration_of_conversation"]  = (total_duration_till_now + run_details["conversation_time"])/ current_high_level_assistant_analytics_data["execution_details"]["total_conversations"]
 
-from datetime import datetime, timedelta
 
 def update_historical_values(arr, current_run_val, last_updated_at, should_increment, multiplier = 0, interval_minutes=1440):
     now = datetime.now(timezone.utc)
@@ -102,6 +103,7 @@ def update_historical_values(arr, current_run_val, last_updated_at, should_incre
 
     return arr
 
+
 def update_historical_spread(current_high_level_assistant_analytics_data, run_details):
     current_high_level_assistant_analytics_data["historical_spread"]["number_of_conversations_in_past_5_days"] = update_historical_values(current_high_level_assistant_analytics_data["historical_spread"]["number_of_conversations_in_past_5_days"], 1, current_high_level_assistant_analytics_data["last_updated_at"], should_increment = True)
     current_high_level_assistant_analytics_data["historical_spread"]["cost_past_5_days"] = update_historical_values(current_high_level_assistant_analytics_data["historical_spread"]["cost_past_5_days"], run_details['total_cost'], current_high_level_assistant_analytics_data["last_updated_at"], should_increment = True)
@@ -123,10 +125,11 @@ def update_conversation_details(current_high_level_assistant_analytics_data, con
     else:
         current_high_level_assistant_analytics_data["conversation_details"]["rejected_conversations"] +=1
 
+
 def update_high_level_assistant_analytics_data(current_high_level_assistant_analytics_data, run_details):
     logger.info(f"run details {run_details}")
-    if current_high_level_assistant_analytics_data == None:
-        current_high_level_assistant_analytics_data =  copy.deepcopy(HIGH_LEVEL_ASSISTANT_ANALYTICS_DATA)
+    if current_high_level_assistant_analytics_data is None:
+        current_high_level_assistant_analytics_data = copy.deepcopy(HIGH_LEVEL_ASSISTANT_ANALYTICS_DATA)
     
     update_execution_details(current_high_level_assistant_analytics_data, run_details)
     update_extraction_details(current_high_level_assistant_analytics_data, run_details)
