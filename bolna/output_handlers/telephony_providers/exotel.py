@@ -22,7 +22,7 @@ class ExotelOutputHandler(TelephonyOutputHandler):
         await self.websocket.send_text(json.dumps(message_clear))
         self.mark_set = set()
 
-    async def form_media_message(self, audio_data):
+    async def form_media_message(self, audio_data, audio_format):
         base64_audio = base64.b64encode(audio_data).decode("ascii")
         message = {
             'event': 'media',
