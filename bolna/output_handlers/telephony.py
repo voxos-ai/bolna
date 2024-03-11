@@ -23,7 +23,7 @@ class TelephonyOutputHandler(DefaultOutputHandler):
     async def handle_interruption(self):
         pass
 
-    async def form_media_message(self, audio_data):
+    async def form_media_message(self, audio_data, audio_format):
         pass
 
     async def form_mark_message(self, mark_id):
@@ -41,8 +41,8 @@ class TelephonyOutputHandler(DefaultOutputHandler):
                         audio_chunk += b'\x00'
 
                 if audio_chunk and self.stream_sid and len(audio_chunk) != 1:
-                    format = meta_info.get("format", "wav")
-                    media_message = await self.form_media_message(audio_chunk, format)
+                    audio_format = meta_info.get("format", "wav")
+                    media_message = await self.form_media_message(audio_chunk, audio_format)
                     await self.websocket.send_text(json.dumps(media_message))
 
                     mark_id = str(uuid.uuid4())
