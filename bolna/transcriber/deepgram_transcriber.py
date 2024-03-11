@@ -284,7 +284,7 @@ class DeepgramTranscriber(BaseTranscriber):
                 
                 #TODO Remove the need for on_device_vad
                 # If interim message is not true and curr message is null, send a begin signal
-                if curr_message == "" and msg["is_final"] == False:
+                if curr_message == "" and msg["is_final"] is False:
                     if not self.on_device_vad:
                         logger.info("Not on device vad and hence inetrrupting")
                         self.meta_info["should_interrupt"] = True
@@ -293,7 +293,7 @@ class DeepgramTranscriber(BaseTranscriber):
                     await asyncio.sleep(0.1) #Enable taskmanager to interrupt
 
                 #Do not send back interim results, just send back interim message
-                if self.process_interim_results == "true" and msg["is_final"] == True:    
+                if self.process_interim_results == "true" and msg["is_final"] is True:
                     logger.info(f"Is final interim Transcriber message {msg}")
                     #curr_message = self.__get_speaker_transcript(msg)
                     finalized_transcript += " " + transcript #Just get the whole transcript as there's mismatch at times

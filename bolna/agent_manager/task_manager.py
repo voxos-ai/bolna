@@ -673,7 +673,6 @@ class TaskManager(BaseManager):
         else:
             logger.info(f"Need to separate out output task")
 
-
     async def _listen_transcriber(self):
         transcriber_message = ""
         logger.info(f"Starting transcriber task")
@@ -685,22 +684,19 @@ class TaskManager(BaseManager):
                 if message["data"].strip() == "":
                     continue
                 if message['data'] == "transcriber_connection_closed":
-                        self.transcriber_duration += message['meta_info']["transcriber_duration"]
-                        logger.info("transcriber connection closed")
-                        break
+                    self.transcriber_duration += message['meta_info']["transcriber_duration"]
+                    logger.info("transcriber connection closed")
+                    break
                 
                 if self.stream:
                     self._set_call_details(message)
                     meta_info = message["meta_info"]
                     sequence = await self.process_transcriber_request(meta_info)
                     next_task = self._get_next_step(sequence, "transcriber")
-                    #logger.info(f'got the next task {next_task}')
                     if message['data'] == "TRANSCRIBER_BEGIN":
                         self.callee_silent = False
-                        #logger.info(f"Not starting the response until we get utterance end")
                         self.start_response = False #Make start response as false
-                        #logger.info(f"Current history{self.history}")
-                        #self.interim_history = self.history.copy()
+
                         self.interim_history = copy.deepcopy(self.history)
                         self.callee_speaking = True
                         response_started = False #This signifies if we've gotten the first bit of interim text for the given response or not
@@ -724,15 +720,14 @@ class TaskManager(BaseManager):
                         if ((len(self.history)  == 1 and self.history[-1]['role'] == "assistant")) or (len(self.history)  > 1 and self.history[-1]['role'] == 'assistant' and (self.history[-2]['role'] in ['assistant', 'system'] )):
                             assistant_message = self.history[-1].copy()
                             self.history = self.history[:-1]
-                    
 
                         logger.info(f"APPENDING USER statement {message['data']}")
-                        self.history.append({'role': 'user', 'content': message['data']})
+                        if message['data'] != 'TRANSCRIBER_END':
+                            self.history.append({'role': 'user', 'content': message['data']})
                         if assistant_message is not None:
                             self.history.append(assistant_message)
                         
                         meta_info = message['meta_info']
-                        #self.latency_dict[meta_info['request_id']]["transcriber"] = {"total_latency":  meta_info["transcriber_latency"], "audio_duration": meta_info["audio_duration"], "last_vocal_frame_timestamp": meta_info["last_vocal_frame_timestamp"] }                        
                         transcriber_message = ""
                         continue
                     else:
@@ -908,10 +903,9 @@ class TaskManager(BaseManager):
     ############################################################
     # Output handling
     ############################################################
-            
     async def __handle_initial_silence(self):
         logger.info(f"Checking for initial silence")
-        await asyncio.sleep(5)
+        await asyncio.sleep(10)
         if self.callee_silent:
             logger.info(f"Calee was silent and hence speaking Hello on callee's behalf")
             meta_info = self.__get_updated_meta_info()
@@ -967,7 +961,6 @@ class TaskManager(BaseManager):
             logger.error(f'Error in processing message output')
 
     async def run(self):
-        
         try:
             if self.task_id == 0:
                 # Create transcriber and synthesizer tasks
