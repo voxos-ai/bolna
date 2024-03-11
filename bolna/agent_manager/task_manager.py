@@ -68,12 +68,10 @@ class TaskManager(BaseManager):
         self.prompts, self.system_prompt = {}, {}
         self.input_parameters = input_parameters
         
-
         #IO HANDLERS
         if task_id == 0:
             self.__setup_input_handlers(connected_through_dashboard, input_queue)
         self.__setup_output_handlers(connected_through_dashboard, output_queue)
-
 
         # Agent stuff
         # Need to maintain current conversation history and overall persona/history kinda thing. 
@@ -242,6 +240,7 @@ class TaskManager(BaseManager):
                 return llm
             else:
                 raise Exception(f'LLM {self.task_config["tools_config"]["llm_agent"]["family"]} not supported')
+
     def __setup_tasks(self, llm):
         if self.task_config["task_type"] == "conversation":
             if self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "streaming":
@@ -266,11 +265,9 @@ class TaskManager(BaseManager):
 
         logger.info("prompt and config setup completed")
         
-    
     ########################
     # Helper methods
     ########################
-        
     async def load_prompt(self, assistant_name, task_id, local, **kwargs):
         logger.info("prompt and config setup started")
         if self.task_config["task_type"] == "webhook":
@@ -283,11 +280,10 @@ class TaskManager(BaseManager):
             }
             logger.info(f"Prompt given in llm_agent and hence storing the prompt")
         else:
-            prompt_responses = await get_prompt_responses(assistant_id=self.assistant_id,local=self.is_local)
+            prompt_responses = await get_prompt_responses(assistant_id=self.assistant_id, local=self.is_local)
             self.prompts = prompt_responses["task_{}".format(task_id + 1)]
             if self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "preprocessed":
                 self.tools["llm_agent"].load_prompts_and_create_graph(self.prompts)
-
 
         if "system_prompt" in self.prompts:
             # This isn't a graph based agent
@@ -316,7 +312,7 @@ class TaskManager(BaseManager):
          #THis is to remove stop words. Really helpful in smaller 7B models
         if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"] and "user" in text_chunk[-5:].lower():
             if text_chunk[-5:].lower() == "user:":
-                text_chunk == text_chunk[:-5]
+                text_chunk = text_chunk[:-5]
             elif text_chunk[-4:].lower() == "user":
                 text_chunk = text_chunk[:-4]
 
@@ -797,7 +793,6 @@ class TaskManager(BaseManager):
     #################################################################
     # Synthesizer task
     #################################################################
-
     async def __listen_synthesizer(self):
         try:
             if self.stream and self.synthesizer_provider != "polly" and not self.is_an_ivr_call: 

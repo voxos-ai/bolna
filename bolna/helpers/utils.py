@@ -134,7 +134,6 @@ async def get_s3_file(bucket_name, file_key):
 
 
 async def store_file(bucket_name = None, file_key = None, file_data = None, content_type= "json", local = False, preprocess_dir = None):
-    
     if not local:
         session = AioSession()
 
@@ -152,17 +151,17 @@ async def store_file(bucket_name = None, file_key = None, file_data = None, cont
             except Exception as e:
                 logger.error('Exception occurred while s3 put object: {}'.format(e))
     if local:
-        dir = PREPROCESS_DIR if preprocess_dir == None else preprocess_dir
-        directory_path = os.path.join(dir, os.path.dirname(file_key))
+        dir_name = PREPROCESS_DIR if preprocess_dir is None else preprocess_dir
+        directory_path = os.path.join(dir_name, os.path.dirname(file_key))
         logger.info(file_data)
         os.makedirs(directory_path, exist_ok=True)
         if content_type == "json":
-            logger.info(f"Writing to {dir}/{file_key} ")
-            with open(f"{dir}/{file_key}", 'w') as f:
+            logger.info(f"Writing to {dir_name}/{file_key} ")
+            with open(f"{dir_name}/{file_key}", 'w') as f:
                 data = json.dumps(file_data)
                 f.write(data)
         elif content_type in ["mp3", "wav", "pcm", "csv"]:
-            with open(f"{dir}/{file_key}", 'w') as f:
+            with open(f"{dir_name}/{file_key}", 'w') as f:
                 data = file_data
                 f.write(data)
 
