@@ -12,7 +12,7 @@ class ZapierAgent(BaseAgent):
         self.payload = payload or {}
 
     async def __send_payload(self, payload):
-        logger.info(f"Sending a zappier post request {payload}")
+        logger.info(f"Sending a zapier post request {payload}")
         async with aiohttp.ClientSession() as session:
             if payload is not None:
                 async with session.post(self.zap_url, json=payload) as response:
@@ -23,8 +23,8 @@ class ZapierAgent(BaseAgent):
                         logger.error(f"Error: {response.status} - {await response.text()}")
             else:
                 logger.info("Payload was null")
+
     async def execute(self, payload):
-       response  = await self.__send_payload(payload)
-       logger.info(f"Respoinse {response}")
-       return response['status']
-       
+        response = await self.__send_payload(payload)
+        logger.info(f"Response {response}")
+        return response['status']

@@ -166,6 +166,7 @@ async def store_file(bucket_name = None, file_key = None, file_data = None, cont
                 data = file_data
                 f.write(data)
 
+
 async def get_raw_audio_bytes_from_base64(agent_name, b64_string, audio_format='mp3', assistant_id=None, local = False):
     # we are already storing pcm formatted audio in the filler config. No need to encode/decode them further
     audio_data = None
@@ -281,6 +282,7 @@ def infer_type(value):
     else:
         return (str, ...)
 
+
 def json_to_pydantic_schema(json_data):
     parsed_json = json.loads(json_data)
     
@@ -289,6 +291,7 @@ def json_to_pydantic_schema(json_data):
     
     return dynamic_model.schema_json(indent=2)
 
+
 def clean_json_string(json_str):
     if type(json_str) is not str:
         return json_str
@@ -296,10 +299,12 @@ def clean_json_string(json_str):
         json_str = json_str[7:-3].strip()
     return json_str
 
+
 def yield_chunks_from_memory(audio_bytes, chunk_size=512):
     total_length = len(audio_bytes)
     for i in range(0, total_length, chunk_size):
         yield audio_bytes[i:i + chunk_size]
+
 
 def pcm_to_wav_bytes(pcm_data, sample_rate = 16000, num_channels = 1, sample_width = 2):
     buffer = io.BytesIO()
@@ -312,6 +317,7 @@ def pcm_to_wav_bytes(pcm_data, sample_rate = 16000, num_channels = 1, sample_wid
     torchaudio.save(buffer, tensor_pcm, sample_rate, format='wav')
     return buffer.getvalue()
 
+
 def convert_audio_to_wav(audio_bytes, source_format = 'flac'):
     logger.info(f"CONVERTING AUDIO TO WAV {source_format}")
     audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format=source_format)
@@ -320,6 +326,7 @@ def convert_audio_to_wav(audio_bytes, source_format = 'flac'):
     audio.export(buffer, format="wav")
     logger.info(f"SENDING BACK WAV")
     return buffer.getvalue()
+
 
 def resample(audio_bytes, target_sample_rate, format = "mp3"):
     audio_buffer = io.BytesIO(audio_bytes)
@@ -333,27 +340,6 @@ def resample(audio_bytes, target_sample_rate, format = "mp3"):
     torchaudio.save(audio_buffer, audio_waveform, target_sample_rate, format="wav")
     return audio_buffer.getvalue()
 
-# def merge_wav_bytes(wav_bytes_list):
-#     logger.info(f"Merging {len(wav_bytes_list)} wav files")
-#     if not wav_bytes_list:
-#         return None
-    
-#     header_length = 44
-#     header = wav_bytes_list[0][:header_length]
-#     merged_audio_data = io.BytesIO(header)
-#     data_size_offset = 40
-#     total_data_size = 0
-
-#     for wav_bytes in wav_bytes_list:
-#         audio_data = wav_bytes[header_length:]
-#         merged_audio_data.write(audio_data)
-#         total_data_size += len(audio_data)
-#     merged_audio_data.seek(data_size_offset)
-#     merged_audio_data.write(total_data_size.to_bytes(4, byteorder='endian'))
-#     file_size = total_data_size + header_length - 8
-#     merged_audio_data.seek(4)
-#     merged_audio_data.write(file_size.to_bytes(4, byteorder='endian'))
-#     return merged_audio_data.getvalue()
 
 def merge_wav_bytes(wav_files_bytes):
     combined = AudioSegment.empty()
