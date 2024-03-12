@@ -27,10 +27,9 @@ class TwilioOutputHandler(TelephonyOutputHandler):
         self.mark_set = set()
 
     async def form_media_message(self, audio_data, audio_format="wav"):
-        audio = ""
-        if format != "mulaw":
-            audio = audioop.lin2ulaw(audio_data, 2)
-        base64_audio = base64.b64encode(audio).decode("utf-8")
+        if audio_format != "mulaw":
+            audio_data = audioop.lin2ulaw(audio_data, 2)
+        base64_audio = base64.b64encode(audio_data).decode("utf-8")
         message = {
             'event': 'media',
             'streamSid': self.stream_sid,
