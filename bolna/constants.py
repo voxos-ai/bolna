@@ -1,7 +1,5 @@
 from datetime import datetime, timezone
-from collections import defaultdict
 PREPROCESS_DIR = 'agent_data'
-USERS_KEY_ORDER = ["honorific", "first_name", "last_name"]
 
 HIGH_LEVEL_ASSISTANT_ANALYTICS_DATA = {
         "extraction_details":{}, 

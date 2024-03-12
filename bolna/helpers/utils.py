@@ -133,7 +133,7 @@ async def get_s3_file(bucket_name, file_key):
             return file_content
 
 
-async def store_file(bucket_name = None, file_key = None, file_data = None, content_type= "json", local = False, preprocess_dir = None):
+async def store_file(bucket_name=None, file_key=None, file_data=None, content_type="json", local=False, preprocess_dir=None):
     if not local:
         session = AioSession()
 

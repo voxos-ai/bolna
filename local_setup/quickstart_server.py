@@ -2,21 +2,15 @@ import os
 import asyncio
 import uuid
 import traceback
-import json
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List
 import redis.asyncio as redis
 from dotenv import load_dotenv
-from bolna.helpers.analytics_helpers import calculate_total_cost_of_llm_from_transcript, update_high_level_assistant_analytics_data
-from bolna.helpers.utils import convert_audio_to_wav, get_md5_hash, get_s3_file, pcm_to_wav_bytes, resample, store_file, format_messages, load_file, create_ws_data_packet, wav_bytes_to_pcm
-from bolna.providers import *
+from bolna.helpers.utils import store_file
 from bolna.prompts import *
 from bolna.helpers.logger_config import configure_logger
 from bolna.models import *
 from bolna.llms import LiteLLM
-from litellm import token_counter
-from datetime import datetime, timezone
 from bolna.agent_manager.assistant_manager import AssistantManager
 
 load_dotenv()
@@ -28,13 +22,12 @@ active_websockets: List[WebSocket] = []
 
 app = FastAPI()
 
-# Set up CORS middleware options
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods
-    allow_headers=["*"],  # Allow all headers
+    allow_methods=["*"],
+    allow_headers=["*"]
 )
 
 
@@ -56,8 +49,12 @@ async def create_agent(agent_data: CreateAgentPayload):
         for index, task in enumerate(data_for_db['tasks']):
             if task['task_type'] == "extraction":
                 extraction_prompt_llm = os.getenv("EXTRACTION_PROMPT_GENERATION_MODEL")
-                extraction_prompt_generation_llm = LiteLLM(streaming_model = extraction_prompt_llm, max_tokens=2000)
-                extraction_prompt = await extraction_prompt_generation_llm.generate(messages = [{'role':'system', 'content': EXTRACTION_PROMPT_GENERATION_PROMPT}, {'role': 'user', 'content': data_for_db["tasks"][index]['tools_config']["llm_agent"]['extraction_details']}])
+                extraction_prompt_generation_llm = LiteLLM(streaming_model=extraction_prompt_llm, max_tokens=2000)
+                extraction_prompt = await extraction_prompt_generation_llm.generate(
+                    messages=[
+                        {'role': 'system', 'content': EXTRACTION_PROMPT_GENERATION_PROMPT},
+                        {'role': 'user', 'content': data_for_db["tasks"][index]['tools_config']["llm_agent"]['extraction_details']}
+                    ])
                 data_for_db["tasks"][index]["tools_config"]["llm_agent"]['extraction_json'] = extraction_prompt
 
     stored_prompt_file_path = f"{agent_uuid}/conversation_details.json"

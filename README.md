@@ -39,7 +39,7 @@ Bolna helps you create AI Voice Agents which can be instructed to do tasks begin
 4. Synthesizing LLM responses back to telephony using `AWS Polly`, `XTTS`, `ElevenLabs`, `Deepgram` etc.
 5. Instructing the Agent to perform tasks like sending emails, text messages, booking calendar after the conversation has ended
 
-Refer to the [docs](https://docs.bolna.dev) for a deepdive into all supported providers.
+Refer to the [docs](https://docs.bolna.dev/providers) for a deepdive into all supported providers.
 
 
 ## Local setup
@@ -66,17 +66,61 @@ Once you have the above docker setup and running, you can create agents and init
 
 ## Using your own providers
 You can populate the `.env` file to use your own keys for providers.
+
 <details>
 
+<summary>ASR Providers</summary>
+These are the current supported ASRs Providers:
+DEEPGRAM_AUTH_TOKEN
+
+| Provider     | Environment variable to be added in `.env` file |
+|--------------|-------------------------------------------------|
+| Deepgram     | DEEPGRAM_AUTH_TOKEN                             |
+
+</details>
+&nbsp;<br>
+
+<details>
 <summary>LLM Providers</summary>
+Bolna uses LiteLLM package to support multiple LLM integrations.
 
-#### You can add a header
+These are the current supported LLM Provider Family:
+https://github.com/bolna-ai/bolna/blob/c8a0d1428793d4df29133119e354bc2f85a7ca76/bolna/providers.py#L19-L28
 
-```ruby
-   puts "Hello World"
-```
+For LiteLLM based LLMs, add either of the following to the `.env` file depending on your use-case:
+`LITELLM_MODEL_API_BASE`: API Key of the LLM
+`LITELLM_MODEL_API_BASE`: URL of the hosted LLM
+
+For LLMs hosted via VLLM, add the following to the `.env` file:
+`VLLM_SERVER_BASE_URL`: URL of the hosted LLM using VLLM
+
+</details>
+&nbsp;<br>
+
+<details>
+
+<summary>TTS Providers</summary>
+These are the current supported TTS Providers:
+https://github.com/bolna-ai/bolna/blob/c8a0d1428793d4df29133119e354bc2f85a7ca76/bolna/providers.py#L7-L14
+
+| Provider   | Environment variable to be added in `.env` file  |
+|------------|--------------------------------------------------|
+| AWS Polly  | Accessed from system wide credentials via ~/.aws |
+| Elevenlabs | ELEVENLABS_API_KEY                               |
+| OpenAI     | OPENAI_API_KEY                                   |
+| Deepgram   | DEEPGRAM_AUTH_TOKEN                              |
+
 </details>
 
+
+## Extending with other Telephony Providers
+In case you wish to extend and add some other Telephony like Vonage, Telnyx, etc. following the guidelines below:
+1. Make sure bi-directional streaming is supported by the Telephony provider
+2. Add the telephony-specific input handler file in [input_handlers/telephony_providers](https://github.com/bolna-ai/bolna/tree/master/bolna/input_handlers/telephony_providers) writing custom functions extending from the [telephony.py](https://github.com/bolna-ai/bolna/blob/master/bolna/input_handlers/telephony.py) class
+   1. This file will mainly contain how different types of event packets are being ingested from the telephony provider
+3. Add telephony-specific output handler file in [output_handlers/telephony_providers](https://github.com/bolna-ai/bolna/tree/master/bolna/output_handlers/telephony_providers) writing custom functions extending from the [telephony.py](https://github.com/bolna-ai/bolna/blob/master/bolna/output_handlers/telephony.py) class
+   1. This mainly concerns converting audio from the synthesizer class to a supported audio format and streaming it over the websocket provided by the telephony provider
+4. Lastly, you'll have to write a dedicated server like the example [twilio_api_server.py](https://github.com/bolna-ai/bolna/blob/master/local_setup/telephony_server/twilio_api_server.py) provided in [local_setup](https://github.com/bolna-ai/bolna/blob/master/local_setup/telephony_server) to initiate calls over websockets.
 
 ## Open-source v/s Paid
 Though the repository is completely open source, you can connect with us if interested in managed hosted offerings or more customized solutions.
