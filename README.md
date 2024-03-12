@@ -80,7 +80,7 @@ These are the current supported ASRs Providers:
 &nbsp;<br>
 
 <details>
-<summary>LLM Providers</summary>
+<summary>LLM Providers</summary><br>
 Bolna uses LiteLLM package to support multiple LLM integrations.
 
 These are the current supported LLM Provider Family:
@@ -98,7 +98,7 @@ For LLMs hosted via VLLM, add the following to the `.env` file:<br>
 
 <details>
 
-<summary>TTS Providers</summary>
+<summary>TTS Providers</summary><br>
 These are the current supported TTS Providers:
 https://github.com/bolna-ai/bolna/blob/c8a0d1428793d4df29133119e354bc2f85a7ca76/bolna/providers.py#L7-L14
 
