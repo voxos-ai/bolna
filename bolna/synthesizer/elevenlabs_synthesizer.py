@@ -5,21 +5,24 @@ import base64
 import json
 import aiohttp
 import os
+import traceback
+from collections import deque
 from .base_synthesizer import BaseSynthesizer
 from bolna.helpers.logger_config import configure_logger
 from bolna.helpers.utils import convert_audio_to_wav, create_ws_data_packet, pcm_to_wav_bytes, resample
-from collections import deque
 
 logger = configure_logger(__name__)
 
+
 class ElevenlabsSynthesizer(BaseSynthesizer):
-    def __init__(self, voice, voice_id, model="eleven_multilingual_v1", audio_format = "mp3", sampling_rate = "16000", stream=False, buffer_size=400, synthesier_key = None, **kwargs):
+    def __init__(self, voice, voice_id, model="eleven_multilingual_v1", audio_format="mp3", sampling_rate="16000",
+                 stream=False, buffer_size=400, synthesier_key=None, **kwargs):
         super().__init__(stream)
         self.api_key = os.environ["ELEVENLABS_API_KEY"] if synthesier_key is None else synthesier_key
         self.voice = voice_id
         self.use_turbo = kwargs.get("use_turbo", False)
         self.model = "eleven_turbo_v2" if self.use_turbo else "eleven_multilingual_v2"
-        self.stream = stream #Issue with elevenlabs streaming that we need to always send the text quickly
+        self.stream = stream  # Issue with elevenlabs streaming that we need to always send the text quickly
         self.websocket_connection = None
         self.connection_open = False
         self.sampling_rate = sampling_rate
@@ -31,20 +34,21 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         self.last_text_sent = False
         self.text_queue = deque()
 
-    #Ensuring we only do wav output for now
-    def get_format(self, format, sampling_rate):    
-        #Eleven labs only allow mp3_44100_64, mp3_44100_96, mp3_44100_128, mp3_44100_192, pcm_16000, pcm_22050, pcm_24000, ulaw_8000
+    # Ensuring we only do wav output for now
+    def get_format(self, format, sampling_rate):
+        # Eleven labs only allow mp3_44100_64, mp3_44100_96, mp3_44100_128, mp3_44100_192, pcm_16000, pcm_22050,
+        # pcm_24000, ulaw_8000
         if self.use_mulaw:
             return "ulaw_8000"
         return f"mp3_44100_128"
 
     # Don't send EOS signal. Let        
-    async def sender(self, text, end_of_llm_stream=False): # sends text to websocket
+    async def sender(self, text, end_of_llm_stream=False):  # sends text to websocket
         if self.websocket_connection is not None and not self.websocket_connection.open:
             self.connection_open = False
             logger.info(f"Connection was closed and hence opening connection")
             await self.open_connection()
-            
+
         if not self.connection_open:
             logger.info("Connecting to elevenlabs websocket...")
             bos_message = {
@@ -57,7 +61,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
             }
             await self.websocket_connection.send(json.dumps(bos_message))
             self.connection_open = True
-            
+
         if text != "":
             logger.info(f"Sending message {text}")
 
@@ -83,11 +87,11 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                 logger.info("response for isFinal: {}".format(data.get('isFinal', False)))
                 if "audio" in data and data["audio"]:
                     chunk = base64.b64decode(data["audio"])
-                    if len(chunk)%2 == 1:
-                        chunk +=  b'\x00'
+                    if len(chunk) % 2 == 1:
+                        chunk += b'\x00'
                     # @TODO make it better - for example sample rate changing for mp3 and other formats  
                     yield chunk
-                
+
                     if "isFinal" in data and data["isFinal"]:
                         self.connection_open = False
                         yield b'\x00'
@@ -96,7 +100,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
             except websockets.exceptions.ConnectionClosed:
                 break
 
-    async def __send_payload(self, payload, format = None):
+    async def __send_payload(self, payload, format=None):
         headers = {
             'xi-api-key': self.api_key
         }
@@ -113,10 +117,10 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                 logger.info("Payload was null")
 
     async def synthesize(self, text):
-        audio = await self.__generate_http(text, format = "mp3_44100_128")
+        audio = await self.__generate_http(text, format="mp3_44100_128")
         return audio
 
-    async def __generate_http(self, text, format = None):
+    async def __generate_http(self, text, format=None):
         payload = None
         logger.info(f"text {text}")
         payload = {
@@ -128,47 +132,49 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                 "optimize_streaming_latency": 3
             }
         }
-        response = await self.__send_payload(payload, format = format)
+        response = await self.__send_payload(payload, format=format)
         return response
 
-    #Currently we are only supporting wav output butn soon we will incorporate conver
+    # Currently we are only supporting wav output but soon we will incorporate conver
     async def generate(self):
         try:
             if self.stream:
                 async for message in self.receiver():
                     logger.info(f"Received message friom server")
                     meta_info = self.text_queue.popleft()
+                    audio = ""
 
                     if self.use_mulaw:
                         meta_info['format'] = 'mulaw'
                     else:
                         meta_info['format'] = "wav"
-                        audio = resample(convert_audio_to_wav(message, source_format="mp3"), int(self.sampling_rate), format= "wav")
-                    
+                        audio = resample(convert_audio_to_wav(message, source_format="mp3"), int(self.sampling_rate),
+                                         format="wav")
+
                     yield create_ws_data_packet(audio, meta_info)
                     if not self.first_chunk_generated:
                         meta_info["is_first_chunk"] = True
                         self.first_chunk_generated = True
-                    
+
                     if self.last_text_sent:
-                        #Reset the last_text_sent and first_chunk converted to reset synth latency
+                        # Reset the last_text_sent and first_chunk converted to reset synth latency
                         self.first_chunk_generated = False
                         self.last_text_sent = True
-                        
+
                     if message == b'\x00':
                         logger.info("received null byte and hence end of stream")
                         meta_info["end_of_synthesizer_stream"] = True
-                        yield create_ws_data_packet(resample(message), meta_info)
+                        yield create_ws_data_packet(resample(message, int(self.sampling_rate)), meta_info)
                         self.first_chunk_generated = False
-                    
+
             else:
                 while True:
                     message = await self.internal_queue.get()
                     logger.info(f"Generating TTS response for message: {message}")
                     meta_info, text = message.get("meta_info"), message.get("data")
                     audio = await self.__generate_http(text)
-                        
-                    meta_info['text']= text
+
+                    meta_info['text'] = text
                     if not self.first_chunk_generated:
                         meta_info["is_first_chunk"] = True
                         self.first_chunk_generated = True
@@ -182,13 +188,12 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                     else:
                         meta_info['format'] = "wav"
                         wav_bytes = convert_audio_to_wav(audio, source_format="mp3")
-                        audio = resample(wav_bytes, int(self.sampling_rate), format= "wav")
+                        audio = resample(wav_bytes, int(self.sampling_rate), format="wav")
                     yield create_ws_data_packet(audio, meta_info)
 
         except Exception as e:
-                import traceback
-                traceback.print_exc()
-                logger.error(f"Error in eleven labs generate {e}")
+            traceback.print_exc()
+            logger.error(f"Error in eleven labs generate {e}")
 
     async def open_connection(self):
         if self.websocket_connection is None or self.connection_open is False:
