@@ -5,6 +5,7 @@ from .llm import BaseLLM
 from bolna.helpers.utils import json_to_pydantic_schema
 from bolna.helpers.logger_config import configure_logger
 import time
+
 logger = configure_logger(__name__)
 load_dotenv()
 
@@ -14,27 +15,33 @@ class LiteLLM(BaseLLM):
                  classification_model=None, temperature=0.0, **kwargs):
         super().__init__(max_tokens, buffer_size)
         self.model = streaming_model
-        self.api_key = kwargs.get("llm_key", os.getenv('LITELLM_MODEL_API_KEY'))
         self.started_streaming = False
-        self.model_args = { "max_tokens": max_tokens, "temperature": temperature, "model": self.model}
+        self.model_args = {"max_tokens": max_tokens, "temperature": temperature, "model": self.model}
+
+        self.api_key = kwargs.get("llm_key", os.getenv('LITELLM_MODEL_API_KEY'))
+        self.api_base = os.getenv('LITELLM_MODEL_API_BASE')
+        if self.api_key:
+            self.model_args["api_key"] = self.api_key
+        if self.api_base:
+            self.model_args["api_base"] = self.api_base
+
         if "top_k" in kwargs:
             self.model_args["top_k"] = kwargs["top_k"]
         if "top_p" in kwargs:
             self.model_args["top_p"] = kwargs["top_p"]
         if "stop" in kwargs:
-            self.model_args["stop"] = kwargs["stop"]        
+            self.model_args["stop"] = kwargs["stop"]
         if "presence_penalty" in kwargs:
             self.model_args["presence_penalty"] = kwargs["presence_penalty"]
-        if  "frequency_penalty" in kwargs:
+        if "frequency_penalty" in kwargs:
             self.model_args["frequency_penalty"] = kwargs["frequency_penalty"]
-        
+
         if len(kwargs) != 0:
             if "base_url" in kwargs:
                 self.model_args["api_base"] = kwargs["base_url"]
             if "llm_key" in kwargs:
                 self.model_args["llm_key"] = kwargs["llm_key"]
         self.classification_model = classification_model
-
 
     async def generate_stream(self, messages, synthesize=True):
         answer, buffer = "", ""
@@ -45,7 +52,6 @@ class LiteLLM(BaseLLM):
         logger.info(f"request to model: {self.model}: {messages}")
         start_time = time.time()
         async for chunk in await litellm.acompletion(**model_args):
-            logger.info(f"Got chunk {chunk}")
             if (text_chunk := chunk['choices'][0]['delta'].content) and not chunk['choices'][0].finish_reason:
                 answer += text_chunk
                 buffer += text_chunk
@@ -66,7 +72,9 @@ class LiteLLM(BaseLLM):
             yield answer, True
         self.started_streaming = False
         logger.info(f"Time to generate response {time.time() - start_time}")
+
     async def generate(self, messages, classification_task=False, stream=False, synthesize=True, request_json=False):
+        text = ""
         model_args = self.model_args.copy()
         model_args["model"] = self.classification_model if classification_task is True else self.model
         model_args["messages"] = messages
