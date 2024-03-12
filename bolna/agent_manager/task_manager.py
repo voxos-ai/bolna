@@ -719,8 +719,7 @@ class TaskManager(BaseManager):
                             self.history = self.history[:-1]
 
                         logger.info(f"APPENDING USER statement {message['data']}")
-                        if message['data'] != 'TRANSCRIBER_END':
-                            self.history.append({'role': 'user', 'content': message['data']})
+                        self.history.append({'role': 'user', 'content': transcriber_message})
                         if assistant_message is not None:
                             self.history.append(assistant_message)
                         
