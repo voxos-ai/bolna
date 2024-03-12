@@ -47,7 +47,7 @@ async def close_redis_connection():
     await redis_client.aclose()
 
 
-@app.post('/make_call')
+@app.post('/call')
 async def make_call(request: Request):
     try:
         call_details = await request.json()
