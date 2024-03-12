@@ -21,7 +21,7 @@ logger = configure_logger(__name__)
 class TaskManager(BaseManager):
     def __init__(self, assistant_name, task_id, task, ws, input_parameters=None, context_data=None,
                  assistant_id=None, run_id=None, connected_through_dashboard=False,cache =  None, 
-                 input_queue = None, conversation_history = None, output_queue = None, yield_chunks = True, **kwargs):
+                 input_queue = None, conversation_history = None, output_queue = None, yield_chunks=True, **kwargs):
         super().__init__()
         # Latency and logging 
         self.latency_dict = defaultdict(dict)
@@ -815,7 +815,7 @@ class TaskManager(BaseManager):
                                 if self.task_config["tools_config"]["output"]["provider"] in SUPPORTED_INPUT_TELEPHONY_HANDLERS.keys() and not self.connected_through_dashboard and self.synthesizer_provider == "elevenlabs":
                                     message['data'] = wav_bytes_to_pcm(message['data'])
                                 
-                                if "is_first_chunk" in  message['meta_info'] and message['meta_info']['is_first_chunk']:
+                                if "is_first_chunk" in message['meta_info'] and message['meta_info']['is_first_chunk']:
                                     first_chunk_generation_timestamp = time.time()
                                     meta_info["synthesizer_first_chunk_latency"] = first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time']
                                     #self.latency_dict[message['meta_info']["request_id"]]['synthesizer'] = {"first_chunk_generation_latency": first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time'], "first_chunk_generation_timestamp": first_chunk_generation_timestamp}
@@ -866,7 +866,7 @@ class TaskManager(BaseManager):
                     message = create_ws_data_packet(chunk, meta_info)
                     self.buffered_output_queue.put_nowait(message)
             else:
-                message = create_ws_data_packet(chunk, meta_info)
+                message = create_ws_data_packet(audio_chunk, meta_info)
                 self.buffered_output_queue.put_nowait(message)
 
     async def _synthesize(self, message):

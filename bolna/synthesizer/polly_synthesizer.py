@@ -21,22 +21,21 @@ class PollySynthesizer(BaseSynthesizer):
         self.voice = voice
         self.language = language
         self.sample_rate = str(sampling_rate)
-        logger.info(f"@@@@@@@@@@@@@@ SAMPLING RATE {self.sample_rate}")
         # @TODO: initialize client here
         self.client = None
         self.first_chunk_generated = False
-
 
     def get_format(self, format):
         if format == "pcm":
             return "pcm"
         else:
             return "mp3"
-                
+
     @staticmethod
     async def create_client(service: str, session: AioSession, exit_stack: AsyncExitStack):
         # creates AWS session from system environment credentials & config
         return await exit_stack.enter_async_context(session.create_client(service))
+
     async def __generate_http(self, text):
         session = AioSession()
         async with AsyncExitStack() as exit_stack:
@@ -55,14 +54,14 @@ class PollySynthesizer(BaseSynthesizer):
                 logger.error(error)
             else:
                 return await response["AudioStream"].read()
-    
+
     async def open_connection(self):
         pass
-    
+
     async def synthesize(self, text):
-        #This is used for one off synthesis mainly for use cases like voice lab and IVR
+        # This is used for one off synthesis mainly for use cases like voice lab and IVR
         audio = await self.__generate_http(text)
-        
+
         return audio
 
     async def generate(self):
@@ -71,7 +70,7 @@ class PollySynthesizer(BaseSynthesizer):
             message = await self.internal_queue.get()
             logger.info(f"Generating TTS response for message: {message}")
             meta_info, text = message.get("meta_info"), message.get("data")
-            message = await self.__generate_http(text)            
+            message = await self.__generate_http(text)
             if self.format == "mp3":
                 message = convert_audio_to_wav(message, source_format="mp3")
             if not self.first_chunk_generated:
@@ -82,7 +81,7 @@ class PollySynthesizer(BaseSynthesizer):
             if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
                 meta_info["end_of_synthesizer_stream"] = True
                 self.first_chunk_generated = False
-            meta_info['text']=  text
+            meta_info['text'] = text
             yield create_ws_data_packet(message, meta_info)
 
     async def push(self, message):
