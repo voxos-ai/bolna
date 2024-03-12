@@ -74,16 +74,16 @@ class OpenAiLLM(BaseLLM):
                 buffer += text_chunk
 
                 if len(buffer) >= self.buffer_size and synthesize:
-                    text = ' '.join(buffer.split(" ")[:-1])
+                    buffer_words = buffer.split(" ")
+                    text = ' '.join(buffer_words[:-1])
 
-                    if synthesize:
-                        if not self.started_streaming:
-                            self.started_streaming = True
-                        yield text,False
-                    buffer = buffer.split(" ")[-1]
+                    if not self.started_streaming:
+                        self.started_streaming = True
+                    yield text, False
+                    buffer = buffer_words[-1]
 
-        if synthesize: #This is used only in streaming sense 
-                yield buffer, True
+        if synthesize: # This is used only in streaming sense 
+            yield buffer, True
         else:
             yield answer, True
         self.started_streaming = False
