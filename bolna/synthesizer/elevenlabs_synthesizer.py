@@ -1,5 +1,5 @@
 import asyncio
-import time
+import copy
 import websockets
 import base64
 import json
@@ -33,6 +33,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         self.first_chunk_generated = False
         self.last_text_sent = False
         self.text_queue = deque()
+        self.meta_info = None
 
     # Ensuring we only do wav output for now
     def get_format(self, format, sampling_rate):
@@ -140,20 +141,22 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         try:
             if self.stream:
                 async for message in self.receiver():
-                    logger.info(f"Received message friom server")
-                    meta_info = self.text_queue.popleft()
+                    logger.info(f"Received message from server")
+
+                    if len(self.text_queue) > 0:
+                        self.meta_info = self.text_queue.popleft()
                     audio = ""
 
                     if self.use_mulaw:
-                        meta_info['format'] = 'mulaw'
+                        self.meta_info['format'] = 'mulaw'
                     else:
-                        meta_info['format'] = "wav"
+                        self.meta_info['format'] = "wav"
                         audio = resample(convert_audio_to_wav(message, source_format="mp3"), int(self.sampling_rate),
                                          format="wav")
 
-                    yield create_ws_data_packet(audio, meta_info)
+                    yield create_ws_data_packet(audio, self.meta_info)
                     if not self.first_chunk_generated:
-                        meta_info["is_first_chunk"] = True
+                        self.meta_info["is_first_chunk"] = True
                         self.first_chunk_generated = True
 
                     if self.last_text_sent:
@@ -205,7 +208,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         if self.stream:
             meta_info, text = message.get("meta_info"), message.get("data")
             end_of_llm_stream = "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]
-            self.meta_info = meta_info
+            self.meta_info = copy.deepcopy(meta_info)
             meta_info["text"] = text
             self.sender_task = asyncio.create_task(self.sender(text, end_of_llm_stream))
             self.text_queue.append(meta_info)
