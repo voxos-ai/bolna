@@ -9,13 +9,13 @@ from bolna.output_handlers.telephony import TelephonyOutputHandler
 
 logger = configure_logger(__name__)
 load_dotenv()
-twilio_client = Client(os.getenv('TWILIO_ACCOUNT_SID'), os.getenv('TWILIO_AUTH_TOKEN'))
 
 
 class TwilioOutputHandler(TelephonyOutputHandler):
     def __init__(self, websocket=None, mark_set=None, log_dir_name=None):
         super().__init__(websocket, mark_set, log_dir_name)
         self.io_provider = 'twilio'
+        self.client = Client(os.getenv('TWILIO_ACCOUNT_SID'), os.getenv('TWILIO_AUTH_TOKEN'))
 
     async def handle_interruption(self):
         logger.info("interrupting because user spoke in between")
@@ -51,18 +51,16 @@ class TwilioOutputHandler(TelephonyOutputHandler):
 
         return mark_message
 
-    @staticmethod
     async def send_sms(self, message_text, call_number):
-        message = twilio_client.messages.create(
+        message = self.client.messages.create(
             to='{}'.format(call_number),
             from_='{}'.format(os.getenv('TWILIO_PHONE_NUMBER')),
             body=message_text)
         logger.info(f'Sent whatsapp message: {message_text}')
         return message.sid
 
-    @staticmethod
     async def send_whatsapp(self, message_text, call_number):
-        message = twilio_client.messages.create(
+        message = self.client.messages.create(
             to='whatsapp:{}'.format(call_number),
             from_='whatsapp:{}'.format(os.getenv('TWILIO_PHONE_NUMBER')),
             body=message_text)
