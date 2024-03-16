@@ -301,9 +301,9 @@ class TaskManager(BaseManager):
             }
         
         if len(self.system_prompt['content']) == 0:
-            self.history =  [] if len(self.history) == 0 else self.history
+            self.history = [] if len(self.history) == 0 else self.history
         else:
-            self.history =  [self.system_prompt] if len(self.history) == 0 else [self.system_prompt] + self.history
+            self.history = [self.system_prompt] if len(self.history) == 0 else [self.system_prompt] + self.history
 
         self.interim_history = copy.deepcopy(self.history)
 
@@ -409,7 +409,6 @@ class TaskManager(BaseManager):
 
             today = datetime.now().strftime("%A, %B %d, %Y")
             self.history[0]['content'] += f"\n Today's Date is {today}"
-
 
             json_data = await self.tools["llm_agent"].generate(self.history)
             if self.task_config["task_type"] == "summarization":
@@ -546,7 +545,7 @@ class TaskManager(BaseManager):
         should_bypass_synth = 'bypass_synth' in meta_info and meta_info['bypass_synth'] == True
         next_step = self._get_next_step(sequence, "llm")        
         meta_info['llm_start_time'] = time.time()
-        cache_response =  self.cache.get(get_md5_hash(message['data'])) if self.cache is not None else None
+        cache_response = self.cache.get(get_md5_hash(message['data'])) if self.cache is not None else None
         if cache_response is not None:
             logger.info("It was a cache hit and hence simply returning")
             await self._handle_llm_output(next_step, cache_response, should_bypass_synth, meta_info)
@@ -741,7 +740,7 @@ class TaskManager(BaseManager):
 
                             if not response_started:
                                 response_started = True
-                            else:
+                            elif self.kwargs['process_interim_results'] == "true":
                                 #In this case user has already started speaking
                                 # Hence check the previous message if it's user or assistant
                                 # If it's user, simply change user's message
@@ -900,8 +899,8 @@ class TaskManager(BaseManager):
     ############################################################
     async def __handle_initial_silence(self):
         logger.info(f"Checking for initial silence")
-        await asyncio.sleep(10)
-        if self.callee_silent:
+        await asyncio.sleep(5)
+        if self.callee_silent and len(self.history) == 1 and len(self.interim_history) == 1:
             logger.info(f"Calee was silent and hence speaking Hello on callee's behalf")
             meta_info = self.__get_updated_meta_info()
             sequence = meta_info["sequence"]
