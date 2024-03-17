@@ -20,8 +20,8 @@ logger = configure_logger(__name__)
 
 class TaskManager(BaseManager):
     def __init__(self, assistant_name, task_id, task, ws, input_parameters=None, context_data=None,
-                 assistant_id=None, run_id=None, connected_through_dashboard=False,cache =  None, 
-                 input_queue = None, conversation_history = None, output_queue = None, yield_chunks=True, **kwargs):
+                 assistant_id=None, run_id=None, connected_through_dashboard=False, cache=None,
+                 input_queue=None, conversation_history=None, output_queue=None, yield_chunks=True, **kwargs):
         super().__init__()
         # Latency and logging 
         self.latency_dict = defaultdict(dict)
@@ -38,7 +38,7 @@ class TaskManager(BaseManager):
         self.enforce_streaming = kwargs.get("enforce_streaming", False)
         self.callee_silent = True
         self.yield_chunks = yield_chunks
-        self.kwargs["process_interim_results"] = "true" if task.get("optimize_latency", False) == True else "false"
+        self.kwargs["process_interim_results"] = "true" if task.get("optimize_latency", False) is True else "false"
         logger.info(f"Processing interim results {self.kwargs['process_interim_results'] }")
         # Set up communication queues between processes
         self.audio_queue = asyncio.Queue()
@@ -115,7 +115,7 @@ class TaskManager(BaseManager):
         self.extracted_data = None
         self.summarized_data = None
         logger.info(f"TASK CONFIG {self.task_config['tools_config'] }")
-        self.stream = ( self.task_config["tools_config"]['synthesizer'] is not None and self.task_config["tools_config"]["synthesizer"]["stream"]) and (self.enforce_streaming or not self.connected_through_dashboard)
+        self.stream = (self.task_config["tools_config"]['synthesizer'] is not None and self.task_config["tools_config"]["synthesizer"]["stream"]) and (self.enforce_streaming or not self.connected_through_dashboard)
         #self.stream = not connected_through_dashboard #Currently we are allowing only realtime conversation based usecases. Hence it'll always be true unless connected through dashboard
         self.is_local = False
         llm_config = None
@@ -320,7 +320,6 @@ class TaskManager(BaseManager):
             text_chunk = text_chunk[index+2:]
         return text_chunk
     
-
     async def process_interruption(self):
         logger.info(f"Handling interruption sequenxce ids {self.sequence_ids}")
         await self.__cleanup_downstream_tasks()    
@@ -932,21 +931,24 @@ class TaskManager(BaseManager):
                     transcriber_latency = message["meta_info"]["transcriber_latency"] if utterance_end is not None else 0
                     first_llm_buffer_latency = message["meta_info"]["llm_first_buffer_generation_latency"] if utterance_end is not None else 0
                     synthesizer_first_chunk_latency = message["meta_info"]["synthesizer_first_chunk_latency"] if utterance_end is not None else 0
+
                     if utterance_end is None:
                         logger.info(f"First chunk is none")
+
                     latency_metrics = {
                         "transcriber": {
-                            "utterance_end": utterance_end, 
+                            "utterance_end": utterance_end,
                             "latency": transcriber_latency
-                            }, 
+                            },
                         "llm": {
                             "first_llm_buffer_latency" : first_llm_buffer_latency
-                            }, 
+                            },
                         "synthesizer": {
                             "synthesizer_first_chunk_latency": synthesizer_first_chunk_latency
                             },
                         "overall_first_byte_latency": overall_first_byte_latency
                         }
+
                     if message['meta_info']["request_id"] not in self.latency_dict:
                         self.latency_dict[message['meta_info']["request_id"]] = latency_metrics
                         logger.info("LATENCY METRICS FOR {} are {}".format(message['meta_info']["request_id"], latency_metrics))

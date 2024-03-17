@@ -262,7 +262,7 @@ class DeepgramTranscriber(BaseTranscriber):
                     self.meta_info["include_latency"] = True
                     self.meta_info["utterance_end"] = self.connection_start_time + msg['last_word_end']
                     self.meta_info["time_received"] = time.time()
-                    self.meta_info["transcriber_latency"] =  None
+                    self.meta_info["transcriber_latency"] = None
                     if curr_message == "":
                         continue
                     logger.info(f"Signalling the Task manager to start speaking")

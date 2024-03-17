@@ -19,7 +19,7 @@ class LiteLLM(BaseLLM):
         self.model_args = {"max_tokens": max_tokens, "temperature": temperature, "model": self.model}
 
         self.api_key = kwargs.get("llm_key", os.getenv('LITELLM_MODEL_API_KEY'))
-        self.api_base = os.getenv('LITELLM_MODEL_API_BASE')
+        self.api_base = kwargs.get("base_url", os.getenv('LITELLM_MODEL_API_BASE'))
         if self.api_key:
             self.model_args["api_key"] = self.api_key
         if self.api_base:

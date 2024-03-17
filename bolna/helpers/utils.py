@@ -1,24 +1,21 @@
 import json
 import asyncio
 import re
-import numpy as np
 import copy
 import hashlib
 import os
 import traceback
+import io
+import numpy as np
+import aiofiles
+import torch
+import torchaudio
+from scipy.io import wavfile
 from botocore.exceptions import BotoCoreError, ClientError
 from aiobotocore.session import AioSession
 from contextlib import AsyncExitStack
 from dotenv import load_dotenv
-from pydantic import BaseModel, create_model
-import wave
-import io
-import numpy as np
-from scipy.io import wavfile
-import aiofiles
-
-import torch
-import torchaudio
+from pydantic import create_model
 from .logger_config import configure_logger
 from bolna.constants import PREPROCESS_DIR
 from pydub import AudioSegment
@@ -207,7 +204,7 @@ def get_required_input_types(task):
     return input_types
 
 
-def format_messages(messages, use_system_prompt = False):
+def format_messages(messages, use_system_prompt=False):
     formatted_string = ""
     for message in messages:
         role = message['role']

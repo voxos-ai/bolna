@@ -21,12 +21,11 @@ class PollySynthesizer(BaseSynthesizer):
         self.voice = voice
         self.language = language
         self.sample_rate = str(sampling_rate)
-        # @TODO: initialize client here
         self.client = None
         self.first_chunk_generated = False
 
-    def get_format(self, format):
-        if format == "pcm":
+    def get_format(self, audio_format):
+        if audio_format == "pcm":
             return "pcm"
         else:
             return "mp3"

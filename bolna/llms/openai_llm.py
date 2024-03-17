@@ -1,4 +1,3 @@
-import asyncio
 import os
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
@@ -68,7 +67,6 @@ class OpenAiLLM(BaseLLM):
         model_args["stream"] = True
         model_args["stop"] = ["User:"]
         async for chunk in await self.async_client.chat.completions.create(**model_args):
-            logger.info(f"CHUNK IN DICTIONARY FORMAT {chunk.__dict__}")
             if text_chunk := chunk.choices[0].delta.content:
                 answer += text_chunk
                 buffer += text_chunk
