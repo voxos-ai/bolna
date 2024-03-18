@@ -260,7 +260,7 @@ class TaskManager(BaseManager):
         elif self.task_config["task_type"] == "webhook":
             zap_url = self.task_config["tools_config"]["api_tools"]["webhookURL"]
             logger.info(f"Zap URL {zap_url}")
-            self.tools["webhook_agent"] = ZapierAgent(zap_url = zap_url)
+            self.tools["webhook_agent"] = ZapierAgent(zap_url=zap_url)
 
         logger.info("prompt and config setup completed")
         
@@ -1033,7 +1033,7 @@ class TaskManager(BaseManager):
                     logger.info(f"self.summarized_data {self.summarized_data}")
                     output = {"summary" : self.summarized_data, "task_type": "summarization"}
                 elif self.task_config["task_type"] == "webhook":
-                    output = {"status" : self.webhook_response, "task_type": "webhook"}
+                    output = {"status": self.webhook_response, "task_type": "webhook"}
             return output
 
     def handle_cancellation(self, message):

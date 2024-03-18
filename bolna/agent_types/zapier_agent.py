@@ -21,10 +21,14 @@ class ZapierAgent(BaseAgent):
                         return data
                     else:
                         logger.error(f"Error: {response.status} - {await response.text()}")
+                        return None
             else:
                 logger.info("Payload was null")
+        return None
 
     async def execute(self, payload):
+        if not self.zap_url:
+            return None
         response = await self.__send_payload(payload)
         logger.info(f"Response {response}")
         return response['status']
