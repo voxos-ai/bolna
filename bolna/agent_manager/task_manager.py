@@ -20,8 +20,8 @@ logger = configure_logger(__name__)
 
 class TaskManager(BaseManager):
     def __init__(self, assistant_name, task_id, task, ws, input_parameters=None, context_data=None,
-                 assistant_id=None, run_id=None, connected_through_dashboard=False,cache =  None, 
-                 input_queue = None, conversation_history = None, output_queue = None, yield_chunks=True, **kwargs):
+                 assistant_id=None, run_id=None, connected_through_dashboard=False, cache=None,
+                 input_queue=None, conversation_history=None, output_queue=None, yield_chunks=True, **kwargs):
         super().__init__()
         # Latency and logging 
         self.latency_dict = defaultdict(dict)
@@ -38,7 +38,7 @@ class TaskManager(BaseManager):
         self.enforce_streaming = kwargs.get("enforce_streaming", False)
         self.callee_silent = True
         self.yield_chunks = yield_chunks
-        self.kwargs["process_interim_results"] = "true" if task.get("optimize_latency", False) == True else "false"
+        self.kwargs["process_interim_results"] = "true" if task.get("optimize_latency", False) is True else "false"
         logger.info(f"Processing interim results {self.kwargs['process_interim_results'] }")
         # Set up communication queues between processes
         self.audio_queue = asyncio.Queue()
@@ -115,7 +115,7 @@ class TaskManager(BaseManager):
         self.extracted_data = None
         self.summarized_data = None
         logger.info(f"TASK CONFIG {self.task_config['tools_config'] }")
-        self.stream = ( self.task_config["tools_config"]['synthesizer'] is not None and self.task_config["tools_config"]["synthesizer"]["stream"]) and (self.enforce_streaming or not self.connected_through_dashboard)
+        self.stream = (self.task_config["tools_config"]['synthesizer'] is not None and self.task_config["tools_config"]["synthesizer"]["stream"]) and (self.enforce_streaming or not self.connected_through_dashboard)
         #self.stream = not connected_through_dashboard #Currently we are allowing only realtime conversation based usecases. Hence it'll always be true unless connected through dashboard
         self.is_local = False
         llm_config = None
@@ -260,7 +260,7 @@ class TaskManager(BaseManager):
         elif self.task_config["task_type"] == "webhook":
             zap_url = self.task_config["tools_config"]["api_tools"]["webhookURL"]
             logger.info(f"Zap URL {zap_url}")
-            self.tools["webhook_agent"] = ZapierAgent(zap_url = zap_url)
+            self.tools["webhook_agent"] = ZapierAgent(zap_url=zap_url)
 
         logger.info("prompt and config setup completed")
         
@@ -301,9 +301,9 @@ class TaskManager(BaseManager):
             }
         
         if len(self.system_prompt['content']) == 0:
-            self.history =  [] if len(self.history) == 0 else self.history
+            self.history = [] if len(self.history) == 0 else self.history
         else:
-            self.history =  [self.system_prompt] if len(self.history) == 0 else [self.system_prompt] + self.history
+            self.history = [self.system_prompt] if len(self.history) == 0 else [self.system_prompt] + self.history
 
         self.interim_history = copy.deepcopy(self.history)
 
@@ -320,7 +320,6 @@ class TaskManager(BaseManager):
             text_chunk = text_chunk[index+2:]
         return text_chunk
     
-
     async def process_interruption(self):
         logger.info(f"Handling interruption sequenxce ids {self.sequence_ids}")
         await self.__cleanup_downstream_tasks()    
@@ -409,7 +408,6 @@ class TaskManager(BaseManager):
 
             today = datetime.now().strftime("%A, %B %d, %Y")
             self.history[0]['content'] += f"\n Today's Date is {today}"
-
 
             json_data = await self.tools["llm_agent"].generate(self.history)
             if self.task_config["task_type"] == "summarization":
@@ -546,7 +544,7 @@ class TaskManager(BaseManager):
         should_bypass_synth = 'bypass_synth' in meta_info and meta_info['bypass_synth'] == True
         next_step = self._get_next_step(sequence, "llm")        
         meta_info['llm_start_time'] = time.time()
-        cache_response =  self.cache.get(get_md5_hash(message['data'])) if self.cache is not None else None
+        cache_response = self.cache.get(get_md5_hash(message['data'])) if self.cache is not None else None
         if cache_response is not None:
             logger.info("It was a cache hit and hence simply returning")
             await self._handle_llm_output(next_step, cache_response, should_bypass_synth, meta_info)
@@ -741,7 +739,7 @@ class TaskManager(BaseManager):
 
                             if not response_started:
                                 response_started = True
-                            else:
+                            elif self.kwargs['process_interim_results'] == "true":
                                 #In this case user has already started speaking
                                 # Hence check the previous message if it's user or assistant
                                 # If it's user, simply change user's message
@@ -900,8 +898,8 @@ class TaskManager(BaseManager):
     ############################################################
     async def __handle_initial_silence(self):
         logger.info(f"Checking for initial silence")
-        await asyncio.sleep(10)
-        if self.callee_silent:
+        await asyncio.sleep(5)
+        if self.callee_silent and len(self.history) == 1 and len(self.interim_history) == 1:
             logger.info(f"Calee was silent and hence speaking Hello on callee's behalf")
             meta_info = self.__get_updated_meta_info()
             sequence = meta_info["sequence"]
@@ -933,21 +931,24 @@ class TaskManager(BaseManager):
                     transcriber_latency = message["meta_info"]["transcriber_latency"] if utterance_end is not None else 0
                     first_llm_buffer_latency = message["meta_info"]["llm_first_buffer_generation_latency"] if utterance_end is not None else 0
                     synthesizer_first_chunk_latency = message["meta_info"]["synthesizer_first_chunk_latency"] if utterance_end is not None else 0
+
                     if utterance_end is None:
                         logger.info(f"First chunk is none")
+
                     latency_metrics = {
                         "transcriber": {
-                            "utterance_end": utterance_end, 
+                            "utterance_end": utterance_end,
                             "latency": transcriber_latency
-                            }, 
+                            },
                         "llm": {
                             "first_llm_buffer_latency" : first_llm_buffer_latency
-                            }, 
+                            },
                         "synthesizer": {
                             "synthesizer_first_chunk_latency": synthesizer_first_chunk_latency
                             },
                         "overall_first_byte_latency": overall_first_byte_latency
                         }
+
                     if message['meta_info']["request_id"] not in self.latency_dict:
                         self.latency_dict[message['meta_info']["request_id"]] = latency_metrics
                         logger.info("LATENCY METRICS FOR {} are {}".format(message['meta_info']["request_id"], latency_metrics))
@@ -1032,7 +1033,7 @@ class TaskManager(BaseManager):
                     logger.info(f"self.summarized_data {self.summarized_data}")
                     output = {"summary" : self.summarized_data, "task_type": "summarization"}
                 elif self.task_config["task_type"] == "webhook":
-                    output = {"status" : self.webhook_response, "task_type": "webhook"}
+                    output = {"status": self.webhook_response, "task_type": "webhook"}
             return output
 
     def handle_cancellation(self, message):
