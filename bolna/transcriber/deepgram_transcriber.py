@@ -71,7 +71,6 @@ class DeepgramTranscriber(BaseTranscriber):
 
         return ' '.join(transcript_words)
 
-
     def get_deepgram_ws_url(self):
         websocket_url = (f"wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=16000&channels=1"
                          f"&filler_words=true&language={self.language}&diarize=true")
@@ -88,25 +87,22 @@ class DeepgramTranscriber(BaseTranscriber):
             logger.info(f"CONNECTED THROUGH PLAYGROUND")
             websocket_url = (f"wss://api.deepgram.com/v1/listen?model=nova-2&filler_words=true&diarize=true")
             self.sampling_rate = 8000
-            self.audio_frame_duration = 0.0 #There's no streaming from the playground 
-            
+            self.audio_frame_duration = 0.0 #There's no streaming from the playground
+
             self.sampling_rate = 8000
             self.audio_frame_duration = 0.2 #With twilio we are sending 200ms at a time
 
         if "en" not in self.language:
             websocket_url += '&language={}'.format(self.language)
-        
-        if self.process_interim_results == "false":
-            pass
-        else:
-            websocket_url +=f"&interim_results={self.process_interim_results}&utterance_end_ms=1000"
 
-        if self.keywords is not None:
-            if len(self.keywords.split(",")) > 0:
-                keyword_string = "&keywords=" + "&keywords=".join(self.keywords.split(","))
-                websocket_url = f"{websocket_url}{keyword_string}"
-        
-        
+        if self.process_interim_results == "false":
+            websocket_url += f"&endpointing={self.endpointing}"
+        else:
+            websocket_url += f"&interim_results={self.process_interim_results}&utterance_end_ms=1000"
+
+        if len(self.keywords.split(",")) > 0:
+            keyword_string = "&keywords=" + "&keywords=".join(self.keywords.split(","))
+            websocket_url = f"{websocket_url}{keyword_string}"
 
         logger.info(f"Deepgram websocket url: {websocket_url}")
         return websocket_url
