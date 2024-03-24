@@ -810,7 +810,8 @@ class TaskManager(BaseManager):
                                 
                             else:
                                 if self.task_config["tools_config"]["output"]["provider"] in SUPPORTED_INPUT_TELEPHONY_HANDLERS.keys() and not self.connected_through_dashboard and self.synthesizer_provider == "elevenlabs":
-                                    message['data'] = wav_bytes_to_pcm(message['data'])
+                                    if meta_info.get('format', '') != 'mulaw':
+                                        message['data'] = wav_bytes_to_pcm(message['data'])
                                 
                                 if "is_first_chunk" in message['meta_info'] and message['meta_info']['is_first_chunk']:
                                     first_chunk_generation_timestamp = time.time()
