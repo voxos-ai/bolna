@@ -79,7 +79,8 @@ class DeepgramTranscriber(BaseTranscriber):
         dg_params = {
             'model': 'nova-2',
             'filler_words': 'true',
-            'diarize': 'true'
+            'diarize': 'true',
+            'language': self.language
         }
 
         self.audio_frame_duration = 0.5  # We're sending 8k samples with a sample rate of 16k
