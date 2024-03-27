@@ -392,11 +392,11 @@ class TaskManager(BaseManager):
         if "stream_sid" in message:
             self.stream_sid = message['meta_info']["stream_sid"]
 
-    async def _process_followup_task(self, message = None):
+    async def _process_followup_task(self, message=None):
         logger.info(f" TASK CONFIG  {self.task_config['task_type']}")
         if self.task_config["task_type"] == "webhook":
             logger.info(f"Input patrameters {self.input_parameters}")
-            logger.info(f"DOINFG THE POST REQUEST TO ZAPIER WEBHOOK {self.input_parameters['extraction_details']}")
+            logger.info(f"DOING THE POST REQUEST TO ZAPIER WEBHOOK {self.input_parameters['extraction_details']}")
             self.webhook_response = await self.tools["webhook_agent"].execute(self.input_parameters['extraction_details'])
             logger.info(f"Response from the server {self.webhook_response}")
         else:

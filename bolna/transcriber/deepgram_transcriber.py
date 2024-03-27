@@ -108,7 +108,7 @@ class DeepgramTranscriber(BaseTranscriber):
             dg_params['interim_results'] = self.process_interim_results
             dg_params['utterance_end_ms'] = '1000'
 
-        if len(self.keywords.split(",")) > 0:
+        if self.keywords and len(self.keywords.split(",")) > 0:
             dg_params['keywords'] = "&keywords=".join(self.keywords.split(","))
 
         websocket_api = 'wss://api.deepgram.com/v1/listen?'
