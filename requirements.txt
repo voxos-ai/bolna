@@ -1,6 +1,6 @@
 aiobotocore==2.9.0
 aiofiles==23.2.1
-aiohttp==3.9.1
+aiohttp
 fastapi==0.108.0
 litellm==1.15.7
 numpy==1.26.1
