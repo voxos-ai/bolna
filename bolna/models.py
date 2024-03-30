@@ -66,14 +66,14 @@ class Transcriber(BaseModel):
 
 class Synthesizer(BaseModel):
     provider: str
-    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig, DeepgramConfig]
+    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig, CartesiaConfig, DeepgramConfig]
     stream: bool = False
     buffer_size: Optional[int] = 40  # 40 characters in a buffer
     audio_format: Optional[str] = "pcm"
 
     @validator("provider")
     def validate_model(cls, value):
-        return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai", "deepgram"])
+        return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai", "deepgram", "cartesia"])
 
 
 class IOModel(BaseModel):
