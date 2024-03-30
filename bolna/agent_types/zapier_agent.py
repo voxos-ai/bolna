@@ -17,8 +17,9 @@ class ZapierAgent(BaseAgent):
             if payload is not None:
                 async with session.post(self.zap_url, json=payload) as response:
                     if response.status == 200:
-                        data = await response.json()
-                        return data
+                        # need to check if the returned response is json or not
+                        #data = await response.json()
+                        return True
                     else:
                         logger.error(f"Error: {response.status} - {await response.text()}")
                         return None
@@ -31,4 +32,4 @@ class ZapierAgent(BaseAgent):
             return None
         response = await self.__send_payload(payload)
         logger.info(f"Response {response}")
-        return response['status']
+        return response
