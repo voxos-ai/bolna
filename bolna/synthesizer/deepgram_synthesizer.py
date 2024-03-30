@@ -11,12 +11,11 @@ DEEPGRAM_TTS_URL = "https://api.deepgram.com/v1/speak"
 
 
 class DeepgramSynthesizer(BaseSynthesizer):
-    def __init__(self, voice, language, audio_format="pcm", sampling_rate="8000", stream=False, buffer_size=400,
+    def __init__(self, voice, audio_format="pcm", sampling_rate="8000", stream=False, buffer_size=400,
                  **kwargs):
         super().__init__(stream, buffer_size)
         self.format = "linear16" if audio_format == "pcm" else audio_format
         self.voice = voice
-        self.language = language
         self.sample_rate = str(sampling_rate)
         self.first_chunk_generated = False
         self.api_key = kwargs.get("transcriber_key", os.getenv('DEEPGRAM_AUTH_TOKEN'))

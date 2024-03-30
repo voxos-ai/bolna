@@ -167,8 +167,8 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
 
                     if message == b'\x00':
                         logger.info("received null byte and hence end of stream")
-                        meta_info["end_of_synthesizer_stream"] = True
-                        yield create_ws_data_packet(resample(message, int(self.sampling_rate)), meta_info)
+                        self.meta_info["end_of_synthesizer_stream"] = True
+                        yield create_ws_data_packet(resample(message, int(self.sampling_rate)), self.meta_info)
                         self.first_chunk_generated = False
 
             else:

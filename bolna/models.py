@@ -43,7 +43,7 @@ class FourieConfig(BaseModel):
 
 
 class DeepgramConfig(BaseModel):
-    voice_id: str
+    voice: str
 
 
 class Transcriber(BaseModel):
