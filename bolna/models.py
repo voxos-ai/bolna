@@ -46,6 +46,10 @@ class DeepgramConfig(BaseModel):
     voice_id: str
 
 
+class CartesiaConfig(BaseModel):
+    voice_id: str
+
+
 class Transcriber(BaseModel):
     model: str
     language: Optional[str] = None
