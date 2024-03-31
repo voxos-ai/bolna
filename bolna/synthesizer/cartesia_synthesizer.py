@@ -1,19 +1,12 @@
 import aiohttp
-import asyncio, copy
 import os, base64
 from dotenv import load_dotenv
 from bolna.helpers.logger_config import configure_logger
 from bolna.helpers.utils import create_ws_data_packet, convert_audio_to_wav, wav_bytes_to_pcm, float32_to_int16
 from .base_synthesizer import BaseSynthesizer
-import websockets, json
-from scipy.signal import resample
+import json
 import numpy as np
-import io
-import wave
-from scipy import signal
-
-
-
+import librosa
 
 
 logger = configure_logger(__name__)
@@ -26,10 +19,12 @@ class CartesiaSynthesizer(BaseSynthesizer):
                  **kwargs):
         super().__init__(stream, buffer_size)
         self.format = "linear16" if audio_format == "pcm" else audio_format
+
+        # @TODO: retrieve voice embeddings from voice id
         self.voice_id = voice_id
         self.sample_rate = str(sampling_rate)
         self.first_chunk_generated = False
-        self.api_key = ''
+        self.api_key = os.getenv('CARTESIA_API_KEY')
 
     async def __generate_http(self, text):
         headers = {
@@ -38,8 +33,9 @@ class CartesiaSynthesizer(BaseSynthesizer):
         }
         url = CARTESIA_TTS_URL
 
+        # voice embeddings hard-coded for now
         payload = {
-            "transcript": "Hello! Welcome to Cartesia",
+            "transcript": text,
             "model_id": "genial-planet-1346",
             "voice": [-0.08349977, 0.002090532, -0.058492012, 0.05682824, 0.032969892, 0.06476176, 0.11180842,
                       -0.010231484,
@@ -91,8 +87,10 @@ class CartesiaSynthesizer(BaseSynthesizer):
                                 try:
                                     chunk_json = json.loads(buffer[start_index: end_index + 1])
                                     decoded_audio = base64.b64decode(chunk_json["data"])
-                                    #resampled_audio = self.convert_pcm_base64_to_pcm_8000(decoded_audio)
-                                    yield decoded_audio
+
+                                    pcm_decoded_array = np.frombuffer(decoded_audio, dtype=np.float32)
+                                    resampled_audio = librosa.resample(pcm_decoded_array, orig_sr=44100, target_sr=8000)
+                                    yield resampled_audio
                                     buffer = buffer[end_index + 1:]
                                 except json.JSONDecodeError:
                                     break
@@ -101,66 +99,18 @@ class CartesiaSynthesizer(BaseSynthesizer):
                         try:
                             chunk_json = json.loads(buffer)
                             decoded_audio = base64.b64decode(chunk_json["data"])
-                            #resampled_audio = self.convert_pcm_base64_to_pcm_8000(decoded_audio)
-                            # audio = librosa.resample(chunk_json["data"], orig_sr=44100, target_sr=8000)
-                            yield decoded_audio
+
+                            pcm_decoded_array = np.frombuffer(decoded_audio, dtype=np.float32)
+                            resampled_audio = librosa.resample(pcm_decoded_array, orig_sr=44100, target_sr=8000)
+                            yield resampled_audio
                         except json.JSONDecodeError:
                             pass
 
             else:
                 logger.info("Payload was null")
 
-    def convert_pcm_base64_to_pcm_8000(self, pcm_data):
-        resampled_pcm_data = signal.resample(pcm_data, int(len(pcm_data) * 8000 / 44100))
-
-        # Convert the resampled PCM data to 16-bit signed integers
-        resampled_pcm_data = (resampled_pcm_data * 32767).astype(np.int16)
-        return resampled_pcm_data
-
     async def open_connection(self):
         pass
-
-    async def is_pcm_format(self, audio_bytes):
-        try:
-            # Load the audio data into a BytesIO object
-            audio_io = io.BytesIO(audio_bytes)
-
-            # Create a Wave_read object
-            with wave.open(audio_io, 'rb') as wave_file:
-                # Check if the audio file parameters match PCM format
-                if wave_file.getnchannels() == 1 and wave_file.getsampwidth() == 2:
-                    return True
-                else:
-                    return False
-        except Exception as e:
-            print("Error:", e)
-            return False
-
-    async def downgrade_audio(self, original_audio_data):
-        audio_bytes = base64.b64decode(original_audio_data)
-
-        # Convert bytes to numpy array
-        audio_np = np.frombuffer(audio_bytes, dtype=np.int16)
-
-        # Original sampling rate
-        original_sampling_rate = 44100
-
-        # Target sampling rate
-        target_sampling_rate = 8000
-
-        # Calculate resampling ratio
-        resampling_ratio = target_sampling_rate / original_sampling_rate
-
-        # Resample the audio data
-        resampled_audio = resample(audio_np, int(len(audio_np) * resampling_ratio))
-
-        # Convert resampled audio to bytes
-        resampled_audio_bytes = resampled_audio.astype(np.int16).tobytes()
-
-        # Convert resampled audio to base64 if needed
-        resampled_base64_audio_data = base64.b64encode(resampled_audio_bytes).decode('utf-8')
-
-        return resampled_base64_audio_data
 
     async def generate(self):
         while True:
