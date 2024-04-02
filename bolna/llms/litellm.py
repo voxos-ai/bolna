@@ -20,10 +20,13 @@ class LiteLLM(BaseLLM):
 
         self.api_key = kwargs.get("llm_key", os.getenv('LITELLM_MODEL_API_KEY'))
         self.api_base = kwargs.get("base_url", os.getenv('LITELLM_MODEL_API_BASE'))
+        self.api_version = kwargs.get("api_version", os.getenv('LITELLM_MODEL_API_VERSION'))
         if self.api_key:
             self.model_args["api_key"] = self.api_key
         if self.api_base:
             self.model_args["api_base"] = self.api_base
+        if self.api_version:
+            self.model_args["api_version"] = self.api_version
 
         if "top_k" in kwargs:
             self.model_args["top_k"] = kwargs["top_k"]
@@ -40,7 +43,9 @@ class LiteLLM(BaseLLM):
             if "base_url" in kwargs:
                 self.model_args["api_base"] = kwargs["base_url"]
             if "llm_key" in kwargs:
-                self.model_args["llm_key"] = kwargs["llm_key"]
+                self.model_args["api_key"] = kwargs["llm_key"]
+            if "api_version" in kwargs:
+                self.model_args["api_version"] = kwargs["api_version"]
         self.classification_model = classification_model
 
     async def generate_stream(self, messages, synthesize=True):

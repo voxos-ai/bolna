@@ -23,6 +23,7 @@ SUPPORTED_LLM_MODELS = {
     'mistral': LiteLLM,
     'llama': LiteLLM,
     'zephyr': LiteLLM,
+    'azure-openai': LiteLLM,
     'perplexity': LiteLLM,
     'vllm': OpenAiLLM
 }
