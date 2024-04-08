@@ -163,6 +163,12 @@ class TaskManager(BaseManager):
         self.request_logs = []
         if task_id == 0:
             self.output_chunk_size = 16384 if self.sampling_rate == 24000 else 8192 #1 second chunk size for calls 
+        
+        # For nitro
+        self.nitro = self.kwargs['process_interim_results'] == "true"
+        self.minimum_wait_duration = self.task_config["tools_config"]["transcriber"]["endpointing"]
+        logger.info(f"minimum wait duration {self.minimum_wait_duration}")
+        self.last_spoken_timestamp = time.time() * 1000
 
     def __setup_output_handlers(self, connected_through_dashboard, output_queue):
         output_kwargs = {"websocket": self.websocket}  
@@ -537,7 +543,6 @@ class TaskManager(BaseManager):
 
 
     async def _process_conversation_formulaic_task(self, message, sequence, meta_info):
-        start_time = time.time()
         llm_response = ""
         logger.info("Agent flow is formulaic and hence moving smoothly")
         async for text_chunk in self.tools['llm_agent'].generate(self.history, stream=True, synthesize=True):
@@ -767,6 +772,7 @@ class TaskManager(BaseManager):
                                 # Hence check the previous message if it's user or assistant
                                 # If it's user, simply change user's message
                                 # If it's assistant remover assistant message and append user
+                                self.last_spoken_timestamp = time.time() * 1000
                                 if self.interim_history[-1]['role'] == 'assistant':
                                     self.interim_history = self.interim_history[:-1]
                                 else:
@@ -935,6 +941,11 @@ class TaskManager(BaseManager):
     async def __process_output_loop(self):
         try:
             while True:
+                time_to_wait = self.last_spoken_timestamp - time.time() *1000
+                if time_to_wait < self.minimum_wait_duration:
+                    logger.info(f"Sleeping for {time_to_wait} to make sure we do not disturb the user")
+                    await asyncio.sleep(time_to_wait)
+
                 logger.info(f"Yielding to output handler")
                 message = await self.buffered_output_queue.get()
                 logger.info("Start response is True and hence starting to speak {} Current sequence ids".format(message['meta_info'], self.sequence_ids))
