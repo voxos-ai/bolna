@@ -169,7 +169,8 @@ class TaskManager(BaseManager):
 
         #setup request logs
         self.request_logs = []
-
+        if task_id == 0:
+            self.output_chunk_size = 16384 if self.sampling_rate == 24000 else 8192 #1 second chunk size for calls 
 
     def __setup_output_handlers(self, connected_through_dashboard, output_queue):
         output_kwargs = {"websocket": self.websocket}  
@@ -354,6 +355,11 @@ class TaskManager(BaseManager):
         await self.tools["output"].handle_interruption()
         logger.info(f"Cleaning up downstream tasks sequenxce ids {self.sequence_ids}. Time taken to send a clear message {time.time() - start_time}")
         self.sequence_ids = set()
+
+        if self.output_task is not None:
+            self.output_task.cancel()
+            self.output_task = asyncio.create_task(self.__process_output_loop())
+
         if self.llm_task is not None:
             logger.info(f"Cancelling LLM Task")
             self.llm_task.cancel()
@@ -827,7 +833,7 @@ class TaskManager(BaseManager):
                                 logger.info(f"Simply Storing in buffered output queue for now")
 
                                 if self.yield_chunks:
-                                    for chunk in yield_chunks_from_memory(message['data'], chunk_size=16384):
+                                    for chunk in yield_chunks_from_memory(message['data'], chunk_size=self.output_chunk_size):
                                         self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, meta_info))
                                 
                                 else:
@@ -857,8 +863,8 @@ class TaskManager(BaseManager):
                             await self.tools["output"].handle(message)
                     else:
                         logger.info(f"{message['meta_info']['sequence_id']} is not in sequence ids  {self.sequence_ids} and hence not sending to output")                
-                    logger.info(f"Sleeping for 300 ms")
-                    await asyncio.sleep(0.3) #Sleeping for 100ms after receiving every chunk so other tasks can execute
+                    logger.info(f"Sleeping for 100 ms")
+                    await asyncio.sleep(0.1) #Sleeping for 100ms after receiving every chunk so other tasks can execute
 
         except Exception as e:
             traceback.print_exc()
@@ -981,8 +987,11 @@ class TaskManager(BaseManager):
                         self.latency_dict[message['meta_info']["request_id"]] = latency_metrics
                         logger.info("LATENCY METRICS FOR {} are {}".format(message['meta_info']["request_id"], latency_metrics))
                 
-                # Sleep until this particular audio frame is passed
-                #asyncio.sleep(duration-0.1)
+                # Sleep until this particular audio frame is spoken only if the duration for the frame is atleast 500ms
+                if duration > 0.5:
+                    logger.info(f"Sleeping for {duration - 0.05}")
+                    await asyncio.sleep(duration-0.05) #Sleep for less than 50 milliseconds
+                
         except Exception as e:
             traceback.print_exc()
             logger.error(f'Error in processing message output')

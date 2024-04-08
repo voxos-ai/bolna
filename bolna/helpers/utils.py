@@ -465,4 +465,4 @@ async def save_audio_file_to_s3(conversation_recording, sampling_rate = 24000, a
     logger.info(f"Storing in {RECORDING_BUCKET_URL}{key}")
     await store_file(bucket_name=RECORDING_BUCKET_NAME, file_key=key, file_data=audio_buffer, content_type="wav")
     
-    return f'{RECORDING_BUCKET_URL}/{key}'
+    return f'{RECORDING_BUCKET_URL}{key}'
