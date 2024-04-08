@@ -1,18 +1,25 @@
 import asyncio
 from collections import defaultdict
+import io
 import traceback
 import time
 import json
 import uuid
 import copy
 from datetime import datetime
+import wave
+
+import numpy as np
+import torch
+import torchaudio
 from .base_manager import BaseManager
 from bolna.agent_types import *
 from bolna.providers import *
-from bolna.helpers.utils import create_ws_data_packet, is_valid_md5, get_raw_audio_bytes_from_base64, \
-    get_required_input_types, format_messages, get_prompt_responses, update_prompt_with_context, get_md5_hash, clean_json_string, wav_bytes_to_pcm, write_request_logs, yield_chunks_from_memory
+from bolna.helpers.utils import calculate_audio_duration, create_ws_data_packet, is_valid_md5, get_raw_audio_bytes_from_base64, \
+    get_required_input_types, format_messages, get_prompt_responses, save_audio_file_to_s3, update_prompt_with_context, get_md5_hash, clean_json_string, wav_bytes_to_pcm, write_request_logs, yield_chunks_from_memory
 from bolna.helpers.logger_config import configure_logger
-
+import math
+from pydub import AudioSegment
 
 asyncio.get_event_loop().set_debug(True)
 logger = configure_logger(__name__)
@@ -60,16 +67,29 @@ class TaskManager(BaseManager):
         self.assistant_id = assistant_id
         self.run_id = run_id
         self.mark_set = set()
-
+        
         self.conversation_ended = False
 
         # Prompts
         self.prompts, self.system_prompt = {}, {}
         self.input_parameters = input_parameters
         
+        # Recording
+        self.should_record = False
+        self.conversation_recording= {
+            "input": {
+                'data': b'',
+                'started': time.time()
+            },
+            "output": [],
+            "metadata": {
+                "started": 0
+            }
+        }
         #IO HANDLERS
         if task_id == 0:
-            self.__setup_input_handlers(connected_through_dashboard, input_queue)
+            self.should_record = self.task_config["tools_config"]["output"]["provider"] == 'default' #In this case, this is a websocket connection and we should record 
+            self.__setup_input_handlers(connected_through_dashboard, input_queue, self.should_record)
         self.__setup_output_handlers(connected_through_dashboard, output_queue)
 
         # Agent stuff
@@ -150,6 +170,7 @@ class TaskManager(BaseManager):
         #setup request logs
         self.request_logs = []
 
+
     def __setup_output_handlers(self, connected_through_dashboard, output_queue):
         output_kwargs = {"websocket": self.websocket}  
         
@@ -160,6 +181,7 @@ class TaskManager(BaseManager):
                 logger.info("Connected through dashboard and hence using default output handler")
                 output_handler_class = SUPPORTED_OUTPUT_HANDLERS.get("default")
                 output_kwargs['queue'] = output_queue
+                self.sampling_rate = 24000
             else:
                 output_handler_class = SUPPORTED_OUTPUT_HANDLERS.get(self.task_config["tools_config"]["output"]["provider"])
             
@@ -171,12 +193,13 @@ class TaskManager(BaseManager):
                 else:
                     self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 24000
                     output_kwargs['queue'] = output_queue
+                self.sampling_rate = self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate']
 
             self.tools["output"] = output_handler_class(**output_kwargs)
         else:
             raise "Other input handlers not supported yet"
 
-    def __setup_input_handlers(self, connected_through_dashboard, input_queue):
+    def __setup_input_handlers(self, connected_through_dashboard, input_queue, should_record):
         if self.task_config["tools_config"]["input"]["provider"] in SUPPORTED_INPUT_HANDLERS.keys():
             logger.info(f"Connected through dashboard {connected_through_dashboard}")
             input_kwargs = {"queues": self.queues,
@@ -184,6 +207,8 @@ class TaskManager(BaseManager):
                             "input_types": get_required_input_types(self.task_config),
                             "mark_set": self.mark_set,
                             "connected_through_dashboard": self.connected_through_dashboard}
+            if should_record:
+                input_kwargs['conversation_recording'] = self.conversation_recording
 
             if connected_through_dashboard:
                 logger.info("Connected through dashboard and hence using default input handler")
@@ -847,7 +872,7 @@ class TaskManager(BaseManager):
                                                             self.task_config["tools_config"]["output"][
                                                                 "format"], local=self.is_local,
                                                             assistant_id=self.assistant_id)
-
+            logger.info("Sending preprocessed audio")
             await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
         else:
             audio_chunk = await get_raw_audio_bytes_from_base64(self.assistant_name, text,
@@ -920,6 +945,8 @@ class TaskManager(BaseManager):
                 
                 if 'sequence_id' in message['meta_info'] and message["meta_info"]["sequence_id"] in self.sequence_ids:
                     await self.tools["output"].handle(message)
+                    duration = calculate_audio_duration(len(message["data"]), self.sampling_rate)
+                    self.conversation_recording['output'].append({'data': message['data'], "start_time": time.time(), "duration": duration})
                 else:
                     logger.info(f'{message["meta_info"]["sequence_id"]} is not in {self.sequence_ids} and hence not speaking')
                     continue
@@ -953,6 +980,9 @@ class TaskManager(BaseManager):
                     if message['meta_info']["request_id"] not in self.latency_dict:
                         self.latency_dict[message['meta_info']["request_id"]] = latency_metrics
                         logger.info("LATENCY METRICS FOR {} are {}".format(message['meta_info']["request_id"], latency_metrics))
+                
+                # Sleep until this particular audio frame is passed
+                #asyncio.sleep(duration-0.1)
         except Exception as e:
             traceback.print_exc()
             logger.error(f'Error in processing message output')
@@ -1026,6 +1056,10 @@ class TaskManager(BaseManager):
                           "transcriber_duration": self.transcriber_duration,
                           "synthesizer_characters": self.synthesizer_characters, "ended_by_assistant": self.ended_by_assistant,
                           "latency_dict": self.latency_dict}
+                
+                if self.should_record:
+                    output['recording_url'] = await save_audio_file_to_s3(self.conversation_recording, self.sampling_rate, self.assistant_id, self.run_id)
+
             else:
                 output = self.input_parameters
                 if self.task_config["task_type"] == "extraction":
