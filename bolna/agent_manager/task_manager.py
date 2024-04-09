@@ -350,13 +350,12 @@ class TaskManager(BaseManager):
     async def __cleanup_downstream_tasks(self):
         start_time = time.time()
         await self.tools["output"].handle_interruption()
-        logger.info(f"Cleaning up downstream tasks sequenxce ids {self.sequence_ids}. Time taken to send a clear message {time.time() - start_time}")
         self.sequence_ids = set()
-
+        
+        #Stop the output loop first so that we do not transmit anything else
         if self.output_task is not None:
-            self.output_task.cancel()
             logger.info(f"Cancelling output task")
-            self.output_task = asyncio.create_task(self.__process_output_loop())
+            self.output_task.cancel()
 
         if self.llm_task is not None:
             logger.info(f"Cancelling LLM Task")
@@ -369,9 +368,11 @@ class TaskManager(BaseManager):
         if not self.buffered_output_queue.empty():
             logger.info(f"Output queue was not empty and hence emptying it")
             self.buffered_output_queue = asyncio.Queue()
-        # if "synthesizer" in self.tools:
-        #     self.tools["synthesizer"].clear_internal_queue()
-    
+        
+        #restart output task
+        self.output_task = asyncio.create_task(self.__process_output_loop())
+        logger.info(f"Cleaning up downstream tasks sequenxce ids {self.sequence_ids}. Time taken to send a clear message {time.time() - start_time}")
+
     def __get_updated_meta_info(self, meta_info = None):
         #This is used in case there's silence from callee's side
         if meta_info is None:
@@ -940,11 +941,11 @@ class TaskManager(BaseManager):
     # but it shouldn't be the case. 
     async def __process_output_loop(self):
         try:
-            while True:
-                time_to_wait = self.last_spoken_timestamp - time.time() *1000
-                if time_to_wait < self.minimum_wait_duration:
-                    logger.info(f"Sleeping for {time_to_wait} to make sure we do not disturb the user")
-                    await asyncio.sleep(time_to_wait)
+            while True:  
+                time_since_last_spoken_word = (time.time() *1000) - self.last_spoken_timestamp
+                if time_since_last_spoken_word < self.minimum_wait_duration:
+                    logger.info(f"Sleeping for {self.minimum_wait_duration - time_since_last_spoken_word} to make sure we do not disturb the user")
+                    await asyncio.sleep((self.minimum_wait_duration - time_since_last_spoken_word)/1000)
 
                 logger.info(f"Yielding to output handler")
                 message = await self.buffered_output_queue.get()
