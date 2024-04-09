@@ -80,7 +80,7 @@ class TaskManager(BaseManager):
         }
         #IO HANDLERS
         if task_id == 0:
-            self.should_record = self.task_config["tools_config"]["output"]["provider"] == 'default' #In this case, this is a websocket connection and we should record 
+            self.should_record = self.task_config["tools_config"]["output"]["provider"] == 'default' and self.enforce_streaming #In this case, this is a websocket connection and we should record 
             self.__setup_input_handlers(connected_through_dashboard, input_queue, self.should_record)
         self.__setup_output_handlers(connected_through_dashboard, output_queue)
 
@@ -163,12 +163,11 @@ class TaskManager(BaseManager):
         self.request_logs = []
         if task_id == 0:
             self.output_chunk_size = 16384 if self.sampling_rate == 24000 else 8192 #1 second chunk size for calls 
-        
-        # For nitro
-        self.nitro = self.kwargs['process_interim_results'] == "true"
-        self.minimum_wait_duration = self.task_config["tools_config"]["transcriber"]["endpointing"]
-        logger.info(f"minimum wait duration {self.minimum_wait_duration}")
-        self.last_spoken_timestamp = time.time() * 1000
+            # For nitro
+            self.nitro = self.kwargs['process_interim_results'] == "true"
+            self.minimum_wait_duration = self.task_config["tools_config"]["transcriber"]["endpointing"]
+            logger.info(f"minimum wait duration {self.minimum_wait_duration}")
+            self.last_spoken_timestamp = time.time() * 1000
 
     def __setup_output_handlers(self, connected_through_dashboard, output_queue):
         output_kwargs = {"websocket": self.websocket}  
@@ -356,6 +355,7 @@ class TaskManager(BaseManager):
 
         if self.output_task is not None:
             self.output_task.cancel()
+            logger.info(f"Cancelling output task")
             self.output_task = asyncio.create_task(self.__process_output_loop())
 
         if self.llm_task is not None:
@@ -503,7 +503,7 @@ class TaskManager(BaseManager):
     ##############################################################
     async def _handle_llm_output(self, next_step, text_chunk, should_bypass_synth, meta_info):
 
-        logger.info("received text from LLM for output processing: {} which belongs to sequence id".format(text_chunk))
+        logger.info("received text from LLM for output processing: {} which belongs to sequence id {}".format(text_chunk, meta_info['sequence_id']))
         if "request_id" not in meta_info:
             meta_info["request_id"] = str(uuid.uuid4())
         first_buffer_latency = time.time() - meta_info["llm_start_time"]
@@ -755,7 +755,7 @@ class TaskManager(BaseManager):
                     else:
                         logger.info(f'invoking next_task {next_task} with transcriber_message: {message["data"]}')
                         if transcriber_message.strip() == message['data'].strip():
-                            logger.info("Transcriber message and message data are same and hence not changing anything else")
+                            logger.info("Transcriber message and message data are same and hence not changing anything else. Probably just an is_final thingy")
                             continue
 
                         elif len(message['data'].strip()) != 0:
@@ -764,7 +764,7 @@ class TaskManager(BaseManager):
                             await self.__cleanup_downstream_tasks()
                             self.last_response_time = time.time()
                             transcriber_message = message['data']
-
+                            
                             if not response_started:
                                 response_started = True
                             elif self.kwargs['process_interim_results'] == "true":
