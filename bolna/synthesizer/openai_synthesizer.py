@@ -23,7 +23,8 @@ class OPENAISynthesizer(BaseSynthesizer):
         self.first_chunk_generated = False 
         self.text_queue = deque()
         self.stream = False
-        logger.info(f"self sampling rate {self.sample_rate}")
+        if type(self.sample_rate) is str:
+            self.sample_rate = int(self.sample_rate)
         
     # Ensuring we can only do wav outputs becasue mulaw conversion for others messes up twilio
     def get_format(self, format):
@@ -88,7 +89,6 @@ class OPENAISynthesizer(BaseSynthesizer):
                     if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
                         meta_info["end_of_synthesizer_stream"] = True
                         self.first_chunk_generated = False 
-                    
                     yield create_ws_data_packet(resample(convert_audio_to_wav(audio, 'mp3'), self.sample_rate, format="wav"), meta_info)
 
         except Exception as e:

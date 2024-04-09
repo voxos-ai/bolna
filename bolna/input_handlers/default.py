@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import time
 from dotenv import load_dotenv
 from bolna.helpers.logger_config import configure_logger
 from bolna.helpers.utils import create_ws_data_packet
@@ -9,7 +10,7 @@ load_dotenv()
 
 
 class DefaultInputHandler:
-    def __init__(self, queues=None, websocket=None, input_types=None, mark_set = None, queue = None, connected_through_dashboard=False):
+    def __init__(self, queues=None, websocket=None, input_types=None, mark_set = None, queue = None, connected_through_dashboard=False, conversation_recording = None):
         self.queues = queues
         self.websocket = websocket
         self.input_types = input_types
@@ -17,7 +18,7 @@ class DefaultInputHandler:
         self.running = True
         self.connected_through_dashboard = connected_through_dashboard
         self.queue = queue
-
+        self.conversation_recording = conversation_recording
     async def stop_handler(self):
         self.running = False
         try:
@@ -35,6 +36,10 @@ class DefaultInputHandler:
                 'type': 'audio',
                 'sequence': self.input_types['audio']
             })
+        if self.conversation_recording:
+            if self.conversation_recording["metadata"]["started"] ==0:
+                self.conversation_recording["metadata"]["started"] = time.time()
+            self.conversation_recording['input']['data'] += data
 
         self.queues['transcriber'].put_nowait(ws_data_packet)
     
@@ -59,7 +64,7 @@ class DefaultInputHandler:
                     logger.info(f"self.queue is not None and hence listening to the queue")
                     request = await self.queue.get()
                 else:
-                    request = await self.websocket.receive_json()
+                    request = await self.websocket.receive_json()                    
                 await self.process_message(request)
         except Exception as e:
             # Send EOS message to transcriber to shut the connection
