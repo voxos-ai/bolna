@@ -104,6 +104,7 @@ class DeepgramTranscriber(BaseTranscriber):
 
         if self.process_interim_results == "false":
             dg_params['endpointing'] = self.endpointing
+            dg_params['vad_events'] = "true"
         else:
             dg_params['interim_results'] = self.process_interim_results
             dg_params['utterance_end_ms'] = '1000'
@@ -277,11 +278,12 @@ class DeepgramTranscriber(BaseTranscriber):
                     finalized_transcript = ""
                     continue
 
-                # if msg["type"] == "SpeechStarted":
-                #     if not self.on_device_vad:
-                #         logger.info("Not on device vad and hence inetrrupting")
-                #         yield create_ws_data_packet("TRANSCRIBER_BEGIN", self.meta_info)
-                #     continue
+                if msg["type"] == "SpeechStarted":
+                    if curr_message != "":
+                        logger.info("Current messsage is null and hence inetrrupting")
+                        self.meta_info["should_interrupt"] = True
+                        yield create_ws_data_packet("TRANSCRIBER_BEGIN", self.meta_info)
+                    continue
 
                 transcript = msg['channel']['alternatives'][0]['transcript']
 
@@ -293,7 +295,7 @@ class DeepgramTranscriber(BaseTranscriber):
                 if curr_message == "" and msg["is_final"] is False:
                     if not self.on_device_vad:
                         logger.info("Not on device vad and hence inetrrupting")
-                        self.meta_info["should_interrupt"] = True
+                        self.meta_info["should_interrupt"] = False
                     yield create_ws_data_packet("TRANSCRIBER_BEGIN", self.meta_info)
 
                     await asyncio.sleep(0.1)  # Enable taskmanager to interrupt
