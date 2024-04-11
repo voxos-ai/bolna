@@ -135,12 +135,11 @@ class GraphBasedConversationAgent(BaseAgent):
                     ind = random.randint(0, len(self.current_node.content) - 1)
                     audio_pair = self.current_node.content[ind]
                     logger.info('Agent: {}'.format(audio_pair.get('text')))
-                    yield audio_pair["audio"]
+                    yield audio_pair
                 else:
                     next_state = await self._get_next_preprocessed_step(history)
                     logger.info('Agent: {}'.format(next_state))
-                    history.append({'role': 'assistant', 'content': next_state['text']})
-                    yield next_state["audio"]
+                    yield next_state
                 
                 if len(self.current_node.children) == 0:
                     await asyncio.sleep(1)

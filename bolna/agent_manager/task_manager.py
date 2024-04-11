@@ -105,12 +105,11 @@ class TaskManager(BaseManager):
         self.was_long_pause = False
         self.buffers = []
         self.should_respond = False
-        self.start_response = False
         self.last_response_time = time.time()
         self.is_an_ivr_call = self._is_conversation_task() and self._is_preprocessed_flow() and not self.connected_through_dashboard
         self.consider_next_transcript_after = time.time()
         self.duration_to_prevent_accidental_interruption = 3 if self.is_an_ivr_call else 1.5
-        self.callee_speaking = False
+        # self.callee_speaking = False
 
         # Call conversations
         self.call_sid = None
@@ -162,7 +161,7 @@ class TaskManager(BaseManager):
         #setup request logs
         self.request_logs = []
         if task_id == 0:
-            self.output_chunk_size = 16384 if self.sampling_rate == 24000 else 8192 #1 second chunk size for calls 
+            self.output_chunk_size = 16384 if self.sampling_rate == 24000 else 4096 #0.5 second chunk size for calls 
             # For nitro
             self.nitro = self.kwargs['process_interim_results'] == "true"
             self.minimum_wait_duration = self.task_config["tools_config"]["transcriber"]["endpointing"]
@@ -348,6 +347,7 @@ class TaskManager(BaseManager):
         await self.__cleanup_downstream_tasks()    
 
     async def __cleanup_downstream_tasks(self):
+        logger.info(f"Cleaning up downstream task")
         start_time = time.time()
         await self.tools["output"].handle_interruption()
         self.sequence_ids = set()
@@ -463,21 +463,6 @@ class TaskManager(BaseManager):
             await self.tools["transcriber"].toggle_connection()
             await asyncio.sleep(5)  # Making sure whatever message was passed is over
 
-    def __update_transcripts(self):
-        #Essentially check if last two are assistants
-        logger.info(f"Appending assistant message to the backend")
-        if len(self.history) > 0 and self.history[-1]['role'] == "user":
-            logger.info(f"Last message was user, and hence appending to it")
-            self.history.append(self.interim_history[-1].copy())
-        elif len(self.history) > 1 and self.history[-1]['role'] == "assistant" and self.history[-2]['role'] == "assistant":
-            logger.info("Last two are assistants and hence changing the last one")
-            self.history[-1] = self.interim_history[-1].copy()
-        elif len(self.history) == 2 and self.history[1]['role'] == "assistant" and self.history[0]['role'] == "system":
-            logger.info(f"Assistant response is already appended to the history")
-            self.history = [self.history[0], self.interim_history[1].copy(), self.history[1]]
-        else:
-            self.history.append(self.interim_history[-1].copy())
-            logger.info(f"Current history {self.history}, current interim history {self.interim_history} but it falls in else part")
 
     def __update_preprocessed_tree_node(self):
         logger.info(f"It's a preprocessed flow and hence updating current node")
@@ -514,33 +499,34 @@ class TaskManager(BaseManager):
             task = asyncio.gather(self._synthesize(create_ws_data_packet(text_chunk, meta_info)))
             self.synthesizer_tasks.append(asyncio.ensure_future(task))
         elif self.tools["output"] is not None:
+            logger.info("Synthesizer not the next step and hence simply returning back")
+            self.history = copy.deepcopy(self.interim_history)
             await self.tools["output"].handle(create_ws_data_packet(text_chunk, meta_info))
 
     async def _process_conversation_preprocessed_task(self, message, sequence, meta_info):
         if self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "preprocessed":
-            llm_response = ""
-            start_time = time.time()
-            self.interim_history.append({'role': 'user', 'content': message['data']})
-            logger.info(f"Starting LLM Agent {self.interim_history}")
+            messages = copy.deepcopy(self.history)
+            messages.append({'role': 'user', 'content': message['data']})
+            logger.info(f"Starting LLM Agent {messages}")
             #Expose get current classification_response method from the agent class and use it for the response log
-            self.__convert_to_request_log(message = format_messages(self.interim_history, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["classification_model"])
-            async for text_chunk in self.tools['llm_agent'].generate(self.interim_history, stream=True, synthesize=True,
+            self.__convert_to_request_log(message = format_messages(messages, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["classification_model"])
+            async for next_state in self.tools['llm_agent'].generate(messages, stream=True, synthesize=True,
                                                                      label_flow=self.label_flow):
-                if text_chunk == "<end_of_conversation>":
+                if next_state == "<end_of_conversation>":
                     meta_info["end_of_conversation"] = True
                     self.buffered_output_queue.put_nowait(create_ws_data_packet("<end_of_conversation>", meta_info))
                     return
                 
-                logger.info(f"Text chunk {text_chunk} callee speaking {self.callee_speaking}")
-                if is_valid_md5(text_chunk):
-                    self.synthesizer_tasks.append(asyncio.create_task(
-                        self._synthesize(create_ws_data_packet(text_chunk, meta_info, is_md5_hash=True))))
-                else:
-                    self.synthesizer_tasks.append(asyncio.create_task(
-                        self._synthesize(create_ws_data_packet(text_chunk, meta_info, is_md5_hash=False))))
-            
-            logger.info(f"Interim history after the LLM task {self.interim_history}")
-            self.__update_transcripts()
+                logger.info(f"Text chunk {next_state['text']}")
+                messages.append({'role': 'assistant', 'content': next_state['text']})
+                self.synthesizer_tasks.append(asyncio.create_task(
+                        self._synthesize(create_ws_data_packet(next_state['audio'], meta_info, is_md5_hash=True))))
+            logger.info(f"Interim history after the LLM task {messages}")
+            self.llm_response_generated = True
+            self.interim_history = copy.deepcopy(messages)
+            if self.callee_silent:
+                logger.info("When we got utterance end, maybe LLM was still generating response. So, copying into history")
+                self.history = copy.deepcopy(self.interim_history)
 
 
     async def _process_conversation_formulaic_task(self, message, sequence, meta_info):
@@ -578,12 +564,12 @@ class TaskManager(BaseManager):
             logger.info("It was a cache hit and hence simply returning")
             await self._handle_llm_output(next_step, cache_response, should_bypass_synth, meta_info)
         else:
-            #messages = [self.interim_history[0], {'role': 'user', 'content': format_messages(self.history)}]
-            self.interim_history.append({'role': 'user', 'content': message['data']})
+            messages = copy.deepcopy(self.history)
+            messages.append({'role': 'user', 'content': message['data']})
             ### TODO CHECK IF THIS IS EVEN REQUIRED
-            self.__convert_to_request_log(message=format_messages(self.interim_history, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["streaming_model"])
+            self.__convert_to_request_log(message=format_messages(messages, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["streaming_model"])
             
-            async for llm_message in self.tools['llm_agent'].generate(self.interim_history, synthesize=True):
+            async for llm_message in self.tools['llm_agent'].generate(messages, synthesize=True):
                 text_chunk, end_of_llm_stream = llm_message
                 logger.info(f"###### time to get the first chunk {time.time() - start_time} {text_chunk}")
                 llm_response += " " + text_chunk
@@ -595,15 +581,22 @@ class TaskManager(BaseManager):
                     
             if not self.stream:
                 meta_info["end_of_llm_stream"] = True
+                messages.append({"role": "assistant", "content": llm_response})
+                self.history = copy.deepcopy(messages)
                 await self._handle_llm_output(next_step, llm_response, should_bypass_synth, meta_info)
                 self.__convert_to_request_log(message = llm_response, meta_info= meta_info, component="llm", direction="response", model=self.task_config["tools_config"]["llm_agent"]["streaming_model"])
 
         if self.current_request_id in self.llm_rejected_request_ids:
             logger.info("User spoke while LLM was generating response")
         else:
-            self.interim_history.append({"role": "assistant", "content": llm_response})
+            messages.append({"role": "assistant", "content": llm_response})
             self.__convert_to_request_log(message=llm_response, meta_info= meta_info, component="llm", direction="response", model=self.task_config["tools_config"]["llm_agent"]["streaming_model"])
-            self.__update_transcripts()
+            self.interim_history = copy.deepcopy(messages)
+            self.llm_response_generated = True
+            if self.callee_silent:
+                logger.info("When we got utterance end, maybe LLM was still generating response. So, copying into history")
+                self.history = copy.deepcopy(self.interim_history)
+            #self.__update_transcripts()
 
             # TODO : Write a better check for completion prompt 
             #answer = await self.tools["llm_agent"].check_for_completion(self.history)
@@ -711,7 +704,7 @@ class TaskManager(BaseManager):
                     self.transcriber_duration += message['meta_info']["transcriber_duration"]
                     logger.info("transcriber connection closed")
                     break
-                
+
                 if self.stream:
                     self._set_call_details(message)
                     meta_info = message["meta_info"]
@@ -719,40 +712,28 @@ class TaskManager(BaseManager):
                     next_task = self._get_next_step(sequence, "transcriber")
                     if message['data'] == "TRANSCRIBER_BEGIN":
                         self.callee_silent = False
-                        self.start_response = False #Make start response as false
-
-                        self.interim_history = copy.deepcopy(self.history)
-                        self.callee_speaking = True
+                        #self.interim_history = copy.deepcopy(self.history)
+                        # self.callee_speaking = True
                         response_started = False #This signifies if we've gotten the first bit of interim text for the given response or not
                         if meta_info.get("should_interrupt", False):
                             logger.info(f"Processing interruption from TRANSCRIBER_BEGIN")
                             await self.process_interruption()
                     elif "speech_final" in meta_info and meta_info['speech_final'] and message['data'] != "":
+                        self.started_transmitting_audio = False #This is used to determine if we should add on to user's previous statement after a pause greater than endpointing in non nitro or not 
                         logger.info(f"Starting the TRANSCRIBER_END TASK")
-                        self.start_response = True
                         if self.output_task is None:
                             logger.info(f"Output task was none and hence starting it")
 
                         if self._is_preprocessed_flow():
                             self.__update_preprocessed_tree_node()
-
-                        self.callee_speaking = False
-                        assistant_message = None
-
-                        # If last two messages are humans
-
-                        if ((len(self.history)  == 1 and self.history[-1]['role'] == "assistant")) or (len(self.history)  > 1 and self.history[-1]['role'] == 'assistant' and (self.history[-2]['role'] in ['assistant', 'system'] )):
-                            assistant_message = self.history[-1].copy()
-                            self.history = self.history[:-1]
-
-                        logger.info(f"APPENDING USER statement {message['data']}")
-                        self.history.append({'role': 'user', 'content': transcriber_message})
-                        if assistant_message is not None:
-                            self.history.append(assistant_message)
                         
+                        logger.info(f"INTERIM TRANSCRIPT WHEN EVERYTING IS OVER {self.interim_history}")
+                        if self.llm_response_generated:
+                            logger.info(f"LLM RESPONSE WAS GENERATED AND HENCE MOVING INTERIM HISTORY TO HISTORY")
+                            self.history = copy.deepcopy(self.interim_history)
+                        self.callee_silent = True    
                         meta_info = message['meta_info']
                         transcriber_message = ""
-                        continue
                     else:
                         logger.info(f'invoking next_task {next_task} with transcriber_message: {message["data"]}')
                         if transcriber_message.strip() == message['data'].strip():
@@ -765,7 +746,10 @@ class TaskManager(BaseManager):
                             await self.__cleanup_downstream_tasks()
                             self.last_response_time = time.time()
                             transcriber_message = message['data']
-                            
+                            # Use last spoken timestamp to give out endpointing in nitro
+                            logger.info(f"last spoken timestamp before changing {self.last_spoken_timestamp}")
+                            self.last_spoken_timestamp = time.time() * 1000
+
                             if not response_started:
                                 response_started = True
                             elif self.kwargs['process_interim_results'] == "true":
@@ -773,12 +757,9 @@ class TaskManager(BaseManager):
                                 # Hence check the previous message if it's user or assistant
                                 # If it's user, simply change user's message
                                 # If it's assistant remover assistant message and append user
-                                self.last_spoken_timestamp = time.time() * 1000
-                                if self.interim_history[-1]['role'] == 'assistant':
-                                    self.interim_history = self.interim_history[:-1]
-                                else:
-                                    self.interim_history = self.interim_history[:-2]
-                            logger.info("Current transcript: {} Predicting next few tokens".format(transcriber_message))
+                                self.callee_silent = False
+                            self.llm_response_generated = False
+                            logger.info("Current transcript: {} Predicting next few tokens and changing last spoken timestampt to {}".format(transcriber_message, self.last_spoken_timestamp))
                             meta_info = self.__get_updated_meta_info(meta_info)
                             await self._handle_transcriber_output(next_task, transcriber_message, meta_info)
 
@@ -853,17 +834,18 @@ class TaskManager(BaseManager):
                                         self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, meta_info))
                                 else:
                                     self.buffered_output_queue.put_nowait(message)
-                                #await self.tools["output"].handle(message)
                             
                         else:
                             logger.info("Stream is not enabled and hence sending entire audio")
                             first_chunk_generation_timestamp = time.time()
                             self.latency_dict[message['meta_info']["request_id"]]['synthesizer'] = {"first_chunk_generation_latency": first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time'], "first_chunk_generation_timestamp": first_chunk_generation_timestamp}
+                            self.history = copy.deepcopy(self.interim_history)
+                            logger.info(f"Changing history")
                             await self.tools["output"].handle(message)
                     else:
                         logger.info(f"{message['meta_info']['sequence_id']} is not in sequence ids  {self.sequence_ids} and hence not sending to output")                
                     logger.info(f"Sleeping for 100 ms")
-                    await asyncio.sleep(0.1) #Sleeping for 100ms after receiving every chunk so other tasks can execute
+                    await asyncio.sleep(0.3) #Sleeping for 100ms after receiving every chunk so other tasks can execute
 
         except Exception as e:
             traceback.print_exc()
@@ -942,13 +924,21 @@ class TaskManager(BaseManager):
     async def __process_output_loop(self):
         try:
             while True:  
-                time_since_last_spoken_word = (time.time() *1000) - self.last_spoken_timestamp
-                if time_since_last_spoken_word < self.minimum_wait_duration:
-                    logger.info(f"Sleeping for {self.minimum_wait_duration - time_since_last_spoken_word} to make sure we do not disturb the user")
-                    await asyncio.sleep((self.minimum_wait_duration - time_since_last_spoken_word)/1000)
-
                 logger.info(f"Yielding to output handler")
                 message = await self.buffered_output_queue.get()
+                if self.nitro:
+                    last_spoken_timestamp = self.last_spoken_timestamp
+                    time_since_last_spoken_word = (time.time() *1000) - self.last_spoken_timestamp
+                    if time_since_last_spoken_word < self.minimum_wait_duration:
+                        logger.info(f"Sleeping for {self.minimum_wait_duration - time_since_last_spoken_word} to make sure we do not disturb the user. Sending to sleep at {time.time() * 1000}")
+                        await asyncio.sleep((self.minimum_wait_duration - time_since_last_spoken_word)/1000)
+                        logger.info(f"Got out of sleep at {time.time() * 1000}")
+                    logger.info(f"{self.last_spoken_timestamp} AND {last_spoken_timestamp}")
+
+                    if self.last_spoken_timestamp != last_spoken_timestamp:
+                        logger.info(f"Last token timestamp has changed meanwhile")
+                        continue
+                
                 logger.info("Start response is True and hence starting to speak {} Current sequence ids".format(message['meta_info'], self.sequence_ids))
                 if "end_of_conversation" in message['meta_info']:
                     await self.__process_end_of_conversation()
@@ -960,8 +950,12 @@ class TaskManager(BaseManager):
                 else:
                     logger.info(f'{message["meta_info"]["sequence_id"]} is not in {self.sequence_ids} and hence not speaking')
                     continue
-
+                
+                # if "end_of_synthesizer_stream" in message['meta_info'] and message['meta_info']['end_of_synthesizer_stream']:
+                #     logger.info(f"Synthesizer stream ended and hence changing history interim history for sequence id Interim history now {self.interim_history}")
+                #     self.history = copy.deepcopy(self.interim_history)
                 if "is_first_chunk" in message['meta_info'] and message['meta_info']['is_first_chunk']:
+                    
                     meta_info = message['meta_info']
                     self.consider_next_transcript_after = time.time() + self.duration_to_prevent_accidental_interruption
                     utterance_end = meta_info.get("utterance_end", None)
@@ -992,9 +986,9 @@ class TaskManager(BaseManager):
                         logger.info("LATENCY METRICS FOR {} are {}".format(message['meta_info']["request_id"], latency_metrics))
                 
                 # Sleep until this particular audio frame is spoken only if the duration for the frame is atleast 500ms
-                if duration > 0.5:
+                if duration > 0.3:
                     logger.info(f"Sleeping for {duration - 0.05}")
-                    await asyncio.sleep(duration-0.05) #Sleep for less than 50 milliseconds
+                    await asyncio.sleep(duration-0.03) #30 milliseconds less
                 
         except Exception as e:
             traceback.print_exc()
@@ -1069,7 +1063,7 @@ class TaskManager(BaseManager):
                           "transcriber_duration": self.transcriber_duration,
                           "synthesizer_characters": self.synthesizer_characters, "ended_by_assistant": self.ended_by_assistant,
                           "latency_dict": self.latency_dict}
-                
+
                 if self.should_record:
                     output['recording_url'] = await save_audio_file_to_s3(self.conversation_recording, self.sampling_rate, self.assistant_id, self.run_id)
 
