@@ -80,7 +80,8 @@ class DeepgramTranscriber(BaseTranscriber):
             'model': 'nova-2',
             'filler_words': 'true',
             'diarize': 'true',
-            'language': self.language
+            'language': self.language,
+            "vad_events": 'true'
         }
 
         self.audio_frame_duration = 0.5  # We're sending 8k samples with a sample rate of 16k
@@ -104,7 +105,6 @@ class DeepgramTranscriber(BaseTranscriber):
 
         if self.process_interim_results == "false":
             dg_params['endpointing'] = self.endpointing
-            dg_params['vad_events'] = "true"
         else:
             dg_params['interim_results'] = self.process_interim_results
             dg_params['utterance_end_ms'] = '1000'
@@ -279,10 +279,13 @@ class DeepgramTranscriber(BaseTranscriber):
                     continue
 
                 if msg["type"] == "SpeechStarted":
-                    if curr_message != "":
+                    if curr_message != "" and not self.process_interim_results:
                         logger.info("Current messsage is null and hence inetrrupting")
                         self.meta_info["should_interrupt"] = True
-                        yield create_ws_data_packet("TRANSCRIBER_BEGIN", self.meta_info)
+                    elif self.process_interim_results:
+                        self.meta_info["should_interrupt"] = False
+                    yield create_ws_data_packet("TRANSCRIBER_BEGIN", self.meta_info)
+                    await asyncio.sleep(0.05) #Sleep for 50ms to pass the control to task manager
                     continue
 
                 transcript = msg['channel']['alternatives'][0]['transcript']
