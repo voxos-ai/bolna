@@ -1,5 +1,6 @@
 import asyncio
 from collections import defaultdict
+import os
 import traceback
 import time
 import json
@@ -180,6 +181,7 @@ class TaskManager(BaseManager):
         self.let_remaining_audio_pass_through = False #Will be used to let remaining audio pass through in case of utterenceEnd event and there's still audio left to be sent
         self.use_llm_to_determine_hangup = task.get("hangup_after_LLMCall", False)
         self.check_for_completion_prompt = task.get("call_cancellation_prompt", None)
+        self.check_for_completion_llm = os.getenv("CHECK_FOR_COMPLETION_LLM")
 
         #Handling accidental interruption
         self.number_of_words_for_interruption = task.get("number_of_words_for_interruption", 3)
@@ -623,6 +625,11 @@ class TaskManager(BaseManager):
                 answer = await self.tools["llm_agent"].check_for_completion(self.history, self.check_for_completion_prompt)
                 answer = False
                 if answer:
+                    prompt = [
+                        {'role': 'system', 'content': self.check_for_completion_prompt},
+                        {'role': 'user', 'content': format_messages(self.history, use_system_prompt= True)}]
+                    self.__convert_to_request_log(message=format_messages(prompt, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["streaming_model"])
+                    self.__convert_to_request_log(message=answer, meta_info= meta_info, component="llm", direction="response", model= self.check_for_completion_llm)
                     await self.__process_end_of_conversation()
                     return
 
@@ -858,7 +865,7 @@ class TaskManager(BaseManager):
     #################################################################
     # Synthesizer task
     #################################################################
-    async def __enqueue_chunk(self, chunk, i, number_of_chunks, meta_info):
+    def __enqueue_chunk(self, chunk, i, number_of_chunks, meta_info):
         if i == 0 and "is_first_chunk" in meta_info and meta_info["is_first_chunk"]:
             copied_meta_info = meta_info.copy()
             logger.info(f"Sending first chunk")
@@ -895,7 +902,7 @@ class TaskManager(BaseManager):
                                     i = 0
                                     for chunk in yield_chunks_from_memory(message['data'], chunk_size=self.output_chunk_size):
                                         i +=1
-                                        self.__enqueue_chunk(self, chunk, i, number_of_chunks, meta_info)
+                                        self.__enqueue_chunk(chunk, i, number_of_chunks, meta_info)
                                 else:
                                     self.buffered_output_queue.put_nowait(message)
                                 
@@ -914,7 +921,7 @@ class TaskManager(BaseManager):
                                     i = 0
                                     for chunk in yield_chunks_from_memory(message['data'], chunk_size=self.output_chunk_size):
                                         i+=1
-                                        self.__enqueue_chunk(self, chunk, i, number_of_chunks, meta_info)
+                                        self.__enqueue_chunk(chunk, i, number_of_chunks, meta_info)
                                 else:
                                     self.buffered_output_queue.put_nowait(message)
                             
