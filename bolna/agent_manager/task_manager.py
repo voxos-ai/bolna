@@ -736,18 +736,18 @@ class TaskManager(BaseManager):
                     if message['data'] == "TRANSCRIBER_BEGIN":
                         self.callee_silent = False
                         response_started = False #This signifies if we've gotten the first bit of interim text for the given response or not
-                        # if self.nitro:
-                        #     should_interrupt = meta_info.get("should_interrupt", True)
-                        #     if not should_interrupt and self.started_transmitting_audio:
-                        #         # Ideally is we are transmitting, we want to wait for x seconds here to make sure if we interrupt or not 
-                        #         # So, we send a clear message for sure but use a variable to make sure that we wait 
-                        #         # then if we haven't received interruption signal, we simply continue
-                        #         # If we have, we interrupt  
-                        #         # Send a clear message
-                        #         await self.tools["output"].handle_interruption()
-                        #         self.backoff_until = (time.time() * 1000) + self.interruption_backoff_period
-                        #         self.allow_extra_sleep = True
-                        #         logger.info(f"Sending interrupt to clear and allowing extra sleep to wait for more messages as we are transmitting audio right now. {self.backoff_until}")
+                        if self.nitro:
+                            should_interrupt = meta_info.get("should_interrupt", True)
+                            if not should_interrupt and self.started_transmitting_audio:
+                                # Ideally is we are transmitting, we want to wait for x seconds here to make sure if we interrupt or not 
+                                # So, we send a clear message for sure but use a variable to make sure that we wait 
+                                # then if we haven't received interruption signal, we simply continue
+                                # If we have, we interrupt  
+                                # Send a clear message
+                                await self.tools["output"].handle_interruption()
+                                self.backoff_until = (time.time() * 1000) + self.interruption_backoff_period
+                                self.allow_extra_sleep = True
+                                logger.info(f"Sending interrupt to clear and allowing extra sleep to wait for more messages as we are transmitting audio right now. {self.backoff_until}")
 
                         if meta_info.get("should_interrupt", False):
                             logger.info(f"Processing interruption from TRANSCRIBER_BEGIN")
@@ -782,16 +782,16 @@ class TaskManager(BaseManager):
                             #Currently simply cancel the next task
                             num_words += len(transcriber_message.split(" "))
 
-                            if self.started_transmitting_audio:
-                                # Ideally is we are transmitting, we want to wait for x seconds here to make sure if we interrupt or not 
-                                # So, we send a clear message for sure but use a variable to make sure that we wait 
-                                # then if we haven't received interruption signal, we simply continue
-                                # If we have, we interrupt  
-                                # Send a clear message
-                                await self.tools["output"].handle_interruption()
-                                self.backoff_until = (time.time() * 1000) + self.interruption_backoff_period
-                                self.allow_extra_sleep = True
-                                logger.info(f"Sending interrupt to clear and allowing extra sleep to wait for more messages as we are transmitting audio right now. {self.backoff_until}")
+                            # if self.started_transmitting_audio:
+                            #     # Ideally is we are transmitting, we want to wait for x seconds here to make sure if we interrupt or not 
+                            #     # So, we send a clear message for sure but use a variable to make sure that we wait 
+                            #     # then if we haven't received interruption signal, we simply continue
+                            #     # If we have, we interrupt  
+                            #     # Send a clear message
+                            #     await self.tools["output"].handle_interruption()
+                            #     self.backoff_until = (time.time() * 1000) + self.interruption_backoff_period
+                            #     self.allow_extra_sleep = True
+                            #     logger.info(f"Sending interrupt to clear and allowing extra sleep to wait for more messages as we are transmitting audio right now. {self.backoff_until}")
 
                             # This means we are generating response from an interim transcript 
                             # Hence we transmit quickly 
@@ -858,6 +858,20 @@ class TaskManager(BaseManager):
     #################################################################
     # Synthesizer task
     #################################################################
+    async def __enqueue_chunk(self, chunk, i, number_of_chunks, meta_info):
+        if i == 0 and "is_first_chunk" in meta_info and meta_info["is_first_chunk"]:
+            copied_meta_info = meta_info.copy()
+            logger.info(f"Sending first chunk")
+            copied_meta_info["is_first_chunk_of_entire_response"] = True
+            self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, copied_meta_info))
+        elif i == number_of_chunks and "end_of_synthesizer_stream" in meta_info and meta_info['end_of_synthesizer_stream']:
+            logger.info(f"Truly a final chunk")
+            copied_meta_info = meta_info.copy()
+            copied_meta_info["is_final_chunk_of_entire_response"] = True
+            self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, copied_meta_info))
+        else:
+            self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, meta_info))
+
     async def __listen_synthesizer(self):
         try:
             if self.stream and self.synthesizer_provider != "polly" and not self.is_an_ivr_call: 
@@ -881,11 +895,7 @@ class TaskManager(BaseManager):
                                     i = 0
                                     for chunk in yield_chunks_from_memory(message['data'], chunk_size=self.output_chunk_size):
                                         i +=1
-                                        if i == number_of_chunks:
-                                            meta_info["is_final_chunk"] = True
-                                        self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, meta_info))
-                                            
-                                
+                                        self.__enqueue_chunk(self, chunk, i, number_of_chunks, meta_info)
                                 else:
                                     self.buffered_output_queue.put_nowait(message)
                                 
@@ -903,9 +913,8 @@ class TaskManager(BaseManager):
                                     number_of_chunks = (len(message['data'])/self.output_chunk_size)
                                     i = 0
                                     for chunk in yield_chunks_from_memory(message['data'], chunk_size=self.output_chunk_size):
-                                        if i == number_of_chunks:
-                                            meta_info["is_final_chunk"] = True
-                                        self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, meta_info))
+                                        i+=1
+                                        self.__enqueue_chunk(self, chunk, i, number_of_chunks, meta_info)
                                 else:
                                     self.buffered_output_queue.put_nowait(message)
                             
@@ -1038,11 +1047,11 @@ class TaskManager(BaseManager):
                     logger.info(f'{message["meta_info"]["sequence_id"]} is not in {self.sequence_ids} and hence not speaking')
                     continue
                 
-                if "is_final_chunk" in message['meta_info'] and message['meta_info']['is_final_chunk']:
+                if "is_final_chunk_of_entire_response" in message['meta_info'] and message['meta_info']['is_final_chunk_of_entire_response']:
                     self.started_transmitting_audio = False
                     logger.info("End of synthesizer stream and ")                    
 
-                if "is_first_chunk" in message['meta_info'] and message['meta_info']['is_first_chunk']:
+                if "is_first_chunk_of_entire_response" in message['meta_info'] and message['meta_info']['is_first_chunk_of_entire_response']:
                     self.started_transmitting_audio = True
                     meta_info = message['meta_info']
                     self.consider_next_transcript_after = time.time() + self.duration_to_prevent_accidental_interruption
@@ -1066,7 +1075,8 @@ class TaskManager(BaseManager):
                         "synthesizer": {
                             "synthesizer_first_chunk_latency": synthesizer_first_chunk_latency
                             },
-                        "overall_first_byte_latency": overall_first_byte_latency
+                        "overall_first_byte_latency": overall_first_byte_latency,
+                        
                         }
 
                     if message['meta_info']["request_id"] not in self.latency_dict:
