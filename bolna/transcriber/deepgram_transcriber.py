@@ -80,8 +80,7 @@ class DeepgramTranscriber(BaseTranscriber):
             'model': 'nova-2',
             'filler_words': 'true',
             'diarize': 'true',
-            'language': self.language,
-            "vad_events": 'true'
+            'language': self.language
         }
 
         self.audio_frame_duration = 0.5  # We're sending 8k samples with a sample rate of 16k
@@ -105,6 +104,8 @@ class DeepgramTranscriber(BaseTranscriber):
 
         if self.process_interim_results == "false":
             dg_params['endpointing'] = self.endpointing
+            dg_params['vad_events'] = 'true'
+
         else:
             dg_params['interim_results'] = self.process_interim_results
             dg_params['utterance_end_ms'] = '1000'

@@ -18,9 +18,9 @@ class StreamingContextualAgent(BaseAgent):
         self.conversation_completion_llm = OpenAiLLM(classification_model=os.getenv('CHECK_FOR_COMPLETION_LLM', llm.classification_model))
         self.history = [{'content': ""}]
 
-    async def check_for_completion(self, messages):
+    async def check_for_completion(self, messages, check_for_completion_prompt = CHECK_FOR_COMPLETION_PROMPT):
         prompt = [
-            {'role': 'system', 'content': CHECK_FOR_COMPLETION_PROMPT},
+            {'role': 'system', 'content': check_for_completion_prompt},
             {'role': 'user', 'content': format_messages(messages)}]
 
         answer = None
