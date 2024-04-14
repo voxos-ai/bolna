@@ -181,6 +181,9 @@ class TaskManager(BaseManager):
         self.let_remaining_audio_pass_through = False #Will be used to let remaining audio pass through in case of utterenceEnd event and there's still audio left to be sent
         self.use_llm_to_determine_hangup = task.get("hangup_after_LLMCall", False)
         self.check_for_completion_prompt = task.get("call_cancellation_prompt", None)
+        if self.check_for_completion_prompt is not None:
+            completion_json_format = {"answer": "A simple Yes or No based on if you should cut the phone or not"}
+            self.check_for_completion_prompt = f"{self.check_for_completion_prompt}\nYour response should be in the following json format\n{completion_json_format}"
         self.check_for_completion_llm = os.getenv("CHECK_FOR_COMPLETION_LLM")
 
         #Handling accidental interruption
@@ -623,13 +626,13 @@ class TaskManager(BaseManager):
             # TODO : Write a better check for completion prompt 
             if self.use_llm_to_determine_hangup:
                 answer = await self.tools["llm_agent"].check_for_completion(self.history, self.check_for_completion_prompt)
-                answer = False
-                if answer:
-                    prompt = [
+                prompt = [
                         {'role': 'system', 'content': self.check_for_completion_prompt},
                         {'role': 'user', 'content': format_messages(self.history, use_system_prompt= True)}]
-                    self.__convert_to_request_log(message=format_messages(prompt, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["streaming_model"])
-                    self.__convert_to_request_log(message=answer, meta_info= meta_info, component="llm", direction="response", model= self.check_for_completion_llm)
+                logger.info(f"Answer from the LLM {answer}")
+                self.__convert_to_request_log(message=format_messages(prompt, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["streaming_model"])
+                self.__convert_to_request_log(message=answer, meta_info= meta_info, component="llm", direction="response", model= self.check_for_completion_llm)
+                if answer:
                     await self.__process_end_of_conversation()
                     return
 
@@ -1184,7 +1187,8 @@ class TaskManager(BaseManager):
             # Construct output
             if "synthesizer" in self.tools and self.synthesizer_task is not None:   
                 self.synthesizer_task.cancel()
-            self.hangup_task.cancel()
+            if self.hangup_task is not None:
+                self.hangup_task.cancel()
             
             if self.task_id == 0:
                 output = {"messages": self.history, "conversation_time": time.time() - self.start_time,

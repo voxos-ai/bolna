@@ -21,7 +21,7 @@ class StreamingContextualAgent(BaseAgent):
     async def check_for_completion(self, messages, check_for_completion_prompt = CHECK_FOR_COMPLETION_PROMPT):
         prompt = [
             {'role': 'system', 'content': check_for_completion_prompt},
-            {'role': 'user', 'content': format_messages(messages)}]
+            {'role': 'user', 'content': format_messages(messages, use_system_prompt=True)}]
 
         answer = None
         response = await self.conversation_completion_llm.generate(prompt, True, False, request_json=True)
