@@ -8,7 +8,6 @@ logger = configure_logger(__name__)
 
 enc = tiktoken.get_encoding("cl100k_base")
 
-
 class AssistantManager(BaseManager):
     def __init__(self, agent_config, ws=None, assistant_id=None, context_data=None, conversation_history=None,
                  connected_through_dashboard=None, cache=None, input_queue=None, output_queue=None, **kwargs):
@@ -27,6 +26,7 @@ class AssistantManager(BaseManager):
         self.output_queue = output_queue
         self.kwargs = kwargs
         self.conversation_history = conversation_history
+
 
     async def run(self, local=False, run_id=None):
         """
