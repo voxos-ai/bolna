@@ -28,7 +28,7 @@ class StreamingContextualAgent(BaseAgent):
         answer = json.loads(response)
 
         logger.info('Agent: {}'.format(answer['answer']))
-        return answer['answer'].lower() == "yes"
+        return answer
 
     async def generate(self, history, synthesize=False):
         async for token in self.llm.generate_stream(history, synthesize=synthesize):
