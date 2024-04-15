@@ -625,7 +625,7 @@ class TaskManager(BaseManager):
                     #self.__update_transcripts()
 
             # TODO : Write a better check for completion prompt 
-            if self.use_llm_to_determine_hangup:
+            if self.use_llm_to_determine_hangup and not self.connected_through_dashboard:
                 answer = await self.tools["llm_agent"].check_for_completion(self.history, self.check_for_completion_prompt)
                 should_hangup = answer['answer'].lower() == "yes"
                 prompt = [
@@ -1193,7 +1193,7 @@ class TaskManager(BaseManager):
             # Construct output
             if "synthesizer" in self.tools and self.synthesizer_task is not None:   
                 self.synthesizer_task.cancel()
-            if not self.use_llm_to_determine_hangup:
+            if self.use_llm_to_determine_hangup is False:
                 self.hangup_task.cancel()
             
             if self.task_id == 0:
