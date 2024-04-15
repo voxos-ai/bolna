@@ -11,6 +11,9 @@ from .base_synthesizer import BaseSynthesizer
 from bolna.helpers.logger_config import configure_logger
 from bolna.helpers.utils import convert_audio_to_wav, create_ws_data_packet, pcm_to_wav_bytes, resample
 
+import uvloop
+asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+
 logger = configure_logger(__name__)
 
 
@@ -39,6 +42,15 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
     def get_format(self, format, sampling_rate):
         # Eleven labs only allow mp3_44100_64, mp3_44100_96, mp3_44100_128, mp3_44100_192, pcm_16000, pcm_22050,
         # pcm_24000, ulaw_8000
+        """Get the audio format and sampling rate for the audio file.
+        Parameters:
+            - format (str): The desired audio format.
+            - sampling_rate (int): The desired sampling rate.
+        Returns:
+            - str: The audio format and sampling rate for the audio file.
+        Processing Logic:
+            - Return ulaw_8000 if self.use_mulaw is True.
+            - Otherwise, return mp3_44100_128."""
         if self.use_mulaw:
             return "ulaw_8000"
         return f"mp3_44100_128"

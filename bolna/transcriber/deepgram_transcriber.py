@@ -14,6 +14,10 @@ from bolna.helpers.logger_config import configure_logger
 from bolna.helpers.utils import create_ws_data_packet, int2float
 from bolna.helpers.vad import VAD
 
+import uvloop
+asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+
+
 torch.set_num_threads(1)
 
 logger = configure_logger(__name__)
@@ -24,6 +28,7 @@ class DeepgramTranscriber(BaseTranscriber):
     def __init__(self, provider, input_queue=None, model='deepgram', stream=True, language="en", endpointing="400",
                  sampling_rate="16000", encoding="linear16", output_queue=None, keywords=None,
                  process_interim_results="true", **kwargs):
+        logger.info(f"Initializing transcriber")
         super().__init__(input_queue)
         self.endpointing = endpointing
         self.language = language
@@ -385,8 +390,10 @@ class DeepgramTranscriber(BaseTranscriber):
         return deepgram_ws
 
     async def run(self):
-        self.transcription_task = asyncio.create_task(self.transcribe())
-
+        try:
+            self.transcription_task = asyncio.create_task(self.transcribe())
+        except Exception as e:
+            logger.error(f"not working {e}")
     def __calculate_utterance_end(self, data):
         utterance_end = None
         if 'channel' in data and 'alternatives' in data['channel']:
@@ -398,6 +405,7 @@ class DeepgramTranscriber(BaseTranscriber):
         return utterance_end
 
     async def transcribe(self):
+        logger.info(f"STARTED TRANSCRIBING")
         try:
             async with self.deepgram_connect() as deepgram_ws:
                 if self.stream:

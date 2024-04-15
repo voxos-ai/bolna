@@ -13,8 +13,11 @@ from bolna.providers import *
 from bolna.helpers.utils import calculate_audio_duration, create_ws_data_packet, is_valid_md5, get_raw_audio_bytes_from_base64, \
     get_required_input_types, format_messages, get_prompt_responses, save_audio_file_to_s3, update_prompt_with_context, get_md5_hash, clean_json_string, wav_bytes_to_pcm, write_request_logs, yield_chunks_from_memory
 from bolna.helpers.logger_config import configure_logger
+import uvloop
+asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
-asyncio.get_event_loop().set_debug(True)
+
+
 logger = configure_logger(__name__)
 
 
@@ -521,7 +524,7 @@ class TaskManager(BaseManager):
         #self.latency_dict[meta_info["request_id"]]["llm"] = first_buffer_latency
         meta_info["llm_first_buffer_generation_latency"] = first_buffer_latency
         if next_step == "synthesizer" and not should_bypass_synth:
-            task = asyncio.gather(self._synthesize(create_ws_data_packet(text_chunk, meta_info)))
+            task = asyncio.create_task(self._synthesize(create_ws_data_packet(text_chunk, meta_info)))
             self.synthesizer_tasks.append(asyncio.ensure_future(task))
         elif self.tools["output"] is not None:
             logger.info("Synthesizer not the next step and hence simply returning back")
@@ -566,8 +569,7 @@ class TaskManager(BaseManager):
                 llm_response += " " +text_chunk
                 next_step = self._get_next_step(sequence, "llm")
                 if next_step == "synthesizer":
-                    task = asyncio.gather(self._synthesize(create_ws_data_packet(text_chunk, meta_info)))
-                    self.synthesizer_tasks.append(asyncio.ensure_future(task))
+                    self.synthesizer_tasks.append(asyncio.create_task(self._synthesize(create_ws_data_packet(text_chunk, meta_info))))
                 else:
                     logger.info(f"Sending output text {sequence}")
                     await self.tools["output"].handle(create_ws_data_packet(text_chunk, meta_info))
@@ -1187,7 +1189,7 @@ class TaskManager(BaseManager):
             # Construct output
             if "synthesizer" in self.tools and self.synthesizer_task is not None:   
                 self.synthesizer_task.cancel()
-            if self.hangup_task is not None:
+            if not self.use_llm_to_determine_hangup:
                 self.hangup_task.cancel()
             
             if self.task_id == 0:

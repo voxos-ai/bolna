@@ -1,4 +1,7 @@
 import asyncio
+import uvloop
+asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+
 import base64
 import time
 from dotenv import load_dotenv
