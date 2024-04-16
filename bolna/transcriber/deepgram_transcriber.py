@@ -291,6 +291,7 @@ class DeepgramTranscriber(BaseTranscriber):
                         self.meta_info["should_interrupt"] = True
                     elif self.process_interim_results:
                         self.meta_info["should_interrupt"] = False
+                    logger.info(f"YIELDING TRANSCRIBER BEGIN")
                     yield create_ws_data_packet("TRANSCRIBER_BEGIN", self.meta_info)
                     await asyncio.sleep(0.05) #Sleep for 50ms to pass the control to task manager
                     continue
