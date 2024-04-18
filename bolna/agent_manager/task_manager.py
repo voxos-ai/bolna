@@ -175,7 +175,7 @@ class TaskManager(BaseManager):
             logger.info(f"minimum wait duration {self.minimum_wait_duration}")
             self.last_spoken_timestamp = time.time() * 1000
             self.incremental_delay = task.get("incremental_delay", 100)
-            self.required_delay_before_speaking = self.minimum_wait_duration - self.incremental_delay #Everytime we get a message we increase it by 100 miliseconds 
+            self.required_delay_before_speaking = max(self.minimum_wait_duration - self.incremental_delay, 0)  #Everytime we get a message we increase it by 100 miliseconds 
             self.time_since_first_interim_result  = -1
 
         #Cut conversation
@@ -188,6 +188,7 @@ class TaskManager(BaseManager):
             completion_json_format = {"answer": "A simple Yes or No based on if you should cut the phone or not"}
             self.check_for_completion_prompt = f"{self.check_for_completion_prompt}\nYour response should be in the following json format\n{completion_json_format}"
         self.check_for_completion_llm = os.getenv("CHECK_FOR_COMPLETION_LLM")
+        self.time_since_last_spoken_human_word = 0 
 
         #Handling accidental interruption
         self.number_of_words_for_interruption = task.get("number_of_words_for_interruption", 3)
@@ -392,8 +393,13 @@ class TaskManager(BaseManager):
             self.llm_task.cancel()
             self.llm_task = None
 
-        #self.synthesizer_task.cancel()
-        #self.synthesizer_task = asyncio.create_task(self.__listen_synthesizer())
+        # self.synthesizer_task.cancel()
+        # self.synthesizer_task = asyncio.create_task(self.__listen_synthesizer())
+        for task in self.synthesizer_tasks:
+            task.cancel()
+        
+        self.synthesizer_tasks = []
+
         logger.info(f"Synth Task cancelled seconds")
         if not self.buffered_output_queue.empty():
             logger.info(f"Output queue was not empty and hence emptying it")
@@ -605,6 +611,7 @@ class TaskManager(BaseManager):
                     if end_of_llm_stream:
                         meta_info["end_of_llm_stream"] = True
                     text_chunk = self.__process_stop_words(text_chunk, meta_info)
+                    logger.info(f"##### O/P from LLM {text_chunk} {llm_response}")
                     await self._handle_llm_output(next_step, text_chunk, should_bypass_synth, meta_info)
                     
             if not self.stream:
@@ -753,20 +760,22 @@ class TaskManager(BaseManager):
                         self.callee_silent = False
                         response_started = False #This signifies if we've gotten the first bit of interim text for the given response or not
                         if self.nitro:
-                            should_interrupt = meta_info.get("should_interrupt", True)
-                            if not should_interrupt and self.started_transmitting_audio:
-                                # Ideally is we are transmitting, we want to wait for x seconds here to make sure if we interrupt or not 
-                                # So, we send a clear message for sure but use a variable to make sure that we wait 
-                                # then if we haven't received interruption signal, we simply continue
-                                # If we have, we interrupt  
-                                # Send a clear message
-                                await self.tools["output"].handle_interruption()
-                                self.backoff_until = (time.time() * 1000) + self.interruption_backoff_period
-                                self.allow_extra_sleep = True
-                                logger.info(f"###### Sending interrupt to clear and allowing extra sleep to wait for more messages as we are transmitting audio right now. {self.backoff_until}")
-
-                        if meta_info.get("should_interrupt", False):
-                            logger.info(f"###### Processing interruption from TRANSCRIBER_BEGIN")
+                            logger.info(f"Just a nitro thingy")
+                            # should_interrupt = meta_info.get("should_interrupt", True)
+                            # if not should_interrupt and self.started_transmitting_audio:
+                            #     # Ideally is we are transmitting, we want to wait for x seconds here to make sure if we interrupt or not 
+                            #     # So, we send a clear message for sure but use a variable to make sure that we wait 
+                            #     # then if we haven't received interruption signal, we simply continue
+                            #     # If we have, we interrupt  
+                            #     # Send a clear message
+                            #     await self.tools["output"].handle_interruption()
+                            #     #self.backoff_until = (time.time() * 1000) + self.interruption_backoff_period
+                            #     self.allow_extra_sleep = True
+                            #     self.backoff_until = 0
+                            #     logger.info(f"###### Sending interrupt to clear and allowing extra sleep to wait for more messages as we are transmitting audio right now. {self.backoff_until}")
+                        
+                        else:
+                            logger.info(f"###### Processing interruption from TRANSCRIBER_BEGIN for non nitro mode")
                             await self.process_interruption()
                     elif "speech_final" in meta_info and meta_info['speech_final'] and message['data'] != "":
                         logger.info(f"Starting the TRANSCRIBER_END TASK")
@@ -788,9 +797,12 @@ class TaskManager(BaseManager):
                         self.let_remaining_audio_pass_through = True 
 
                         if self.nitro:
-                            self.required_delay_before_speaking = self.minimum_wait_duration - self.incremental_delay
                             self.time_since_first_interim_result = -1
+                            self.required_delay_before_speaking = max(self.minimum_wait_duration - self.incremental_delay, 0)
+                            logger.info(f"#### Resetting time since first interim result and resetting required delay {self.required_delay_before_speaking}")
+                        
                     else:
+                        self.time_since_last_spoken_human_word = time.time()
                         logger.info(f'invoking next_task {next_task} with transcriber_message: {message["data"]}')
                         if transcriber_message.strip() == message['data'].strip():
                             logger.info(f"###### Transcriber message and message data are same and hence not changing anything else. Probably just an is_final thingy. {message}")
@@ -798,7 +810,7 @@ class TaskManager(BaseManager):
 
                         elif len(message['data'].strip()) != 0:
                             #Currently simply cancel the next task
-                            num_words += len(transcriber_message.split(" "))
+                            num_words += len(message['data'].split(" "))
 
                             # if self.started_transmitting_audio:
                             #     # Ideally is we are transmitting, we want to wait for x seconds here to make sure if we interrupt or not 
@@ -811,19 +823,26 @@ class TaskManager(BaseManager):
                             #     self.allow_extra_sleep = True
                             #     logger.info(f"Sending interrupt to clear and allowing extra sleep to wait for more messages as we are transmitting audio right now. {self.backoff_until}")
 
+                            
                             # This means we are generating response from an interim transcript 
                             # Hence we transmit quickly 
                             if not self.started_transmitting_audio:
+                                logger.info("##### Haven't started transmitting audio and hence cleaning up downstream tasks")
                                 await self.__cleanup_downstream_tasks()
                             
+                            # If we've started transmitting audio this is probably an interruption, so calculate number of words
                             if self.nitro and self.started_transmitting_audio:
                                 if num_words > self.number_of_words_for_interruption:
                                     #Process interruption only if number of words is higher than the threshold 
                                     logger.info(f"###### Number of words {num_words} is higher than the required number of words for interruption, hence, definitely interrupting")
-                                    await self.__cleanup_downstream_tasks()                                    
+                                    await self.__cleanup_downstream_tasks()
+                                else:
+                                    logger.info(f"Not starting a cleanup because {num_words} number of words are lesser {self.number_of_words_for_interruption} and hence continuing,")
+                                    continue
                                     
                             self.last_response_time = time.time()
                             transcriber_message = message['data']
+                            
                             # Use last spoken timestamp to give out endpointing in nitro
                             logger.info(f"###### last spoken timestamp before changing {self.last_spoken_timestamp}")
                             self.last_spoken_timestamp = time.time() * 1000
@@ -832,6 +851,7 @@ class TaskManager(BaseManager):
                                 response_started = True
                             elif self.nitro:
                                 self.let_remaining_audio_pass_through = False
+                                logger.info(f"Increase the incremental delay time")
                                 self.required_delay_before_speaking += self.incremental_delay
                                 if self.time_since_first_interim_result == -1:
                                     self.time_since_first_interim_result = time.time() * 1000
@@ -877,8 +897,9 @@ class TaskManager(BaseManager):
     # Synthesizer task
     #################################################################
     def __enqueue_chunk(self, chunk, i, number_of_chunks, meta_info):
+        logger.info(f"Meta_info of chunk {meta_info} {i} {number_of_chunks}")
         if i == 0 and "is_first_chunk" in meta_info and meta_info["is_first_chunk"]:
-            copied_meta_info = meta_info.copy()
+            copied_meta_info = copy.deepcopy(meta_info)
             logger.info(f"##### Sending first chunk")
             copied_meta_info["is_first_chunk_of_entire_response"] = True
             self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, copied_meta_info))
@@ -909,11 +930,12 @@ class TaskManager(BaseManager):
                                 logger.info(f"Simply Storing in buffered output queue for now")
 
                                 if self.yield_chunks:
-                                    number_of_chunks = (len(message['data'])/self.output_chunk_size)
+                                    logger.info(f"Yielding chunks")
+                                    number_of_chunks = (len(message['data'])//self.output_chunk_size)
                                     i = 0
                                     for chunk in yield_chunks_from_memory(message['data'], chunk_size=self.output_chunk_size):
-                                        i +=1
                                         self.__enqueue_chunk(chunk, i, number_of_chunks, meta_info)
+                                        i +=1
                                 else:
                                     self.buffered_output_queue.put_nowait(message)
                                 
@@ -1029,11 +1051,11 @@ class TaskManager(BaseManager):
         try:
             while True:
                 # Allow extra sleep allows us to have real time impact in when uer starts speaking
-                if self.nitro and self.allow_extra_sleep and time.time() *1000 < self.backoff_until:
-                    logger.info(f"##### sleeping for extra backoff period to see if user will start speaking something new or not after {self.interruption_backoff_period/1000}")
-                    await asyncio.sleep(self.interruption_backoff_period/1000)
-                    self.allow_extra_sleep = False
-                    prev_message = current_message
+                # if self.nitro and self.allow_extra_sleep and time.time() *1000 < self.backoff_until:
+                #     logger.info(f"##### sleeping for extra backoff period to see if user will start speaking something new or not after {self.interruption_backoff_period/1000}")
+                #     #await asyncio.sleep(self.interruption_backoff_period/1000)
+                #     self.allow_extra_sleep = False
+                #     prev_message = current_message
 
                 if self.nitro and not self.let_remaining_audio_pass_through:
                     time_since_first_interim_result = (time.time() *1000)- self.time_since_first_interim_result if self.time_since_first_interim_result != -1 else -1
@@ -1042,6 +1064,7 @@ class TaskManager(BaseManager):
                         await asyncio.sleep(0.1) #sleep for 100ms and continue 
                         continue
                     else:
+                        logger.info(f"First interim result hasn't been gotten yet and hence sleeping ")
                         await asyncio.sleep(0.1)
 
                     logger.info(f"##### Got to wait {self.required_delay_before_speaking} ms before speaking and alreasy waited {time_since_first_interim_result} since the first interim result")
@@ -1060,6 +1083,7 @@ class TaskManager(BaseManager):
                 if 'sequence_id' in message['meta_info'] and message["meta_info"]["sequence_id"] in self.sequence_ids:
                     await self.tools["output"].handle(message)                    
                     duration = calculate_audio_duration(len(message["data"]), self.sampling_rate)
+                    logger.info(f"Duration of the byte {duration}")
                     self.conversation_recording['output'].append({'data': message['data'], "start_time": time.time(), "duration": duration})
                 else:
                     logger.info(f'{message["meta_info"]["sequence_id"]} is not in {self.sequence_ids} and hence not speaking')
@@ -1070,6 +1094,7 @@ class TaskManager(BaseManager):
                     logger.info("##### End of synthesizer stream and ")                    
 
                 if "is_first_chunk_of_entire_response" in message['meta_info'] and message['meta_info']['is_first_chunk_of_entire_response']:
+                    logger.info(f"First chunk stuff")
                     self.started_transmitting_audio = True
                     meta_info = message['meta_info']
                     self.consider_next_transcript_after = time.time() + self.duration_to_prevent_accidental_interruption
@@ -1102,9 +1127,9 @@ class TaskManager(BaseManager):
                         logger.info("LATENCY METRICS FOR {} are {}".format(message['meta_info']["request_id"], latency_metrics))
                 
                 # Sleep until this particular audio frame is spoken only if the duration for the frame is atleast 500ms
-                if duration > 0.3:
-                    logger.info(f"##### Sleeping for {duration - 0.03} to maintain quueue on our side")
-                    await asyncio.sleep(duration-0.03) #30 milliseconds less
+                if duration > 0:
+                    logger.info(f"##### Sleeping for {duration} to maintain quueue on our side {self.sampling_rate}")
+                    await asyncio.sleep(duration) #30 milliseconds less
                     
                 self.last_transmitted_timesatamp = time.time()
                 logger.info(f"##### Updating Last transmitted timestamp to {self.last_transmitted_timesatamp}")
@@ -1121,15 +1146,13 @@ class TaskManager(BaseManager):
                 logger.info(f"Last transmitted timestamp is simply 0 and hence continuing")
                 continue
 
-            time_since_last_spoken_word = time.time() - self.last_transmitted_timesatamp
-            if time_since_last_spoken_word > self.hang_conversation_after:
-                logger.info(f"{time_since_last_spoken_word} seconds since last spoken time stamp and hence cutting the phone call and last transmitted timestampt ws {self.last_transmitted_timesatamp}")
+            time_since_last_spoken_AI_word = (time.time() - self.last_transmitted_timesatamp) 
+            if time_since_last_spoken_AI_word > self.hang_conversation_after and self.time_since_last_spoken_human_word < self.last_transmitted_timesatamp:
+                logger.info(f"{time_since_last_spoken_AI_word} seconds since last spoken time stamp and hence cutting the phone call and last transmitted timestampt ws {self.last_transmitted_timesatamp} and time since last spoken human word {self.time_since_last_spoken_human_word}")
                 await self.__process_end_of_conversation()
                 break
             else:
-                logger.info(f"Only {time_since_last_spoken_word} seconds since last spoken time stamp and hence cutting the phone call and hence not cutting the phone call")
-            
-                
+                logger.info(f"Only {time_since_last_spoken_AI_word} seconds since last spoken time stamp and hence cutting the phone call and hence not cutting the phone call")
             
     async def run(self):
         try:

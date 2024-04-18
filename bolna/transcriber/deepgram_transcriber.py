@@ -291,6 +291,7 @@ class DeepgramTranscriber(BaseTranscriber):
                         self.meta_info["should_interrupt"] = True
                     elif self.process_interim_results:
                         self.meta_info["should_interrupt"] = False
+                    logger.info(f"YIELDING TRANSCRIBER BEGIN")
                     yield create_ws_data_packet("TRANSCRIBER_BEGIN", self.meta_info)
                     await asyncio.sleep(0.05) #Sleep for 50ms to pass the control to task manager
                     continue
@@ -310,19 +311,7 @@ class DeepgramTranscriber(BaseTranscriber):
 
                     await asyncio.sleep(0.1)  # Enable taskmanager to interrupt
 
-                # Do not send back interim results, just send back interim message
-                if self.process_interim_results == "true" and msg["is_final"] is True:
-                    logger.info(f"Is final interim Transcriber message {msg}")
-                    # curr_message = self.__get_speaker_transcript(msg)
-                    finalized_transcript += " " + transcript  # Just get the whole transcript as there's mismatch at times
-                    self.meta_info["is_final"] = True
-                    if transcript.strip() != curr_message.strip():
-                        self.meta_info["utterance_end"] = self.__calculate_utterance_end(msg)
-                        self.meta_info["time_received"] = time.time()
-                        self.meta_info["transcriber_latency"] = self.meta_info["time_received"] - self.meta_info[
-                            "utterance_end"]
-                        yield create_ws_data_packet(curr_message, self.meta_info)
-                elif self.process_interim_results == "true":
+                if self.process_interim_results == "true":
                     # If we're not processing interim results
                     # Yield current transcript
                     # curr_message = self.__get_speaker_transcript(msg)
@@ -335,11 +324,12 @@ class DeepgramTranscriber(BaseTranscriber):
                     self.meta_info["transcriber_latency"] = self.meta_info["time_received"] - self.meta_info[
                         "utterance_end"]
                     yield create_ws_data_packet(curr_message, self.meta_info)
-                    # #If the current message is empty no need to send anything to the task manager
-                    # if curr_message == "":
-                    #     continue
-                    # yield create_ws_data_packet(curr_message, self.meta_info)
-                    # curr_message = ""
+                    
+                    # If is_final is true simply update the finalized transcript
+                    if  msg["is_final"] is True:
+                        finalized_transcript += " " + transcript  # Just get the whole transcript as there's mismatch at times
+                        self.meta_info["is_final"] = True
+
                 else:
                     curr_message += " " + transcript
                     # Process interim results is false and hence we need to be dependent on the endpointing
