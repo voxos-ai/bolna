@@ -175,7 +175,7 @@ class TaskManager(BaseManager):
             logger.info(f"minimum wait duration {self.minimum_wait_duration}")
             self.last_spoken_timestamp = time.time() * 1000
             self.incremental_delay = task.get("incremental_delay", 100)
-            self.required_delay_before_speaking = self.minimum_wait_duration - self.incremental_delay #Everytime we get a message we increase it by 100 miliseconds 
+            self.required_delay_before_speaking = max(self.minimum_wait_duration - self.incremental_delay, 0)  #Everytime we get a message we increase it by 100 miliseconds 
             self.time_since_first_interim_result  = -1
 
         #Cut conversation
@@ -188,6 +188,7 @@ class TaskManager(BaseManager):
             completion_json_format = {"answer": "A simple Yes or No based on if you should cut the phone or not"}
             self.check_for_completion_prompt = f"{self.check_for_completion_prompt}\nYour response should be in the following json format\n{completion_json_format}"
         self.check_for_completion_llm = os.getenv("CHECK_FOR_COMPLETION_LLM")
+        self.time_since_last_spoken_human_word = 0 
 
         #Handling accidental interruption
         self.number_of_words_for_interruption = task.get("number_of_words_for_interruption", 3)
@@ -603,6 +604,7 @@ class TaskManager(BaseManager):
                     if end_of_llm_stream:
                         meta_info["end_of_llm_stream"] = True
                     text_chunk = self.__process_stop_words(text_chunk, meta_info)
+                    logger.info(f"##### O/P from LLM {text_chunk} {llm_response}")
                     await self._handle_llm_output(next_step, text_chunk, should_bypass_synth, meta_info)
                     
             if not self.stream:
@@ -786,10 +788,12 @@ class TaskManager(BaseManager):
                         self.let_remaining_audio_pass_through = True 
 
                         if self.nitro:
-                            logger.info(f"#### Resetting time since first interim result")
                             self.time_since_first_interim_result = -1
+                            self.required_delay_before_speaking = max(self.minimum_wait_duration - self.incremental_delay, 0)
+                            logger.info(f"#### Resetting time since first interim result and resetting required delay {self.required_delay_before_speaking}")
                         
                     else:
+                        self.time_since_last_spoken_human_word = time.time()
                         logger.info(f'invoking next_task {next_task} with transcriber_message: {message["data"]}')
                         if transcriber_message.strip() == message['data'].strip():
                             logger.info(f"###### Transcriber message and message data are same and hence not changing anything else. Probably just an is_final thingy. {message}")
@@ -810,10 +814,6 @@ class TaskManager(BaseManager):
                             #     self.allow_extra_sleep = True
                             #     logger.info(f"Sending interrupt to clear and allowing extra sleep to wait for more messages as we are transmitting audio right now. {self.backoff_until}")
 
-
-                            if self.nitro:
-                                self.required_delay_before_speaking = self.minimum_wait_duration - self.incremental_delay
-                                logger.info(f"##### Adding incremental delay New required delay {self.required_delay_before_speaking}")
                             
                             # This means we are generating response from an interim transcript 
                             # Hence we transmit quickly 
@@ -1068,6 +1068,7 @@ class TaskManager(BaseManager):
                 if 'sequence_id' in message['meta_info'] and message["meta_info"]["sequence_id"] in self.sequence_ids:
                     await self.tools["output"].handle(message)                    
                     duration = calculate_audio_duration(len(message["data"]), self.sampling_rate)
+                    logger.info(f"Duration of the byte {duration}")
                     self.conversation_recording['output'].append({'data': message['data'], "start_time": time.time(), "duration": duration})
                 else:
                     logger.info(f'{message["meta_info"]["sequence_id"]} is not in {self.sequence_ids} and hence not speaking')
@@ -1110,7 +1111,7 @@ class TaskManager(BaseManager):
                         logger.info("LATENCY METRICS FOR {} are {}".format(message['meta_info']["request_id"], latency_metrics))
                 
                 # Sleep until this particular audio frame is spoken only if the duration for the frame is atleast 500ms
-                if duration > 0.3:
+                if duration > 0.1:
                     logger.info(f"##### Sleeping for {duration - 0.03} to maintain quueue on our side")
                     await asyncio.sleep(duration-0.03) #30 milliseconds less
                     
@@ -1129,13 +1130,13 @@ class TaskManager(BaseManager):
                 logger.info(f"Last transmitted timestamp is simply 0 and hence continuing")
                 continue
 
-            time_since_last_spoken_word = time.time() - self.last_transmitted_timesatamp
-            if time_since_last_spoken_word > self.hang_conversation_after and self.nitro:
-                logger.info(f"{time_since_last_spoken_word} seconds since last spoken time stamp and hence cutting the phone call and last transmitted timestampt ws {self.last_transmitted_timesatamp}")
+            time_since_last_spoken_AI_word = (time.time() - self.last_transmitted_timesatamp) 
+            if time_since_last_spoken_AI_word > self.hang_conversation_after and self.time_since_last_spoken_human_word < self.last_transmitted_timesatamp:
+                logger.info(f"{time_since_last_spoken_AI_word} seconds since last spoken time stamp and hence cutting the phone call and last transmitted timestampt ws {self.last_transmitted_timesatamp} and time since last spoken human word {self.time_since_last_spoken_human_word}")
                 await self.__process_end_of_conversation()
                 break
             else:
-                logger.info(f"Only {time_since_last_spoken_word} seconds since last spoken time stamp and hence cutting the phone call and hence not cutting the phone call")
+                logger.info(f"Only {time_since_last_spoken_AI_word} seconds since last spoken time stamp and hence cutting the phone call and hence not cutting the phone call")
             
     async def run(self):
         try:
