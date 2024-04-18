@@ -1,7 +1,6 @@
 from collections import deque
 import os
 from dotenv import load_dotenv
-import audioop
 from bolna.helpers.logger_config import configure_logger
 from bolna.helpers.utils import convert_audio_to_wav, create_ws_data_packet, pcm_to_wav_bytes, resample
 from .base_synthesizer import BaseSynthesizer

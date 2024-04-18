@@ -14,6 +14,10 @@ from bolna.helpers.logger_config import configure_logger
 from bolna.helpers.utils import create_ws_data_packet, int2float
 from bolna.helpers.vad import VAD
 
+import uvloop
+asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+
+
 torch.set_num_threads(1)
 
 logger = configure_logger(__name__)
@@ -24,6 +28,7 @@ class DeepgramTranscriber(BaseTranscriber):
     def __init__(self, provider, input_queue=None, model='deepgram', stream=True, language="en", endpointing="400",
                  sampling_rate="16000", encoding="linear16", output_queue=None, keywords=None,
                  process_interim_results="true", **kwargs):
+        logger.info(f"Initializing transcriber")
         super().__init__(input_queue)
         self.endpointing = endpointing
         self.language = language
@@ -80,7 +85,8 @@ class DeepgramTranscriber(BaseTranscriber):
             'model': 'nova-2',
             'filler_words': 'true',
             'diarize': 'true',
-            'language': self.language
+            'language': self.language,
+            'vad_events' :'true'
         }
 
         self.audio_frame_duration = 0.5  # We're sending 8k samples with a sample rate of 16k
@@ -104,7 +110,8 @@ class DeepgramTranscriber(BaseTranscriber):
 
         if self.process_interim_results == "false":
             dg_params['endpointing'] = self.endpointing
-            dg_params['vad_events'] = "true"
+            #dg_params['vad_events'] = 'true'
+
         else:
             dg_params['interim_results'] = self.process_interim_results
             dg_params['utterance_end_ms'] = '1000'
@@ -279,10 +286,13 @@ class DeepgramTranscriber(BaseTranscriber):
                     continue
 
                 if msg["type"] == "SpeechStarted":
-                    if curr_message != "":
+                    if curr_message != "" and not self.process_interim_results:
                         logger.info("Current messsage is null and hence inetrrupting")
                         self.meta_info["should_interrupt"] = True
-                        yield create_ws_data_packet("TRANSCRIBER_BEGIN", self.meta_info)
+                    elif self.process_interim_results:
+                        self.meta_info["should_interrupt"] = False
+                    yield create_ws_data_packet("TRANSCRIBER_BEGIN", self.meta_info)
+                    await asyncio.sleep(0.05) #Sleep for 50ms to pass the control to task manager
                     continue
 
                 transcript = msg['channel']['alternatives'][0]['transcript']
@@ -380,8 +390,10 @@ class DeepgramTranscriber(BaseTranscriber):
         return deepgram_ws
 
     async def run(self):
-        self.transcription_task = asyncio.create_task(self.transcribe())
-
+        try:
+            self.transcription_task = asyncio.create_task(self.transcribe())
+        except Exception as e:
+            logger.error(f"not working {e}")
     def __calculate_utterance_end(self, data):
         utterance_end = None
         if 'channel' in data and 'alternatives' in data['channel']:
@@ -393,6 +405,7 @@ class DeepgramTranscriber(BaseTranscriber):
         return utterance_end
 
     async def transcribe(self):
+        logger.info(f"STARTED TRANSCRIBING")
         try:
             async with self.deepgram_connect() as deepgram_ws:
                 if self.stream:
