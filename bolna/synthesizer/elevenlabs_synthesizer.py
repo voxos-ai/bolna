@@ -25,7 +25,8 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         self.voice = voice_id
         self.use_turbo = kwargs.get("use_turbo", False)
         self.model = "eleven_turbo_v2" if self.use_turbo else "eleven_multilingual_v2"
-        self.stream = stream  # Issue with elevenlabs streaming that we need to always send the text quickly
+        logger.info(f"Using turbo or not {self.model}")
+        self.stream = False  # Issue with elevenlabs streaming that we need to always send the text quickly
         self.websocket_connection = None
         self.connection_open = False
         self.sampling_rate = sampling_rate
@@ -140,7 +141,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
             "text": text,
             "model_id": self.model,
             "voice_settings": {
-                "stability": 0.5,
+                "stability": 0.4,
                 "similarity_boost": 0.5,
                 "optimize_streaming_latency": 3
             }

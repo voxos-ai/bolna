@@ -391,8 +391,13 @@ class TaskManager(BaseManager):
             self.llm_task.cancel()
             self.llm_task = None
 
-        #self.synthesizer_task.cancel()
-        #self.synthesizer_task = asyncio.create_task(self.__listen_synthesizer())
+        # self.synthesizer_task.cancel()
+        # self.synthesizer_task = asyncio.create_task(self.__listen_synthesizer())
+        for task in self.synthesizer_tasks:
+            task.cancel()
+        
+        self.synthesizer_tasks = []
+
         logger.info(f"Synth Task cancelled seconds")
         if not self.buffered_output_queue.empty():
             logger.info(f"Output queue was not empty and hence emptying it")
