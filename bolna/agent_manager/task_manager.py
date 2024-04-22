@@ -1218,7 +1218,7 @@ class TaskManager(BaseManager):
             # Construct output
             if "synthesizer" in self.tools and self.synthesizer_task is not None:   
                 self.synthesizer_task.cancel()
-            if self.use_llm_to_determine_hangup is False:
+            if self._is_conversation_task() and self.use_llm_to_determine_hangup is False:
                 self.hangup_task.cancel()
             
             if self.task_id == 0:
