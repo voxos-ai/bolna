@@ -1155,6 +1155,7 @@ class TaskManager(BaseManager):
                 logger.info(f"Only {time_since_last_spoken_AI_word} seconds since last spoken time stamp and hence cutting the phone call and hence not cutting the phone call")
             
     async def run(self):
+        self.hangup_task = None
         try:
             if self.task_id == 0:
                 # Create transcriber and synthesizer tasks
@@ -1218,7 +1219,7 @@ class TaskManager(BaseManager):
             # Construct output
             if "synthesizer" in self.tools and self.synthesizer_task is not None:   
                 self.synthesizer_task.cancel()
-            if self.use_llm_to_determine_hangup is False:
+            if self.use_llm_to_determine_hangup is False and not self.hangup_task:
                 self.hangup_task.cancel()
             
             if self.task_id == 0:
