@@ -132,6 +132,21 @@ async def get_s3_file(bucket_name, file_key):
             file_content = await response['Body'].read()
             return file_content
 
+async def delete_s3_file_by_prefix(bucket_name,file_key):
+    session = AioSession()
+    async with AsyncExitStack() as exit_stack:
+        s3_client = await exit_stack.enter_async_context(session.create_client('s3'))
+        try:
+            paginator = s3_client.get_paginator('list_objects')
+            async for result in paginator.paginate(Bucket=bucket_name, Prefix=file_key):
+                tasks = []
+                for file in result.get('Contents', []):
+                    tasks.append(s3_client.delete_object(Bucket=bucket_name, Key=file['Key']))
+                await asyncio.gather(*tasks)
+            return True
+        except (BotoCoreError, ClientError) as error:
+            logger.error(error)
+            return error
 
 async def store_file(bucket_name=None, file_key=None, file_data=None, content_type="json", local=False, preprocess_dir=None):
     if not local:
