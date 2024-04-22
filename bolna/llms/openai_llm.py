@@ -10,20 +10,20 @@ load_dotenv()
 
 
 class OpenAiLLM(BaseLLM):
-    def __init__(self, max_tokens=100, buffer_size=40, streaming_model="gpt-3.5-turbo-16k",
-                 classification_model="gpt-3.5-turbo-1106", temperature= 0.1, **kwargs):
+    def __init__(self, max_tokens=100, buffer_size=40, model="gpt-3.5-turbo-16k", temperature= 0.1, **kwargs):
         super().__init__(max_tokens, buffer_size)
-        self.model = streaming_model
+        self.model = model
         self.started_streaming = False
         logger.info(f"Initializing OpenAI LLM with model: {self.model} and maxc tokens {max_tokens}")
         self.max_tokens = max_tokens
-        self.classification_model = classification_model
         self.temperature = temperature
         self.vllm_model = "vllm" in self.model
         self.model_args = { "max_tokens": self.max_tokens, "temperature": self.temperature, "model": self.model}
 
         if self.vllm_model:
-            base_url = kwargs.get("base_url", os.getenv("VLLM_SERVER_BASE_URL"))
+            base_url = kwargs.get("base_url", None)
+            if base_url is None:
+                raise Exception("Cannot run a custom LLM without base URL")
             api_key=kwargs.get('llm_key', None)
             if len(api_key) > 0:
                 api_key = api_key
@@ -52,14 +52,13 @@ class OpenAiLLM(BaseLLM):
         if  "frequency_penalty" in kwargs:
             self.model_args["frequency_penalty"] = kwargs["frequency_penalty"]
 
-    async def generate_stream(self, messages, classification_task=False, synthesize=True, request_json=False):
+    async def generate_stream(self, messages, synthesize=True, request_json=False):
         if len(messages) == 0:
             raise Exception("No messages provided")
         
         response_format = self.get_response_format(request_json)
 
         answer, buffer = "", ""
-        model = self.classification_model if classification_task is True else self.model
         logger.info(f"request to open ai {messages} max tokens {self.max_tokens} ")
         model_args = self.model_args
         model_args["response_format"] = response_format
@@ -86,18 +85,17 @@ class OpenAiLLM(BaseLLM):
             yield answer, True
         self.started_streaming = False
 
-    async def generate(self, messages, classification_task=False, stream=False, synthesize=True, request_json=False):
+    async def generate(self, messages, request_json=False):
         response_format = self.get_response_format(request_json)
         logger.info(f"request to open ai {messages}")
-        model = self.classification_model if classification_task is True else self.model
 
-        completion = await self.async_client.chat.completions.create(model=model, temperature=0.0, messages=messages,
+        completion = await self.async_client.chat.completions.create(model=self.model, temperature=0.0, messages=messages,
                                                                      stream=False, response_format=response_format)
         res = completion.choices[0].message.content
         return res
 
     def get_response_format(self, is_json_format: bool):
-        if is_json_format and self.classification_model in ('gpt-4-1106-preview', 'gpt-3.5-turbo-1106'):
+        if is_json_format and self.model in ('gpt-4-1106-preview', 'gpt-3.5-turbo-1106'):
             return {"type": "json_object"}
         else:
             return {"type": "text"}

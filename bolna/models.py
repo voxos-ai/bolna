@@ -13,27 +13,27 @@ def validate_attribute(value, allowed_values):
 class PollyConfig(BaseModel):
     voice: str
     engine: str
-    sampling_rate: Optional[str] = "16000"
+    sampling_rate: Optional[int] = 16000
     language: str
 
 
 class XTTSConfig(BaseModel):
     voice: str
     language: str
-    sampling_rate: Optional[str] ="24000"
+    sampling_rate: Optional[int] = 24000
 
 
 class ElevenLabsConfig(BaseModel):
     voice: str
     voice_id: str
     model: str
-    sampling_rate: Optional[str] = "16000"
+    sampling_rate: Optional[int] = 16000
 
 
 class OpenAIConfig(BaseModel):
     voice: str
     model: str
-    sampling_rate: Optional[str] ="24000"
+    sampling_rate: Optional[int] =24000
 
 
 class FourieConfig(BaseModel):
@@ -86,11 +86,9 @@ class IOModel(BaseModel):
 
 
 class LLM(BaseModel):
-    streaming_model: Optional[str] = "gpt-3.5-turbo-16k"
-    classification_model: Optional[str] = "gpt-4"
+    model: Optional[str] = "gpt-3.5-turbo-16k"
     max_tokens: Optional[int] = 100
     agent_flow_type: Optional[str] = "streaming"
-    use_fallback: Optional[bool] = False
     family: Optional[str] = "openai"
     temperature: Optional[float] = 0.1
     request_json: Optional[bool] = False
@@ -98,8 +96,9 @@ class LLM(BaseModel):
     top_k: Optional[int] = 0
     top_p: Optional[float] = 0.9
     min_p: Optional[float] = 0.1
-    frequency_penalty: Optional[float] = 0.0  
+    frequency_penalty: Optional[float] = 0.0
     presence_penalty: Optional[float] = 0.0
+    provider: Optional[str] = "openai"
 
 class MessagingModel(BaseModel):
     provider: str

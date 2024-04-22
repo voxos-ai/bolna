@@ -16,8 +16,6 @@ from bolna.helpers.vad import VAD
 
 import uvloop
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-
-
 torch.set_num_threads(1)
 
 logger = configure_logger(__name__)

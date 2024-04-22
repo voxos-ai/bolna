@@ -21,11 +21,14 @@ SUPPORTED_LLM_MODELS = {
     'cohere': LiteLLM,
     'ollama': LiteLLM,
     'mistral': LiteLLM,
+    'mixtral': LiteLLM,
     'llama': LiteLLM,
     'zephyr': LiteLLM,
     'azure-openai': LiteLLM,
     'perplexity': LiteLLM,
-    'vllm': OpenAiLLM
+    'vllm': OpenAiLLM,
+    'fireworks': OpenAiLLM,
+    'gemma': LiteLLM
 }
 SUPPORTED_INPUT_HANDLERS = {
     'default': DefaultInputHandler,
