@@ -99,6 +99,7 @@ class LLM(BaseModel):
     frequency_penalty: Optional[float] = 0.0
     presence_penalty: Optional[float] = 0.0
     provider: Optional[str] = "openai"
+    base_url: Optional[str] = None
 
 class MessagingModel(BaseModel):
     provider: str

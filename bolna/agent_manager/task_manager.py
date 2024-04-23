@@ -282,14 +282,14 @@ class TaskManager(BaseManager):
 
     def __setup_llm(self, llm_config):
         if self.task_config["tools_config"]["llm_agent"] is not None:
-            logger.info(f'### PROVIDER {self.task_config["tools_config"]["llm_agent"]["family"] }')
-            if self.task_config["tools_config"]["llm_agent"]["family"] in SUPPORTED_LLM_MODELS.keys():
-                llm_class = SUPPORTED_LLM_MODELS.get(self.task_config["tools_config"]["llm_agent"]["family"])
+            logger.info(f'### PROVIDER {self.task_config["tools_config"]["llm_agent"]["provider"] }')
+            if self.task_config["tools_config"]["llm_agent"]["provider"] in SUPPORTED_LLM_MODELS.keys():
+                llm_class = SUPPORTED_LLM_MODELS.get(self.task_config["tools_config"]["llm_agent"]["provider"])
                 logger.info(f"LLM CONFIG {llm_config}")
                 llm = llm_class(**llm_config, **self.kwargs)
                 return llm
             else:
-                raise Exception(f'LLM {self.task_config["tools_config"]["llm_agent"]["family"]} not supported')
+                raise Exception(f'LLM {self.task_config["tools_config"]["llm_agent"]["provider"]} not supported')
 
     def __setup_tasks(self, llm):
         if self.task_config["task_type"] == "conversation":

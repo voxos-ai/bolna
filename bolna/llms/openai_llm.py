@@ -25,7 +25,7 @@ class OpenAiLLM(BaseLLM):
             if base_url is None:
                 raise Exception("Cannot run a custom LLM without base URL")
             api_key=kwargs.get('llm_key', None)
-            if len(api_key) > 0:
+            if api_key is not None and len(api_key) > 0:
                 api_key = api_key
             else:
                 api_key = "EMPTY"
