@@ -16,7 +16,8 @@ SUPPORTED_TRANSCRIBER_MODELS = {
     'deepgram': DeepgramTranscriber,
     'whisper': DeepgramTranscriber #Seperate out a transcriber for https://github.com/bolna-ai/streaming-transcriber-server or build a deepgram compatible proxy
 }
-SUPPORTED_LLM_MODELS = {
+
+SUPPORTED_LLM_PROVIDERS = {
     'openai': OpenAiLLM,
     'cohere': LiteLLM,
     'ollama': LiteLLM,

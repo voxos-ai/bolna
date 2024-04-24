@@ -283,8 +283,8 @@ class TaskManager(BaseManager):
     def __setup_llm(self, llm_config):
         if self.task_config["tools_config"]["llm_agent"] is not None:
             logger.info(f'### PROVIDER {self.task_config["tools_config"]["llm_agent"]["provider"] }')
-            if self.task_config["tools_config"]["llm_agent"]["provider"] in SUPPORTED_LLM_MODELS.keys():
-                llm_class = SUPPORTED_LLM_MODELS.get(self.task_config["tools_config"]["llm_agent"]["provider"])
+            if self.task_config["tools_config"]["llm_agent"]["provider"] in SUPPORTED_LLM_PROVIDERS.keys():
+                llm_class = SUPPORTED_LLM_PROVIDERS.get(self.task_config["tools_config"]["llm_agent"]["provider"])
                 logger.info(f"LLM CONFIG {llm_config}")
                 llm = llm_class(**llm_config, **self.kwargs)
                 return llm
@@ -1066,7 +1066,8 @@ class TaskManager(BaseManager):
                         await asyncio.sleep(0.1)
 
                     logger.info(f"##### Got to wait {self.required_delay_before_speaking} ms before speaking and alreasy waited {time_since_first_interim_result} since the first interim result")
-                
+                else:
+                    logger.info(f"Started transmitting at {time.time()}")
                 if prev_message is None:
                     message = await self.buffered_output_queue.get()   
                     current_message = message 
