@@ -11,8 +11,7 @@ from urllib.parse import urlencode
 from dotenv import load_dotenv
 from .base_transcriber import BaseTranscriber
 from bolna.helpers.logger_config import configure_logger
-from bolna.helpers.utils import create_ws_data_packet, int2float
-from bolna.helpers.vad import VAD
+from bolna.helpers.utils import create_ws_data_packet
 
 import uvloop
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
@@ -265,55 +264,22 @@ class DeepgramTranscriber(BaseTranscriber):
                 #     yield create_ws_data_packet("TRANSCRIBER_BEGIN", self.meta_info)
                 #     await asyncio.sleep(0.1)  # Enable taskmanager to interrupt
 
-                if self.process_interim_results == "true":
-                    # If we're not processing interim results
-                    # Yield current transcript
-                    # Just yield the current transcript as we do not want to wait for is_final. Is_final is just to make 
-                    self.curr_message = self.finalized_transcript + " " + transcript
-                    logger.info(f"Yielding interim-message current_message = {self.curr_message}")
-                    self.meta_info["include_latency"] = False
-                    self.meta_info["utterance_end"] = self.__calculate_utterance_end(msg)
-                    self.meta_info["time_received"] = time.time()
-                    self.meta_info["transcriber_latency"] = self.meta_info["time_received"] - self.meta_info[
-                        "utterance_end"]
-                    yield create_ws_data_packet(self.curr_message, self.meta_info)
-                    
-                    # If is_final is true simply update the finalized transcript
-                    if  msg["is_final"] is True:
-                        self.finalized_transcript += " " + transcript  # Just get the whole transcript as there's mismatch at times
-                        self.meta_info["is_final"] = True
-
-                else:
-                    self.curr_message += " " + transcript
-                    # Process interim results is false and hence we need to be dependent on the endpointing
-                    if msg["speech_final"] or not self.stream:
-                        logger.info(f"Full Transcriber message from speech final {msg}")
-                        yield create_ws_data_packet(self.curr_message, self.meta_info)
-                        logger.info(f"Yielded {self.curr_message}")
-                        logger.info('User: {}'.format(self.curr_message))
-
-                        self.interruption_signalled = False
-                        if self.audio_submitted == True:
-                            logger.info("Transcriber Latency: {} for request id {}".format(
-                                time.time() - self.audio_submission_time, self.current_request_id))
-                            self.meta_info["start_time"] = self.audio_submission_time
-                            self.meta_info["end_time"] = time.time()
-                            self.audio_submitted = False
-                        if self.curr_message != "":
-                            self.meta_info["include_latency"] = True
-                            self.meta_info["audio_duration"] = msg['start'] + msg['duration']
-                            last_spoken_audio_frame = self.__calculate_utterance_end(msg)
-                            self.meta_info["audio_start_time"] = self.audio_submission_time
-                            transcription_completion_time = time.time()
-                            self.meta_info["transcription_completion_time"] = transcription_completion_time
-                            self.meta_info[
-                                "transcriber_latency"] = transcription_completion_time - last_spoken_audio_frame  # We subtract first audio wav because user started speaking then. In this case we can calculate actual latency taken by the transcriber
-                            self.meta_info["last_vocal_frame_timestamp"] = last_spoken_audio_frame
-                        else:
-                            self.meta_info["include_latency"] = False
-                        self.meta_info["speech_final"] = True
-                        yield create_ws_data_packet("TRANSCRIBER_END", self.meta_info)
-                        self.curr_message = ""
+                # If we're not processing interim results
+                # Yield current transcript
+                # Just yield the current transcript as we do not want to wait for is_final. Is_final is just to make 
+                self.curr_message = self.finalized_transcript + " " + transcript
+                logger.info(f"Yielding interim-message current_message = {self.curr_message}")
+                self.meta_info["include_latency"] = False
+                self.meta_info["utterance_end"] = self.__calculate_utterance_end(msg)
+                self.meta_info["time_received"] = time.time()
+                self.meta_info["transcriber_latency"] = self.meta_info["time_received"] - self.meta_info[
+                    "utterance_end"]
+                yield create_ws_data_packet(self.curr_message, self.meta_info)
+                
+                # If is_final is true simply update the finalized transcript
+                if  msg["is_final"] is True:
+                    self.finalized_transcript += " " + transcript  # Just get the whole transcript as there's mismatch at times
+                    self.meta_info["is_final"] = True
 
             except Exception as e:
                 traceback.print_exc()

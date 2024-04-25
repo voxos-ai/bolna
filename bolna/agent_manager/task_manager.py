@@ -169,7 +169,7 @@ class TaskManager(BaseManager):
         if task_id == 0:
             self.output_chunk_size = 16384 if self.sampling_rate == 24000 else 4096 #0.5 second chunk size for calls 
             # For nitro
-            self.nitro = self.kwargs['process_interim_results'] == "true"
+            self.nitro = True 
             self.minimum_wait_duration = self.task_config["tools_config"]["transcriber"]["endpointing"]
             logger.info(f"minimum wait duration {self.minimum_wait_duration}")
             self.last_spoken_timestamp = time.time() * 1000
@@ -1221,7 +1221,7 @@ class TaskManager(BaseManager):
             # Construct output
             if "synthesizer" in self.tools and self.synthesizer_task is not None:   
                 self.synthesizer_task.cancel()
-            if self.use_llm_to_determine_hangup is False:
+            if self.use_llm_to_determine_hangup is False and self._is_conversation_task:
                 self.hangup_task.cancel()
             
             if self.task_id == 0:

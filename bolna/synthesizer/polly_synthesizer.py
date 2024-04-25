@@ -39,10 +39,11 @@ class PollySynthesizer(BaseSynthesizer):
         async with AsyncExitStack() as exit_stack:
             polly = await self.create_client("polly", session, exit_stack)
             logger.info(f"Generating TTS response for text: {text}, SampleRate {self.sample_rate} format {self.format}")
+            input = f'<speak> <amazon:auto-breaths volume= "x-loud" frequency="x-high" duration="x-long"> {text} </amazon:auto-breaths> </speak>'
             try:
                 response = await polly.synthesize_speech(
                     Engine=self.engine,
-                    Text=text,
+                    Text=input,
                     OutputFormat=self.format,
                     VoiceId=self.voice,
                     LanguageCode=self.language,

@@ -15,6 +15,9 @@ class PollyConfig(BaseModel):
     engine: str
     sampling_rate: Optional[int] = 16000
     language: str
+    # volume: Optional[str] = '0dB'
+    # rate: Optional[str] = '100%'
+
 
 
 class XTTSConfig(BaseModel):
