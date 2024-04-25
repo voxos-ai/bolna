@@ -115,7 +115,7 @@ class GraphBasedConversationAgent(BaseAgent):
 
         message = [{"role": "system", "content": self.current_node.prompt}] + prev_messages
         # Get classification label from LLM
-        response = await self.llm.generate(message, True, False, request_json=True)
+        response = await self.llm.generate(message, request_json=True)
         logger.info(f"Classification response {response}")
         classification_result = json.loads(response)
         label = classification_result["classification_label"]
@@ -126,8 +126,9 @@ class GraphBasedConversationAgent(BaseAgent):
 
     def update_current_node(self):
         self.current_node = self.current_node_interim
-        
-    async def generate(self, history, stream=False, synthesize=False, label_flow=None):
+    
+    # Label flow is not being used right now as we're logging every request
+    async def generate(self, history, label_flow=None):
         try:
             if self.preprocessed:
                 logger.info(f"Current node {str(self.current_node)}")
