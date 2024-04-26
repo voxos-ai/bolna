@@ -40,6 +40,7 @@ class DeepgramTranscriber(BaseTranscriber):
         self.sampling_rate = sampling_rate
         self.encoding = encoding
         self.api_key = kwargs.get("transcriber_key", os.getenv('DEEPGRAM_AUTH_TOKEN'))
+        self.deepgram_host = os.getenv('DEEPGRAM_HOST', 'api.deepgram.com')
         self.transcriber_output_queue = output_queue
         self.transcription_task = None
         self.on_device_vad = kwargs.get("on_device_vad", False) if self.stream else False
@@ -54,7 +55,7 @@ class DeepgramTranscriber(BaseTranscriber):
         self.interruption_signalled = False
         self.sampling_rate = 16000
         if not self.stream:
-            self.api_url = f"https://api.deepgram.com/v1/listen?model=nova-2&filler_words=true&language={self.language}"
+            self.api_url = f"https://{self.deepgram_host}/v1/listen?model=nova-2&filler_words=true&language={self.language}"
             self.session = aiohttp.ClientSession()
             if self.keywords is not None:
                 keyword_string = "&keywords=" + "&keywords=".join(self.keywords.split(","))
@@ -119,7 +120,7 @@ class DeepgramTranscriber(BaseTranscriber):
         if self.keywords and len(self.keywords.split(",")) > 0:
             dg_params['keywords'] = "&keywords=".join(self.keywords.split(","))
 
-        websocket_api = 'wss://api.deepgram.com/v1/listen?'
+        websocket_api = 'wss://{}/v1/listen?'.format(self.deepgram_host)
         websocket_url = websocket_api + urlencode(dg_params)
         logger.info(f"Deepgram websocket url: {websocket_url}")
         return websocket_url

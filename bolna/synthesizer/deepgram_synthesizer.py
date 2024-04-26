@@ -7,7 +7,8 @@ from .base_synthesizer import BaseSynthesizer
 
 logger = configure_logger(__name__)
 load_dotenv()
-DEEPGRAM_TTS_URL = "https://api.deepgram.com/v1/speak"
+DEEPGRAM_HOST = os.getenv('DEEPGRAM_HOST', 'api.deepgram.com')
+DEEPGRAM_TTS_URL = "https://{}/v1/speak".format(DEEPGRAM_HOST)
 
 
 class DeepgramSynthesizer(BaseSynthesizer):
