@@ -19,7 +19,7 @@ logger = configure_logger(__name__)
 
 class ElevenlabsSynthesizer(BaseSynthesizer):
     def __init__(self, voice, voice_id, model="eleven_multilingual_v1", audio_format="mp3", sampling_rate="16000",
-                 stream=False, buffer_size=400, synthesier_key=None, **kwargs):
+                 stream=False, buffer_size=400, temperature = 0.5, similarity_boost = 0.5, synthesier_key=None, **kwargs):
         super().__init__(stream)
         self.api_key = os.environ["ELEVENLABS_API_KEY"] if synthesier_key is None else synthesier_key
         self.voice = voice_id
@@ -38,6 +38,8 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         self.last_text_sent = False
         self.text_queue = deque()
         self.meta_info = None
+        self.temperature = temperature
+        self.similarity_boost = similarity_boost
 
     # Ensuring we only do wav output for now
     def get_format(self, format, sampling_rate):
@@ -68,8 +70,8 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
             bos_message = {
                 "text": " ",
                 "voice_settings": {
-                    "stability": 0.5,
-                    "similarity_boost": 0.5
+                    "stability": self.temperature,
+                    "similarity_boost": self.similarity_boost
                 },
                 "xi_api_key": self.api_key,
             }

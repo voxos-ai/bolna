@@ -13,30 +13,27 @@ def validate_attribute(value, allowed_values):
 class PollyConfig(BaseModel):
     voice: str
     engine: str
-    sampling_rate: Optional[int] = 16000
     language: str
     # volume: Optional[str] = '0dB'
     # rate: Optional[str] = '100%'
 
 
-
 class XTTSConfig(BaseModel):
     voice: str
     language: str
-    sampling_rate: Optional[int] = 24000
 
 
 class ElevenLabsConfig(BaseModel):
     voice: str
     voice_id: str
     model: str
-    sampling_rate: Optional[int] = 16000
+    temperature: Optional[float] = 0.5
+    similarity_boost: Optional[float] = 0.5
 
 
 class OpenAIConfig(BaseModel):
     voice: str
     model: str
-    sampling_rate: Optional[int] =24000
 
 
 class FourieConfig(BaseModel):
@@ -103,6 +100,8 @@ class LLM(BaseModel):
     presence_penalty: Optional[float] = 0.0
     provider: Optional[str] = "openai"
     base_url: Optional[str] = None
+    faqs_caching: Optional[bool] = False
+    faqs: Optional[str] = "" #This should be a json array of format [{"question": "", "answer": ""}]
 
 class MessagingModel(BaseModel):
     provider: str

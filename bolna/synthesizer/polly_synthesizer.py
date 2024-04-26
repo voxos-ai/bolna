@@ -13,7 +13,7 @@ load_dotenv()
 
 class PollySynthesizer(BaseSynthesizer):
     def __init__(self, voice, language, audio_format="pcm", sampling_rate=8000, stream=False, engine="neural",
-                 buffer_size=400, **kwargs):
+                 buffer_size=400, speaking_rate = "100%", volume = "0dB", **kwargs):
         super().__init__(stream, buffer_size)
         self.engine = engine
         self.format = self.get_format(audio_format.lower())
@@ -22,6 +22,8 @@ class PollySynthesizer(BaseSynthesizer):
         self.sample_rate = str(sampling_rate)
         self.client = None
         self.first_chunk_generated = False
+        self.speaking_rate = speaking_rate
+        self.volume = volume
 
     def get_format(self, audio_format):
         if audio_format == "pcm":
@@ -39,11 +41,21 @@ class PollySynthesizer(BaseSynthesizer):
         async with AsyncExitStack() as exit_stack:
             polly = await self.create_client("polly", session, exit_stack)
             logger.info(f"Generating TTS response for text: {text}, SampleRate {self.sample_rate} format {self.format}")
-            input = f'<speak> <amazon:auto-breaths volume= "x-loud" frequency="x-high" duration="x-long"> {text} </amazon:auto-breaths> </speak>'
+            input = f"""
+            <speak> 
+                <amazon:auto-breaths volume= "x-loud" frequency="x-high" duration="x-long"> 
+                    <prosody volume="{self.volume}" rate="{self.speaking_rate}"> {text} 
+                    </prosody> 
+                </amazon:auto-breaths>
+            </speak>
+            """
+
+            logger.info(f"Sending text {input}")
             try:
                 response = await polly.synthesize_speech(
                     Engine=self.engine,
                     Text=input,
+                    TextType='ssml',
                     OutputFormat=self.format,
                     VoiceId=self.voice,
                     LanguageCode=self.language,
