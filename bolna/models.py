@@ -84,6 +84,17 @@ class IOModel(BaseModel):
     def validate_provider(cls, value):
         return validate_attribute(value, ["twilio", "default", "database", "exotel"])
 
+# Can be used to route across multiple prompts as well
+class Route(BaseModel):
+    route_name: str
+    utterances: List[str]
+    response: Union[List[str], str] #If length of responses is less than utterances, a random sentence will be used as a response and if it's equal, respective index will be used to use it as FAQs caching
+    score_threshold: Optional[float] = 0.85 # this is the required threshold for cosine similarity 
+
+# Routes can be used for FAQs caching, prompt routing, guard rails, agent assist function calling
+class Routes(BaseModel):
+    embedding_model: Optional[str] = "Snowflake/snowflake-arctic-embed-l"
+    routes: List[Route]
 
 class LLM(BaseModel):
     model: Optional[str] = "gpt-3.5-turbo-16k"
@@ -100,8 +111,7 @@ class LLM(BaseModel):
     presence_penalty: Optional[float] = 0.0
     provider: Optional[str] = "openai"
     base_url: Optional[str] = None
-    faqs_caching: Optional[bool] = False
-    faqs: Optional[str] = "" #This should be a json array of format [{"question": "", "answer": ""}]
+    routes: Optional[Routes] = None
 
 class MessagingModel(BaseModel):
     provider: str
