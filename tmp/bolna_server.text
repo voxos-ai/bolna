@@ -1,0 +1,11 @@
+redis://localhost:6379
+redis://localhost:6379
+{'uid': '2161e96f-868b-4d04-8e72-a5059f574e06', 'segments': [{'start': '0.000', 'end': '2.000', 'text': ' Hello.'}]}
+{'uid': '2161e96f-868b-4d04-8e72-a5059f574e06', 'segments': [{'start': '0.000', 'end': '2.000', 'text': ' Hello.'}]}
+{'uid': '2161e96f-868b-4d04-8e72-a5059f574e06', 'segments': [{'start': '0.000', 'end': '2.000', 'text': ' Hello.'}]}
+{'uid': '2161e96f-868b-4d04-8e72-a5059f574e06', 'segments': [{'start': '0.000', 'end': '2.000', 'text': ' Hello.'}]}
+{'uid': '2161e96f-868b-4d04-8e72-a5059f574e06', 'segments': [{'start': '0.000', 'end': '2.000', 'text': ' Hello.'}]}
+{'uid': '2161e96f-868b-4d04-8e72-a5059f574e06', 'segments': [{'start': '0.000', 'end': '2.000', 'text': ' Hello.'}]}
+{'uid': '2161e96f-868b-4d04-8e72-a5059f574e06', 'segments': [{'start': '0.000', 'end': '16.395', 'text': ' Hello.'}]}
+{'uid': '2161e96f-868b-4d04-8e72-a5059f574e06', 'message': 'UTTERANCE_END'}
+[{'start': '0.000', 'end': '16.395', 'text': ' Hello.', 'is_final': False}]
