@@ -1,9 +1,6 @@
 import traceback
 from .default import DefaultInputHandler
 import asyncio
-import uvloop
-asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-
 import base64
 import json
 from dotenv import load_dotenv

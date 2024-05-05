@@ -13,11 +13,9 @@ from bolna.providers import *
 from bolna.helpers.utils import calculate_audio_duration, create_ws_data_packet, is_valid_md5, get_raw_audio_bytes_from_base64, \
     get_required_input_types, format_messages, get_prompt_responses, save_audio_file_to_s3, update_prompt_with_context, get_md5_hash, clean_json_string, wav_bytes_to_pcm, write_request_logs, yield_chunks_from_memory
 from bolna.helpers.logger_config import configure_logger
-import uvloop
-asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 
-
+asyncio.get_event_loop().set_debug(True)
 logger = configure_logger(__name__)
 
 
