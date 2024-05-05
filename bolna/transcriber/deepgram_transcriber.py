@@ -14,9 +14,6 @@ from bolna.helpers.logger_config import configure_logger
 from bolna.helpers.utils import create_ws_data_packet, int2float
 from bolna.helpers.vad import VAD
 
-import uvloop
-asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-
 
 torch.set_num_threads(1)
 
@@ -385,6 +382,7 @@ class DeepgramTranscriber(BaseTranscriber):
             self.transcription_task = asyncio.create_task(self.transcribe())
         except Exception as e:
             logger.error(f"not working {e}")
+
     def __calculate_utterance_end(self, data):
         utterance_end = None
         if 'channel' in data and 'alternatives' in data['channel']:

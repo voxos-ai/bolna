@@ -4,10 +4,6 @@ import uuid
 from dotenv import load_dotenv
 from bolna.helpers.logger_config import configure_logger
 
-import asyncio
-import uvloop
-
-
 load_dotenv()
 logger = configure_logger(__name__)
 
@@ -23,10 +19,6 @@ class BaseTranscriber:
         self.last_vocal_frame_time = None
         self.previous_request_id = None
         self.current_request_id = None
-        self.__event_loop = uvloop.new_event_loop()
-        self.__event_loop.set_debug(True)
-        asyncio.set_event_loop(self.__event_loop)
-
 
     def update_meta_info(self):
         self.meta_info['request_id'] = self.current_request_id if self.current_request_id else None
@@ -63,5 +55,3 @@ class BaseTranscriber:
             await ws.send(json.dumps(data))
         except Exception as e:
             logger.error(f"Error while closing transcriber stream {e}")
-    def get_event_loop(self):
-        return self.__event_loop
