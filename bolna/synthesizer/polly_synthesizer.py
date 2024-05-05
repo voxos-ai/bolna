@@ -13,7 +13,7 @@ load_dotenv()
 
 class PollySynthesizer(BaseSynthesizer):
     def __init__(self, voice, language, audio_format="pcm", sampling_rate=8000, stream=False, engine="neural",
-                 buffer_size=400, speaking_rate = "100%", volume = "0dB", **kwargs):
+                 buffer_size=400, speaking_rate = "100%", volume = "0dB", cache= None, **kwargs):
         super().__init__(stream, buffer_size)
         self.engine = engine
         self.format = self.get_format(audio_format.lower())
@@ -24,7 +24,12 @@ class PollySynthesizer(BaseSynthesizer):
         self.first_chunk_generated = False
         self.speaking_rate = speaking_rate
         self.volume = volume
+        self.synthesized_characters = 0
+        self.cache = cache
 
+    def get_synthesized_characters(self):
+        return self.synthesized_characters
+    
     def get_format(self, audio_format):
         if audio_format == "pcm":
             return "pcm"
@@ -37,25 +42,25 @@ class PollySynthesizer(BaseSynthesizer):
         return await exit_stack.enter_async_context(session.create_client(service))
 
     async def __generate_http(self, text):
+        self.synthesized_characters += len(text)
         session = AioSession()
         async with AsyncExitStack() as exit_stack:
             polly = await self.create_client("polly", session, exit_stack)
             logger.info(f"Generating TTS response for text: {text}, SampleRate {self.sample_rate} format {self.format}")
-            input = f"""
-            <speak> 
-                <amazon:auto-breaths volume= "x-loud" frequency="x-high" duration="x-long"> 
-                    <prosody volume="{self.volume}" rate="{self.speaking_rate}"> {text} 
-                    </prosody> 
-                </amazon:auto-breaths>
-            </speak>
-            """
+            # input = f"""
+            # <speak> 
+            #     <amazon:auto-breaths volume= "x-loud" frequency="x-high" duration="x-long"> 
+            #         <prosody volume="{self.volume}" rate="{self.speaking_rate}"> {text} 
+            #         </prosody> 
+            #     </amazon:auto-breaths>
+            # </speak>
+            # """
 
             logger.info(f"Sending text {input}")
             try:
                 response = await polly.synthesize_speech(
                     Engine=self.engine,
-                    Text=input,
-                    TextType='ssml',
+                    Text=text,
                     OutputFormat=self.format,
                     VoiceId=self.voice,
                     LanguageCode=self.language,
@@ -81,6 +86,11 @@ class PollySynthesizer(BaseSynthesizer):
             message = await self.internal_queue.get()
             logger.info(f"Generating TTS response for message: {message}")
             meta_info, text = message.get("meta_info"), message.get("data")
+            if self.cache.get(text):
+                logger.info(f"Cache hit and hence returning quickly {text}")
+                message = self.cache[text]
+            else:
+                logger.info(f"Not a cache hit {list(self.cache.data_dict)}")
             message = await self.__generate_http(text)
             if self.format == "mp3":
                 message = convert_audio_to_wav(message, source_format="mp3")

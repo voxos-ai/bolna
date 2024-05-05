@@ -314,6 +314,7 @@ class TaskManager(BaseManager):
 
     def __setup_synthesizer(self, llm_config):
         self.synthesizer_cache = InmemoryScalarCache()
+        
         logger.info(f"Synthesizer config: {self.task_config['tools_config']['synthesizer']}")
         if self._is_conversation_task():
             self.kwargs["use_turbo"] = self.task_config["tools_config"]["transcriber"]["language"] == "en"
@@ -325,7 +326,7 @@ class TaskManager(BaseManager):
                 self.task_config["tools_config"]["synthesizer"]["audio_format"] = "mp3" # Hard code mp3 if we're connected through dashboard
                 self.task_config["tools_config"]["synthesizer"]["stream"] = True if self.enforce_streaming else False #Hardcode stream to be False as we don't want to get blocked by a __listen_synthesizer co-routine
         
-            self.tools["synthesizer"] = synthesizer_class(**self.task_config["tools_config"]["synthesizer"], **provider_config, **self.kwargs)
+            self.tools["synthesizer"] = synthesizer_class(**self.task_config["tools_config"]["synthesizer"], **provider_config, **self.kwargs, cache = self.synthesizer_cache)
             if self.task_config["tools_config"]["llm_agent"] is not None:
                 llm_config["buffer_size"] = self.task_config["tools_config"]["synthesizer"].get('buffer_size')
 
@@ -656,7 +657,6 @@ class TaskManager(BaseManager):
                 logger.info(f"Route {route} has a vector cache")
                 relevant_utterance = self.vector_caches[route].get(message['data'])
                 cache_response = self.route_responses_dict[route][relevant_utterance]
-                logger.info(f"Cached response {cache_response}")
                 self.__convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["model"])
                 self.__convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="response", model=self.task_config["tools_config"]["llm_agent"]["model"])
                 messages = copy.deepcopy(self.history)
@@ -673,8 +673,10 @@ class TaskManager(BaseManager):
             
             logger.info(f"Cached response {cache_response}")
             meta_info['cached'] = True
+            meta_info["end_of_llm_stream"] = True
                 
             await self._handle_llm_output(next_step, cache_response, should_bypass_synth, meta_info)
+            self.llm_processed_request_ids.add(self.current_request_id)
         else:
             messages = copy.deepcopy(self.history)
             messages.append({'role': 'user', 'content': message['data']})
@@ -1064,18 +1066,19 @@ class TaskManager(BaseManager):
             audio_chunk = await get_raw_audio_bytes_from_md5(self.assistant_name, text,
                                                             'pcm', local=self.is_local,
                                                             assistant_id=self.assistant_id)
-
+            
             if not self.buffered_output_queue.empty():
                 logger.info(f"Output queue was not empty and hence emptying it")
                 self.buffered_output_queue = asyncio.Queue()
 
             if self.yield_chunks:
-                for chunk in yield_chunks_from_memory(audio_chunk, chunk_size=16384):
+                for chunk in yield_chunks_from_memory(audio_chunk, chunk_size=self.output_chunk_size):
                     logger.debug("Sending chunk to output queue")
                     message = create_ws_data_packet(chunk, meta_info)
                     self.buffered_output_queue.put_nowait(message)
             else:
                 message = create_ws_data_packet(audio_chunk, meta_info)
+                logger.info(f"Yield in chunks is false and hence sending a full")
                 self.buffered_output_queue.put_nowait(message)
 
     async def _synthesize(self, message):
@@ -1095,9 +1098,11 @@ class TaskManager(BaseManager):
                     self.__convert_to_request_log(message = text, meta_info= meta_info, component="synthesizer", direction="request", model = self.synthesizer_provider)
                     logger.info('##### sending text to {} for generation: {} '.format(self.synthesizer_provider, text))
                     if 'cached' in message['meta_info'] and meta_info['cached'] == True:
+                        logger.info(f"Cached response and hence sending preprocessed text")
                         await self.__send_preprocessed_audio(meta_info, get_md5_hash(text))
-                    self.synthesizer_characters += len(text)
-                    await self.tools["synthesizer"].push(message)
+                    else:
+                        self.synthesizer_characters += len(text)
+                        await self.tools["synthesizer"].push(message)
                 else:
                     logger.info("other synthesizer models not supported yet")
             else:
@@ -1210,7 +1215,7 @@ class TaskManager(BaseManager):
                     # Sleep until this particular audio frame is spoken only if the duration for the frame is atleast 500ms
                     if duration > 0:
                         logger.info(f"##### Sleeping for {duration} to maintain quueue on our side {self.sampling_rate}")
-                        await asyncio.sleep(duration) #30 milliseconds less
+                        await asyncio.sleep(duration - 0.010) #10 milliseconds less
                         
 
                     
@@ -1311,7 +1316,7 @@ class TaskManager(BaseManager):
                 output = {"messages": self.history, "conversation_time": time.time() - self.start_time,
                           "label_flow": self.label_flow, "call_sid": self.call_sid, "stream_sid": self.stream_sid,
                           "transcriber_duration": self.transcriber_duration,
-                          "synthesizer_characters": self.synthesizer_characters, "ended_by_assistant": self.ended_by_assistant,
+                          "synthesizer_characters": self.tools['synthesizer'].get_synthesized_characters(), "ended_by_assistant": self.ended_by_assistant,
                           "latency_dict": self.latency_dict}
 
                 if self.should_record:
