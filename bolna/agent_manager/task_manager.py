@@ -1,6 +1,7 @@
 import asyncio
 from collections import defaultdict
 import os
+import random
 import traceback
 import time
 import json
@@ -13,8 +14,8 @@ from bolna.memory.cache.vector_cache import VectorCache
 from .base_manager import BaseManager
 from bolna.agent_types import *
 from bolna.providers import *
-from bolna.helpers.utils import calculate_audio_duration, create_ws_data_packet, get_raw_audio_bytes_from_md5, is_valid_md5, \
-    get_required_input_types, format_messages, get_prompt_responses, save_audio_file_to_s3, update_prompt_with_context, get_md5_hash, clean_json_string, wav_bytes_to_pcm, write_request_logs, yield_chunks_from_memory
+from bolna.helpers.utils import calculate_audio_duration, create_ws_data_packet, get_file_names_in_directory, get_raw_audio_bytes, is_valid_md5, \
+    get_required_input_types, format_messages, get_prompt_responses, list_number_of_wav_files_in_directory, resample, save_audio_file_to_s3, update_prompt_with_context, get_md5_hash, clean_json_string, wav_bytes_to_pcm, write_request_logs, yield_chunks_from_memory
 from bolna.helpers.logger_config import configure_logger
 import uvloop
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
@@ -117,7 +118,8 @@ class TaskManager(BaseManager):
         self.is_an_ivr_call = self._is_conversation_task() and self._is_preprocessed_flow() and not self.connected_through_dashboard
         self.consider_next_transcript_after = time.time()
         self.duration_to_prevent_accidental_interruption = 3 if self.is_an_ivr_call else 0
-        # self.callee_speaking = False
+        self.callee_speaking = False
+        self.callee_speaking_start_time = -1
 
         # Call conversations
         self.call_sid = None
@@ -165,6 +167,7 @@ class TaskManager(BaseManager):
         #Setup tasks
         self.__setup_tasks(llm)
 
+
         #setup request logs
         self.request_logs = []
 
@@ -206,7 +209,23 @@ class TaskManager(BaseManager):
             self.route_layer = None
             if self.routes:
                 self.__setup_routes(self.routes)
-    
+        
+        #Backchanneling
+        self.should_backchannel = task.get("backchanneling", True)
+        self.backchanneling_task = None
+        self.backchanneling_start_delay = task.get("backchanneling_start_delay", 5)
+        self.backchanneling_message_gap = task.get("backchanneling_message_gap", 2) #Amount of duration co routine will sleep
+        if self.should_backchannel:
+            logger.info(f"Should backchannel")
+            self.backchanneling_audios = f'{kwargs.get("backchanneling_audio_location", os.getenv("BACKCHANNELING_PRESETS_DIR"))}/{self.synthesizer_voice.lower()}'
+            #self.num_files = list_number_of_wav_files_in_directory(self.backchanneling_audios)
+            self.filenames = get_file_names_in_directory(self.backchanneling_audios)
+            logger.info(f"Backchanneling audio location {self.backchanneling_audios}")
+        else:
+            logger.info(f"Not setting up backchanneling")
+            self.backchanneling_audio_map = []
+            
+            
     def __setup_routes(self, routes):
         embedding_model = routes.get("embedding_model", os.getenv("ROUTE_EMBEDDING_MODEL"))
         self.route_encoder = FastEmbedEncoder(name=embedding_model)
@@ -322,6 +341,7 @@ class TaskManager(BaseManager):
             self.synthesizer_provider = self.task_config["tools_config"]["synthesizer"].pop("provider")
             synthesizer_class = SUPPORTED_SYNTHESIZER_MODELS.get(self.synthesizer_provider)
             provider_config = self.task_config["tools_config"]["synthesizer"].pop("provider_config")
+            self.synthesizer_voice = provider_config["voice"]
             if self.connected_through_dashboard:
                 self.task_config["tools_config"]["synthesizer"]["audio_format"] = "mp3" # Hard code mp3 if we're connected through dashboard
                 self.task_config["tools_config"]["synthesizer"]["stream"] = True if self.enforce_streaming else False #Hardcode stream to be False as we don't want to get blocked by a __listen_synthesizer co-routine
@@ -836,8 +856,8 @@ class TaskManager(BaseManager):
                     next_task = self._get_next_step(sequence, "transcriber")
                     num_words = 0
                     if message['data'] == "TRANSCRIBER_BEGIN":
-                        self.callee_silent = False
                         response_started = False #This signifies if we've gotten the first bit of interim text for the given response or not
+                        self.callee_silent = False
                         if self.nitro:
                             logger.info(f"Just a nitro thingy")
                             should_interrupt = meta_info.get("should_interrupt", True)
@@ -857,7 +877,8 @@ class TaskManager(BaseManager):
                             await self.process_interruption()
                     elif "speech_final" in meta_info and meta_info['speech_final'] and message['data'] != "":
                         logger.info(f"Starting the TRANSCRIBER_END TASK")
-
+                        self.callee_speaking = False
+                        self.callee_silent = True
                         if self.output_task is None:
                             logger.info(f"Output task was none and hence starting it")
                             self.output_task = asyncio.create_task(self.__process_output_loop())
@@ -869,7 +890,6 @@ class TaskManager(BaseManager):
                         if self.llm_response_generated:
                             logger.info(f"LLM RESPONSE WAS GENERATED AND HENCE MOVING INTERIM HISTORY TO HISTORY")
                             self.history = copy.deepcopy(self.interim_history)
-                        self.callee_silent = True    
                         meta_info = message['meta_info']
                         transcriber_message = ""
                         self.let_remaining_audio_pass_through = True 
@@ -889,7 +909,9 @@ class TaskManager(BaseManager):
                         elif len(message['data'].strip()) != 0:
                             #Currently simply cancel the next task
                             num_words += len(message['data'].split(" "))
-
+                            if self.callee_speaking is False:
+                                self.callee_speaking_start_time = time.time()
+                                self.callee_speaking = True
                             # if self.started_transmitting_audio:
                             #     # Ideally is we are transmitting, we want to wait for x seconds here to make sure if we interrupt or not 
                             #     # So, we send a clear message for sure but use a variable to make sure that we wait 
@@ -1056,14 +1078,14 @@ class TaskManager(BaseManager):
         #TODO: Either load IVR audio into memory before call or user s3 iter_cunks
         # This will help with interruption in IVR
         if self.connected_through_dashboard or self.task_config['tools_config']['output'] == "default":
-            audio_chunk = await get_raw_audio_bytes_from_md5(self.assistant_name, text,
+            audio_chunk = await get_raw_audio_bytes(text, self.assistant_name,
                                                             self.task_config["tools_config"]["output"][
                                                                 "format"], local=self.is_local,
                                                             assistant_id=self.assistant_id)
             logger.info("Sending preprocessed audio")
             await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
         else:
-            audio_chunk = await get_raw_audio_bytes_from_md5(self.assistant_name, text,
+            audio_chunk = await get_raw_audio_bytes( text, self.assistant_name,
                                                             'pcm', local=self.is_local,
                                                             assistant_id=self.assistant_id)
             
@@ -1241,7 +1263,19 @@ class TaskManager(BaseManager):
                 break
             else:
                 logger.info(f"Only {time_since_last_spoken_AI_word} seconds since last spoken time stamp and hence cutting the phone call and hence not cutting the phone call")
-            
+    
+    async def __check_for_backchanneling(self):
+        while True:
+            if self.callee_speaking and time.time() - self.callee_speaking_start_time > self.backchanneling_start_delay:
+                filename = random.choice(self.filenames)
+                logger.info(f"Should send a random backchanneling words and sending them {filename}")
+                audio = await get_raw_audio_bytes(f"{self.backchanneling_audios}/{filename}", local= True, is_location=True)
+                if not self.connected_through_dashboard and self.task_config['tools_config']['output'] != "default":
+                    audio = resample(audio, target_sample_rate= 8000, format="wav")
+                await self.tools["output"].handle(create_ws_data_packet(audio, self.__get_updated_meta_info())) 
+            else:
+                logger.info(f"Callee isn't speaking and hence not sending or {time.time() - self.callee_speaking_start_time} is not greater than {self.backchanneling_start_delay}") 
+            await asyncio.sleep(self.backchanneling_message_gap) 
     async def run(self):
         try:
             if self.task_id == 0:
@@ -1269,7 +1303,9 @@ class TaskManager(BaseManager):
                 if self._is_conversation_task():
                     self.output_task = asyncio.create_task(self.__process_output_loop())
                     if not self.use_llm_to_determine_hangup and not self.connected_through_dashboard :
-                        self.hangup_task = asyncio.create_task(self.__check_for_completion())   
+                        self.hangup_task = asyncio.create_task(self.__check_for_completion())
+                    if not self.connected_through_dashboard and self.should_backchannel:
+                        self.backchanneling_task = asyncio.create_task(self.__check_for_backchanneling())
                 try:
                     await asyncio.gather(*tasks)
                 except asyncio.CancelledError as e:
@@ -1311,6 +1347,9 @@ class TaskManager(BaseManager):
             
             if self._is_conversation_task():
                 self.output_task.cancel()
+            
+            if self._is_conversation_task() and self.backchanneling_task is not None:
+                self.backchanneling_task.cancel()
             
             if self.task_id == 0:
                 output = {"messages": self.history, "conversation_time": time.time() - self.start_time,
