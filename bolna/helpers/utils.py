@@ -181,16 +181,23 @@ async def store_file(bucket_name=None, file_key=None, file_data=None, content_ty
                 f.write(data)
 
 
-async def get_raw_audio_bytes_from_base64(agent_name, b64_string, audio_format='mp3', assistant_id=None, local = False):
+async def get_raw_audio_bytes(filename, agent_name = None, audio_format='mp3', assistant_id=None, local = False, is_location = False):
     # we are already storing pcm formatted audio in the filler config. No need to encode/decode them further
     audio_data = None
     if local:
-        file_name = f"{PREPROCESS_DIR}/{agent_name}/{audio_format}/{b64_string}.{audio_format}"
+        if not is_location:
+            file_name = f"{PREPROCESS_DIR}/{agent_name}/{audio_format}/{filename}.{audio_format}"
+        else:
+            file_name = filename
         with open(file_name, 'rb') as file:
             # Read the entire file content into a variable
             audio_data = file.read()
     else:
-        object_key = f"{assistant_id}/audio/{b64_string}.{audio_format}"
+        if not is_location:
+            object_key = f"{assistant_id}/audio/{filename}.{audio_format}"
+        else:
+            object_key = filename
+            
         logger.info(f"Reading {object_key}")
         audio_data = await get_s3_file(BUCKET_NAME, object_key)
 
@@ -481,3 +488,14 @@ async def save_audio_file_to_s3(conversation_recording, sampling_rate = 24000, a
     await store_file(bucket_name=RECORDING_BUCKET_NAME, file_key=key, file_data=audio_buffer, content_type="wav")
     
     return f'{RECORDING_BUCKET_URL}{key}'
+
+def list_number_of_wav_files_in_directory(directory):
+    count = 0
+    for filename in os.listdir(directory):
+        if filename.endswith(".mp3") or filename.endswith(".wav") or filename.endswith(".ogg"):
+            count += 1
+    return count
+
+def get_file_names_in_directory(directory):
+    return os.listdir(directory)
+

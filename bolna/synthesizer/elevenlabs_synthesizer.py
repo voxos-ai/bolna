@@ -17,7 +17,8 @@ logger = configure_logger(__name__)
 
 class ElevenlabsSynthesizer(BaseSynthesizer):
     def __init__(self, voice, voice_id, model="eleven_multilingual_v1", audio_format="mp3", sampling_rate="16000",
-                 stream=False, buffer_size=400, synthesier_key=None, **kwargs):
+                 stream=False, buffer_size=400, temperature = 0.5, similarity_boost = 0.5, synthesier_key=None, 
+                 cache=None, **kwargs):
         super().__init__(stream)
         self.api_key = os.environ["ELEVENLABS_API_KEY"] if synthesier_key is None else synthesier_key
         self.voice = voice_id
@@ -36,20 +37,15 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         self.last_text_sent = False
         self.text_queue = deque()
         self.meta_info = None
+        self.temperature = temperature
+        self.similarity_boost = similarity_boost
+        self.cache = cache
+        self.synthesized_characters = 0
 
     # Ensuring we only do wav output for now
     def get_format(self, format, sampling_rate):
         # Eleven labs only allow mp3_44100_64, mp3_44100_96, mp3_44100_128, mp3_44100_192, pcm_16000, pcm_22050,
         # pcm_24000, ulaw_8000
-        """Get the audio format and sampling rate for the audio file.
-        Parameters:
-            - format (str): The desired audio format.
-            - sampling_rate (int): The desired sampling rate.
-        Returns:
-            - str: The audio format and sampling rate for the audio file.
-        Processing Logic:
-            - Return ulaw_8000 if self.use_mulaw is True.
-            - Otherwise, return mp3_44100_128."""
         if self.use_mulaw:
             return "ulaw_8000"
         return f"mp3_44100_128"
@@ -66,8 +62,8 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
             bos_message = {
                 "text": " ",
                 "voice_settings": {
-                    "stability": 0.5,
-                    "similarity_boost": 0.5
+                    "stability": self.temperature,
+                    "similarity_boost": self.similarity_boost
                 },
                 "xi_api_key": self.api_key,
             }
@@ -147,6 +143,9 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         response = await self.__send_payload(payload, format=format)
         return response
 
+    def get_synthesized_characters(self):
+        return self.synthesized_characters
+
     # Currently we are only supporting wav output but soon we will incorporate conver
     async def generate(self):
         try:
@@ -187,8 +186,16 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                     message = await self.internal_queue.get()
                     logger.info(f"Generating TTS response for message: {message}")
                     meta_info, text = message.get("meta_info"), message.get("data")
-                    audio = await self.__generate_http(text)
-
+                    if self.cache.get(text):
+                        logger.info(f"Cache hit and hence returning quickly {text}")
+                        message = self.cache.get(text)
+                    else:
+                        c = len(text)
+                        self.synthesized_characters += c
+                        logger.info(f"Not a cache hit {list(self.cache.data_dict)} and hence increasing characters by {c}")
+                        audio = await self.__generate_http(text)
+                        self.cache.set(text, audio)
+                        
                     meta_info['text'] = text
                     if not self.first_chunk_generated:
                         meta_info["is_first_chunk"] = True
@@ -203,6 +210,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                     else:
                         meta_info['format'] = "wav"
                         wav_bytes = convert_audio_to_wav(audio, source_format="mp3")
+                        logger.info(f"self.sampling_rate {self.sampling_rate}")
                         audio = resample(wav_bytes, int(self.sampling_rate), format="wav")
                     yield create_ws_data_packet(audio, meta_info)
 
