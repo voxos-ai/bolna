@@ -219,8 +219,12 @@ class TaskManager(BaseManager):
             logger.info(f"Should backchannel")
             self.backchanneling_audios = f'{kwargs.get("backchanneling_audio_location", os.getenv("BACKCHANNELING_PRESETS_DIR"))}/{self.synthesizer_voice.lower()}'
             #self.num_files = list_number_of_wav_files_in_directory(self.backchanneling_audios)
-            self.filenames = get_file_names_in_directory(self.backchanneling_audios)
-            logger.info(f"Backchanneling audio location {self.backchanneling_audios}")
+            try:
+                self.filenames = get_file_names_in_directory(self.backchanneling_audios)
+                logger.info(f"Backchanneling audio location {self.backchanneling_audios}")
+            except Exception as e:
+                logger.info(f"Something went wrong an putting should backchannel to false")
+                self.should_backchannel = False
         else:
             logger.info(f"Not setting up backchanneling")
             self.backchanneling_audio_map = []
