@@ -13,8 +13,6 @@ from .base_transcriber import BaseTranscriber
 from bolna.helpers.logger_config import configure_logger
 from bolna.helpers.utils import create_ws_data_packet
 
-import uvloop
-asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 torch.set_num_threads(1)
 
 logger = configure_logger(__name__)
@@ -37,13 +35,14 @@ class DeepgramTranscriber(BaseTranscriber):
         self.sampling_rate = 16000
         self.encoding = encoding
         self.api_key = kwargs.get("transcriber_key", os.getenv('DEEPGRAM_AUTH_TOKEN'))
+        self.deepgram_host = os.getenv('DEEPGRAM_HOST', 'api.deepgram.com')
         self.transcriber_output_queue = output_queue
         self.transcription_task = None
         self.keywords = keywords
         logger.info(f"self.stream: {self.stream}")
         self.interruption_signalled = False
         if not self.stream:
-            self.api_url = f"https://api.deepgram.com/v1/listen?model=nova-2&filler_words=true&language={self.language}"
+            self.api_url = f"https://{self.deepgram_host}/v1/listen?model=nova-2&filler_words=true&language={self.language}"
             self.session = aiohttp.ClientSession()
             if self.keywords is not None:
                 keyword_string = "&keywords=" + "&keywords=".join(self.keywords.split(","))
@@ -98,7 +97,7 @@ class DeepgramTranscriber(BaseTranscriber):
         if self.keywords and len(self.keywords.split(",")) > 0:
             dg_params['keywords'] = "&keywords=".join(self.keywords.split(","))
 
-        websocket_api = 'wss://api.deepgram.com/v1/listen?'
+        websocket_api = 'wss://{}/v1/listen?'.format(self.deepgram_host)
         websocket_url = websocket_api + urlencode(dg_params)
         logger.info(f"Deepgram websocket url: {websocket_url}")
         return websocket_url
@@ -303,6 +302,7 @@ class DeepgramTranscriber(BaseTranscriber):
             self.transcription_task = asyncio.create_task(self.transcribe())
         except Exception as e:
             logger.error(f"not working {e}")
+
     def __calculate_utterance_end(self, data):
         utterance_end = None
         if 'channel' in data and 'alternatives' in data['channel']:

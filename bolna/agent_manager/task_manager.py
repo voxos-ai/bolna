@@ -23,6 +23,7 @@ from semantic_router import Route
 from semantic_router.layer import RouteLayer
 from semantic_router.encoders import FastEmbedEncoder
 
+asyncio.get_event_loop().set_debug(True)
 logger = configure_logger(__name__)
 
 
