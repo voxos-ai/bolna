@@ -6,7 +6,7 @@ fastembed==0.2.7
 litellm==1.15.7
 numpy==1.26.1
 openai==1.10.0
-pydantic==2.5
+pydantic==2.5.3
 pydub==0.25.1
 python-dateutil==2.8.2
 python-dotenv==1.0.0
