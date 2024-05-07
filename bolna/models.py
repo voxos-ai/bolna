@@ -13,27 +13,27 @@ def validate_attribute(value, allowed_values):
 class PollyConfig(BaseModel):
     voice: str
     engine: str
-    sampling_rate: Optional[str] = "16000"
     language: str
+    # volume: Optional[str] = '0dB'
+    # rate: Optional[str] = '100%'
 
 
 class XTTSConfig(BaseModel):
     voice: str
     language: str
-    sampling_rate: Optional[str] ="24000"
 
 
 class ElevenLabsConfig(BaseModel):
     voice: str
     voice_id: str
     model: str
-    sampling_rate: Optional[str] = "16000"
+    temperature: Optional[float] = 0.5
+    similarity_boost: Optional[float] = 0.5
 
 
 class OpenAIConfig(BaseModel):
     voice: str
     model: str
-    sampling_rate: Optional[str] ="24000"
 
 
 class FourieConfig(BaseModel):
@@ -84,13 +84,22 @@ class IOModel(BaseModel):
     def validate_provider(cls, value):
         return validate_attribute(value, ["twilio", "default", "database", "exotel"])
 
+# Can be used to route across multiple prompts as well
+class Route(BaseModel):
+    route_name: str
+    utterances: List[str]
+    response: Union[List[str], str] #If length of responses is less than utterances, a random sentence will be used as a response and if it's equal, respective index will be used to use it as FAQs caching
+    score_threshold: Optional[float] = 0.85 # this is the required threshold for cosine similarity 
+
+# Routes can be used for FAQs caching, prompt routing, guard rails, agent assist function calling
+class Routes(BaseModel):
+    embedding_model: Optional[str] = "Snowflake/snowflake-arctic-embed-l"
+    routes: List[Route]
 
 class LLM(BaseModel):
-    streaming_model: Optional[str] = "gpt-3.5-turbo-16k"
-    classification_model: Optional[str] = "gpt-4"
+    model: Optional[str] = "gpt-3.5-turbo-16k"
     max_tokens: Optional[int] = 100
     agent_flow_type: Optional[str] = "streaming"
-    use_fallback: Optional[bool] = False
     family: Optional[str] = "openai"
     temperature: Optional[float] = 0.1
     request_json: Optional[bool] = False
@@ -98,8 +107,11 @@ class LLM(BaseModel):
     top_k: Optional[int] = 0
     top_p: Optional[float] = 0.9
     min_p: Optional[float] = 0.1
-    frequency_penalty: Optional[float] = 0.0  
+    frequency_penalty: Optional[float] = 0.0
     presence_penalty: Optional[float] = 0.0
+    provider: Optional[str] = "openai"
+    base_url: Optional[str] = None
+    routes: Optional[Routes] = None
 
 class MessagingModel(BaseModel):
     provider: str

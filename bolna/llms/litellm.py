@@ -11,13 +11,12 @@ load_dotenv()
 
 
 class LiteLLM(BaseLLM):
-    def __init__(self, streaming_model, max_tokens=30, buffer_size=40,
-                 classification_model=None, temperature=0.0, **kwargs):
+    def __init__(self, model, max_tokens=30, buffer_size=40,
+                 temperature=0.0, **kwargs):
         super().__init__(max_tokens, buffer_size)
-        self.model = streaming_model
+        self.model = model
         self.started_streaming = False
         self.model_args = {"max_tokens": max_tokens, "temperature": temperature, "model": self.model}
-
         self.api_key = kwargs.get("llm_key", os.getenv('LITELLM_MODEL_API_KEY'))
         self.api_base = kwargs.get("base_url", os.getenv('LITELLM_MODEL_API_BASE'))
         self.api_version = kwargs.get("api_version", os.getenv('LITELLM_MODEL_API_VERSION'))
@@ -46,7 +45,6 @@ class LiteLLM(BaseLLM):
                 self.model_args["api_key"] = kwargs["llm_key"]
             if "api_version" in kwargs:
                 self.model_args["api_version"] = kwargs["api_version"]
-        self.classification_model = classification_model
 
     async def generate_stream(self, messages, synthesize=True):
         answer, buffer = "", ""
@@ -78,10 +76,10 @@ class LiteLLM(BaseLLM):
         self.started_streaming = False
         logger.info(f"Time to generate response {time.time() - start_time}")
 
-    async def generate(self, messages, classification_task=False, stream=False, synthesize=True, request_json=False):
+    async def generate(self, messages, stream=False, request_json=False):
         text = ""
         model_args = self.model_args.copy()
-        model_args["model"] = self.classification_model if classification_task is True else self.model
+        model_args["model"] = self.model
         model_args["messages"] = messages
         model_args["stream"] = stream
 

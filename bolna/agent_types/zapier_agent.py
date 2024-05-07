@@ -12,20 +12,24 @@ class ZapierAgent(BaseAgent):
         self.payload = payload or {}
 
     async def __send_payload(self, payload):
-        logger.info(f"Sending a zapier post request {payload}")
-        async with aiohttp.ClientSession() as session:
-            if payload is not None:
-                async with session.post(self.zap_url, json=payload) as response:
-                    if response.status == 200:
-                        # need to check if the returned response is json or not
-                        #data = await response.json()
-                        return True
-                    else:
-                        logger.error(f"Error: {response.status} - {await response.text()}")
-                        return None
-            else:
-                logger.info("Payload was null")
-        return None
+        try:
+            logger.info(f"Sending a zapier post request {payload}")
+            async with aiohttp.ClientSession() as session:
+                if payload is not None:
+                    async with session.post(self.zap_url, json=payload) as response:
+                        if response.status == 200:
+                            # need to check if the returned response is json or not
+                            #data = await response.json()
+                            return True
+                        else:
+                            logger.error(f"Error: {response.status} - {await response.text()}")
+                            return None
+                else:
+                    logger.info("Payload was null")
+            return None
+        except Exception as e:
+            logger.error(f"Something went wrong with webhook {self.zap_url}, {payload}")
+
 
     async def execute(self, payload):
         if not self.zap_url:

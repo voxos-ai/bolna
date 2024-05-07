@@ -12,11 +12,11 @@ class SummarizationContextualAgent(BaseAgent):
         self.is_inference_on = False
         self.has_intro_been_sent = False
 
-    async def generate(self, history, stream=True, synthesize=False):
+    async def generate(self, history):
         summary = ""
         logger.info("extracting json from the previous conversation data")
         try:
-            summary = await self.llm.generate(history, stream=False, synthesize=False, request_json=False)
+            summary = await self.llm.generate(history, request_json=False)
             logger.info(f"summary {summary}")
         except Exception as e:
             import traceback
