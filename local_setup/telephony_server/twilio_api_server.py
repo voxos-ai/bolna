@@ -63,6 +63,7 @@ async def make_call(request: Request):
         websocket_url = os.getenv('WEBSOCKET_URL')
 
         if os.getenv('ENVIRONMENT') == 'local':
+            print('populating ngrok tunnel: local enviromment selected')
             app_callback_url, websocket_url = populate_ngrok_tunnels()
 
         print(f'app_callback_url: {app_callback_url}')
