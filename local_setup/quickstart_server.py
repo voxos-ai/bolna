@@ -12,6 +12,7 @@ from bolna.helpers.logger_config import configure_logger
 from bolna.models import *
 from bolna.llms import LiteLLM
 from bolna.agent_manager.assistant_manager import AssistantManager
+from fastapi.responses import JSONResponse
 
 load_dotenv()
 logger = configure_logger(__name__)
@@ -65,6 +66,47 @@ async def create_agent(agent_data: CreateAgentPayload):
 
     return {"agent_id": agent_uuid, "state": "created"}
 
+@app.get("/agent/all")
+async def get_all_agents():
+    agent_ids = await redis_client.keys()
+    agents_data = []
+    for agent_id in agent_ids:
+        agent_config = await redis_client.get(agent_id)
+        if agent_config:
+            agent_config = json.loads(agent_config)
+            agents_data.append(agent_config)
+
+    return JSONResponse(content=agents_data, status_code=200)
+
+
+@app.get("/agent/{agent_id}")
+async def get_agent(agent_id: str):
+    try:
+        print(redis_client.keys())
+        retrieved_agent_config = await redis_client.get(agent_id)
+        if retrieved_agent_config:
+            agent_config = json.loads(retrieved_agent_config)
+            return JSONResponse(content=agent_config, status_code=200)
+        else:
+            return JSONResponse(content={"message": "Agent not found"}, status_code=404)
+    except Exception as e:
+        return JSONResponse(content={"message": str(e)}, status_code=500)
+
+
+
+@app.put("/agent/{agent_id}")
+async def update_agent(agent_id: str, agent_data: AgentModel):
+    try:
+        retrieved_agent_config = await redis_client.get(agent_id)
+        if retrieved_agent_config:
+            agent_config = json.loads(retrieved_agent_config)
+            agent_config.update({key: value for key, value in agent_data.model_dump().items()})
+            await redis_client.set(agent_id, json.dumps(dict(agent_config)))
+            return JSONResponse(content={"message": "Agent updated successfully"}, status_code=200)
+        else:
+            return JSONResponse(content={"message": "Agent not found"}, status_code=404)
+    except Exception as e:
+        return JSONResponse(content={"message": str(e)}, status_code=500)
 
 ############################################################################################# 
 # Websocket 

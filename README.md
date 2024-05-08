@@ -67,7 +67,7 @@ Once you have the above docker setup and running, you can create agents and init
 ## Using your own providers
 You can populate the `.env` file to use your own keys for providers.
 
-<details open>
+<details>
 
 <summary>ASR Providers</summary><br>
 These are the current supported ASRs Providers:
@@ -79,7 +79,7 @@ These are the current supported ASRs Providers:
 </details>
 &nbsp;<br>
 
-<details open>
+<details>
 <summary>LLM Providers</summary><br>
 Bolna uses LiteLLM package to support multiple LLM integrations.
 
@@ -87,9 +87,8 @@ These are the current supported LLM Provider Family:
 https://github.com/bolna-ai/bolna/blob/c8a0d1428793d4df29133119e354bc2f85a7ca76/bolna/providers.py#L19-L28
 
 For LiteLLM based LLMs, add either of the following to the `.env` file depending on your use-case:<br><br>
-`LITELLM_MODEL_API_KEY`: API Key of the LLM<br>
-`LITELLM_MODEL_API_BASE`: URL of the hosted LLM<br>
-`LITELLM_MODEL_API_VERSION`: API VERSION for LLMs like Azure
+`LITELLM_MODEL_API_BASE`: API Key of the LLM<br>
+`LITELLM_MODEL_API_BASE`: URL of the hosted LLM
 
 For LLMs hosted via VLLM, add the following to the `.env` file:<br>
 `VLLM_SERVER_BASE_URL`: URL of the hosted LLM using VLLM
@@ -97,7 +96,7 @@ For LLMs hosted via VLLM, add the following to the `.env` file:<br>
 </details>
 &nbsp;<br>
 
-<details open>
+<details>
 
 <summary>TTS Providers</summary><br>
 These are the current supported TTS Providers:
