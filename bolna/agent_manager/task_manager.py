@@ -209,8 +209,18 @@ class TaskManager(BaseManager):
             self.routes = task['tools_config']['llm_agent'].get("routes", None)
             self.route_layer = None
             if self.routes:
-                self.__setup_routes(self.routes)
-        
+                start_time = time.time()
+                routes_meta = self.kwargs.get('routes', None)
+                if self.kwargs['routes']:
+                    self.route_encoder = routes_meta["route_encoder"]
+                    self.vector_caches = routes_meta["vector_caches"]
+                    self.route_responses_dict = routes_meta["route_responses_dict"]
+                    self.route_layer = routes_meta["route_layer"]
+                    logger.info(f"Time to setup routes from warrmed up cache {time.time() - start_time}")
+                else:
+                    self.__setup_routes(self.routes)
+                    logger.info(f"Time to setup routes {time.time() - start_time}")
+
         #Backchanneling
         self.should_backchannel = task.get("backchanneling", True)
         self.backchanneling_task = None
