@@ -1,1 +1,0 @@
-ython3 BolnaServer.py 2>&1 | tee logs.txt

@@ -1,0 +1,51 @@
+# pyproject.toml
+
+[build-system]
+requires      = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bolna"
+version = "0.7.7"
+readme = "README.md"
+authors = [
+    { name = "Prateek Sachan", email = "ps@prateeksachan.com" }
+]
+license = { file = "LICENSE" }
+classifiers = [
+    "License :: OSI Approved :: GNU Affero General Public License v3",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+]
+dynamic = ["dependencies"]
+requires-python = ">=3.8"
+
+[project.optional-dependencies]
+dev = ["pip-tools"]
+
+[tool.setuptools]
+package-dir = {"bolna" = "bolna"}
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.bumpver]
+current_version = "0.7.7"
+version_pattern = "MAJOR.MINOR.PATCH"
+commit_message = "bump bolna version {old_version} -> {new_version}"
+tag_message = "bolna-{new_version}"
+tag_scope = "default"
+pre_commit_hook = ""
+post_commit_hook = ""
+commit = true
+tag = true
+push = false
+
+[tool.bumpver.file_patterns]
+"pyproject.toml" = [
+    'current_version = "{version}"',
+    'version = "{version}"',
+]
+"bolna/__init__.py" = [
+    '^__version__ = "{version}"$',
+]
