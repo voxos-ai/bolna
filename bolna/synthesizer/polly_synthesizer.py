@@ -87,11 +87,12 @@ class PollySynthesizer(BaseSynthesizer):
             meta_info, text = message.get("meta_info"), message.get("data")
             if self.cache.get(text):
                 logger.info(f"Cache hit and hence returning quickly {text}")
-                message = self.cache[text]
+                message = self.cache.get(text)
             else:
                 logger.info(f"Not a cache hit {list(self.cache.data_dict)}")
                 self.synthesized_characters += len(text)
                 message = await self.__generate_http(text)
+                self.cache.set(text, message)
             if self.format == "mp3":
                 message = convert_audio_to_wav(message, source_format="mp3")
             if not self.first_chunk_generated:

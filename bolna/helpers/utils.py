@@ -419,7 +419,7 @@ async def write_request_logs(message, run_id):
     
     row = row + component_details
     
-    header = "Time,Component,Direction,Leg ID,Sequence ID,Model,Data,Input Tokens,Output Tokens,Characters,cached,Final Transcript\n"
+    header = "Time,Component,Direction,Leg ID,Sequence ID,Model,Data,Input Tokens,Output Tokens,Characters,Cached,Final Transcript\n"
     log_string = ','.join(['"' + str(item).replace('"', '""') + '"' if item is not None else '' for item in row]) + '\n'    
     log_dir = f"./logs/{run_id.split('#')[0]}"
     os.makedirs(log_dir, exist_ok=True) 
