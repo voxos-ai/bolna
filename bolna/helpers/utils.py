@@ -411,15 +411,15 @@ async def write_request_logs(message, run_id):
     logger.info(f"Message {message}")
     row = [message['time'], message["component"], message["direction"], message["leg_id"], message['sequence_id'], message['model']]
     if message["component"] == "llm":
-        component_details = [message['data'], message.get('input_tokens', 0), message.get('output_tokens', 0), None, None]
+        component_details = [message['data'], message.get('input_tokens', 0), message.get('output_tokens', 0), None, message['cached'], None]
     elif message["component"] == "transcriber":
-        component_details = [message['data'], None, None, None, message.get('is_final', False)]
+        component_details = [message['data'], None, None, None, False ,message.get('is_final', False)]
     elif message["component"] == "synthesizer":
-        component_details = [message['data'], None, None, len(message['data']), None]
+        component_details = [message['data'], None, None,len(message['data']), message['cached'] ,None]
     
     row = row + component_details
     
-    header = "Time,Component,Direction,Leg ID,Sequence ID,Model,Data,Input Tokens,Output Tokens,Characters,Final Transcript\n"
+    header = "Time,Component,Direction,Leg ID,Sequence ID,Model,Data,Input Tokens,Output Tokens,Characters,cached,Final Transcript\n"
     log_string = ','.join(['"' + str(item).replace('"', '""') + '"' if item is not None else '' for item in row]) + '\n'    
     log_dir = f"./logs/{run_id.split('#')[0]}"
     os.makedirs(log_dir, exist_ok=True) 

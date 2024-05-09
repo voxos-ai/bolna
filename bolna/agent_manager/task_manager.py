@@ -222,11 +222,11 @@ class TaskManager(BaseManager):
                     logger.info(f"Time to setup routes {time.time() - start_time}")
 
         #Backchanneling
-        self.should_backchannel = task.get("backchanneling", True)
+        self.should_backchannel = task.get("backchanneling", False)
         self.backchanneling_task = None
         self.backchanneling_start_delay = task.get("backchanneling_start_delay", 5)
         self.backchanneling_message_gap = task.get("backchanneling_message_gap", 2) #Amount of duration co routine will sleep
-        if self.should_backchannel:
+        if self.should_backchannel and not connected_through_dashboard and task_id == 0:
             logger.info(f"Should backchannel")
             self.backchanneling_audios = f'{kwargs.get("backchanneling_audio_location", os.getenv("BACKCHANNELING_PRESETS_DIR"))}/{self.synthesizer_voice.lower()}'
             #self.num_files = list_number_of_wav_files_in_directory(self.backchanneling_audios)
@@ -589,7 +589,7 @@ class TaskManager(BaseManager):
         logger.info(f"It's a preprocessed flow and hence updating current node")
         self.tools['llm_agent'].update_current_node()
     
-    def __convert_to_request_log(self, message, meta_info, model, component = "transcriber", direction = 'response'):
+    def __convert_to_request_log(self, message, meta_info, model, component = "transcriber", direction = 'response', is_cached = False):
         log = dict()
         log['direction'] = direction
         log['data'] = message
@@ -598,6 +598,7 @@ class TaskManager(BaseManager):
         log['component'] = component
         log['sequence_id'] = meta_info['sequence_id']
         log['model'] = model
+        log['cached'] = is_cached
         if component == "transcriber":
             if 'is_final' in meta_info and meta_info['is_final']:
                 log['is_final'] = True
@@ -630,7 +631,7 @@ class TaskManager(BaseManager):
             messages.append({'role': 'user', 'content': message['data']})
             logger.info(f"Starting LLM Agent {messages}")
             #Expose get current classification_response method from the agent class and use it for the response log
-            self.__convert_to_request_log(message = format_messages(messages, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["model"])
+            self.__convert_to_request_log(message = format_messages(messages, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["model"], is_cached= True)
             async for next_state in self.tools['llm_agent'].generate(messages, label_flow=self.label_flow):
                 if next_state == "<end_of_conversation>":
                     meta_info["end_of_conversation"] = True
@@ -693,7 +694,7 @@ class TaskManager(BaseManager):
                 relevant_utterance = self.vector_caches[route].get(message['data'])
                 cache_response = self.route_responses_dict[route][relevant_utterance]
                 self.__convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["model"])
-                self.__convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="response", model=self.task_config["tools_config"]["llm_agent"]["model"])
+                self.__convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="response", model=self.task_config["tools_config"]["llm_agent"]["model"], is_cached= True)
                 messages = copy.deepcopy(self.history)
                 messages += [{'role': 'user', 'content': message['data']},{'role': 'assistant', 'content': cache_response}]
                 self.interim_history = copy.deepcopy(messages)
@@ -860,7 +861,7 @@ class TaskManager(BaseManager):
                 if message["data"].strip() == "":
                     continue
                 if message['data'] == "transcriber_connection_closed":
-                    self.transcriber_duration += message['meta_info']["transcriber_duration"]
+                    self.transcriber_duration += message['meta_info']["transcriber_duration"] if message['meta_info'] is not None else 0
                     logger.info("transcriber connection closed")
                     break
 
@@ -1035,6 +1036,7 @@ class TaskManager(BaseManager):
                 logger.info("Listening to synthesizer")
                 async for message in self.tools["synthesizer"].generate():
                     meta_info = message["meta_info"]
+                    self.__convert_to_request_log(message = meta_info['text'], meta_info= meta_info, component="synthesizer", direction="response", model = self.synthesizer_provider, is_cached= 'is_cached' in meta_info and meta_info['is_cached'])
                     if not self.conversation_ended and message["meta_info"]["sequence_id"] in self.sequence_ids:
                         logger.info(f"{message['meta_info']['sequence_id'] } is in sequence ids  {self.sequence_ids} and hence removing the sequence ids ")
                         if self.stream:   
@@ -1136,6 +1138,7 @@ class TaskManager(BaseManager):
                     logger.info('##### sending text to {} for generation: {} '.format(self.synthesizer_provider, text))
                     if 'cached' in message['meta_info'] and meta_info['cached'] == True:
                         logger.info(f"Cached response and hence sending preprocessed text")
+                        self.__convert_to_request_log(message = text, meta_info= meta_info, component="synthesizer", direction="response", model = self.synthesizer_provider, is_cached= True)
                         await self.__send_preprocessed_audio(meta_info, get_md5_hash(text))
                     else:
                         self.synthesizer_characters += len(text)

@@ -189,10 +189,12 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                     if self.cache.get(text):
                         logger.info(f"Cache hit and hence returning quickly {text}")
                         message = self.cache.get(text)
+                        meta_info['is_cached'] = True
                     else:
                         c = len(text)
                         self.synthesized_characters += c
                         logger.info(f"Not a cache hit {list(self.cache.data_dict)} and hence increasing characters by {c}")
+                        meta_info['is_cached'] = False
                         audio = await self.__generate_http(text)
                         self.cache.set(text, audio)
                         
