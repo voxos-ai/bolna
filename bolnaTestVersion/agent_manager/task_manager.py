@@ -12,13 +12,13 @@ from bolnaTestVersion.providers import *
 from bolnaTestVersion.helpers.utils import calculate_audio_duration, create_ws_data_packet, is_valid_md5, get_raw_audio_bytes_from_base64, \
     get_required_input_types, format_messages, get_prompt_responses, save_audio_file_to_s3, update_prompt_with_context, get_md5_hash, clean_json_string, wav_bytes_to_pcm, write_request_logs, yield_chunks_from_memory
 from bolnaTestVersion.helpers.logger_config import configure_logger
-
+from bolnaTestVersion.helpers.FirstMessage import FirstVoice
 asyncio.get_event_loop().set_debug(True)
 logger = configure_logger(__name__)
 
 
 class TaskManager(BaseManager):
-    def __init__(self, assistant_name, task_id, task, ws, input_parameters=None, context_data=None,
+    def __init__(self, assistant_name, task_id, task, ws, firstVoice:FirstVoice, input_parameters=None, context_data=None,
                  assistant_id=None, run_id=None, connected_through_dashboard=False, cache=None,
                  input_queue=None, conversation_history=None, output_queue=None, yield_chunks=True, **kwargs):
         super().__init__()
@@ -79,10 +79,24 @@ class TaskManager(BaseManager):
             }
         }
         #IO HANDLERS
+        self.__setup_output_handlers(connected_through_dashboard, output_queue)
+        # FirstVoice
+        # self.firstVoice = FirstVoice(
+        #         {
+        #             "voice":self.task_config["tools_config"]["synthesizer"]["provider_config"]["voice"],
+        #             "language":self.task_config["tools_config"]["synthesizer"]["provider_config"]["language"]
+        #         },'poly',
+        #         "hell ansh now your call is recorded",
+        #         self.tools["output"]
+        #     )
+        self.firstVoice = firstVoice
+        self.firstVoice.setOutputHandel(self.tools["output"])
         if task_id == 0:
             self.should_record = self.task_config["tools_config"]["output"]["provider"] == 'default' and self.enforce_streaming #In this case, this is a websocket connection and we should record 
-            self.__setup_input_handlers(connected_through_dashboard, input_queue, self.should_record)
-        self.__setup_output_handlers(connected_through_dashboard, output_queue)
+            self.__setup_input_handlers(connected_through_dashboard, input_queue, self.should_record,firstvoice=self.firstVoice)
+        
+
+
 
         # Agent stuff
         # Need to maintain current conversation history and overall persona/history kinda thing. 
@@ -148,6 +162,8 @@ class TaskManager(BaseManager):
         # Sequence id for interruption
         self.curr_sequence_id = 0
         self.sequence_ids = set()
+
+        
         
         # setting transcriber
         self.__setup_transcriber()
@@ -157,6 +173,9 @@ class TaskManager(BaseManager):
         llm = self.__setup_llm(llm_config)
         #Setup tasks
         self.__setup_tasks(llm)
+
+        # first message
+        self.fmessage = "hello ansh"
 
         #setup request logs
         self.request_logs = []
@@ -168,7 +187,7 @@ class TaskManager(BaseManager):
             self.minimum_wait_duration = self.task_config["tools_config"]["transcriber"]["endpointing"]
             logger.info(f"minimum wait duration {self.minimum_wait_duration}")
             self.last_spoken_timestamp = time.time() * 1000
-
+        
     def __setup_output_handlers(self, connected_through_dashboard, output_queue):
         output_kwargs = {"websocket": self.websocket}  
         
@@ -197,7 +216,7 @@ class TaskManager(BaseManager):
         else:
             raise "Other input handlers not supported yet"
 
-    def __setup_input_handlers(self, connected_through_dashboard, input_queue, should_record):
+    def __setup_input_handlers(self, connected_through_dashboard, input_queue, should_record, firstvoice:FirstVoice):
         if self.task_config["tools_config"]["input"]["provider"] in SUPPORTED_INPUT_HANDLERS.keys():
             logger.info(f"Connected through dashboard {connected_through_dashboard}")
             input_kwargs = {"queues": self.queues,
@@ -219,7 +238,7 @@ class TaskManager(BaseManager):
 
                 if self.task_config['tools_config']['input']['provider'] == 'default':
                     input_kwargs['queue'] = input_queue
-            self.tools["input"] = input_handler_class(**input_kwargs)
+            self.tools["input"] = input_handler_class(fv=firstvoice,**input_kwargs)
         else:
             raise "Other input handlers not supported yet"
 
@@ -681,6 +700,7 @@ class TaskManager(BaseManager):
         self.__convert_to_request_log(message=transcriber_message, meta_info= meta_info, model = "deepgram")
         if time.time() < self.consider_next_transcript_after:
             logger.info("Not considering transcript as we're still in cool down period")
+        
         if next_task == "llm":
             logger.info(f"Running llm Tasks")
             meta_info["origin"] = "transcriber"
@@ -696,6 +716,7 @@ class TaskManager(BaseManager):
         transcriber_message = ""
         logger.info(f"Starting transcriber task")
         response_started = False
+        
         try:
             while True:
                 message = await self.transcriber_output_queue.get()
@@ -800,10 +821,12 @@ class TaskManager(BaseManager):
             if self.stream and self.synthesizer_provider != "polly" and not self.is_an_ivr_call: 
                 logger.info("Opening websocket connection to synthesizer")
                 await self.tools["synthesizer"].open_connection()
+            # await self._synthesize(self, create_ws_data_packet(self.fmessage,message["meta_info"])
             while True:
                 logger.info("Listening to synthesizer")
                 async for message in self.tools["synthesizer"].generate():
                     meta_info = message["meta_info"]
+                    logger.info(f"----90 {meta_info}")
                     if not self.conversation_ended and message["meta_info"]["sequence_id"] in self.sequence_ids:
                         logger.info(f"{message['meta_info']['sequence_id'] } is in sequence ids  {self.sequence_ids} and hence removing the sequence ids ")
                         if self.stream:   
@@ -913,6 +936,7 @@ class TaskManager(BaseManager):
     ############################################################
     async def __handle_initial_silence(self):
         logger.info(f"Checking for initial silence")
+        
         await asyncio.sleep(5)
         if self.callee_silent and len(self.history) == 1 and len(self.interim_history) == 1:
             logger.info(f"Calee was silent and hence speaking Hello on callee's behalf")

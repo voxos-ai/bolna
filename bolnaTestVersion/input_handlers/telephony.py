@@ -12,7 +12,7 @@ load_dotenv()
 
 
 class TelephonyInputHandler(DefaultInputHandler):
-    def __init__(self, queues, websocket=None, input_types=None, mark_set=None, connected_through_dashboard=False):
+    def __init__(self, fv ,queues, websocket=None, input_types=None, mark_set=None, connected_through_dashboard=False):
         super().__init__(queues, websocket, input_types, connected_through_dashboard)
         self.stream_sid = None
         self.call_sid = None
@@ -21,7 +21,7 @@ class TelephonyInputHandler(DefaultInputHandler):
         self.mark_set = mark_set
         self.last_media_received = 0
         self.io_provider = None
-
+        self.fv = fv
     async def call_start(self, packet):
         pass
 
@@ -71,6 +71,7 @@ class TelephonyInputHandler(DefaultInputHandler):
                             logger.info(f"Filling {bytes_to_fill} bytes of silence")
                             #await self.ingest_audio(b"\xff" * bytes_to_fill, meta_info)
                         '''
+                        await self.fv.ready(self.stream_sid)
                         self.last_media_received = media_ts
                         buffer.append(media_audio)
                         self.message_count += 1

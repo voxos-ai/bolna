@@ -7,8 +7,8 @@ load_dotenv()
 
 
 class ExotelInputHandler(TelephonyInputHandler):
-    def __init__(self, queues, websocket=None, input_types=None, mark_set=None, connected_through_dashboard=False):
-        super().__init__(queues, websocket, input_types, mark_set, connected_through_dashboard)
+    def __init__(self, fv, queues, websocket=None, input_types=None, mark_set=None, connected_through_dashboard=False):
+        super().__init__(fv, queues, websocket, input_types, mark_set, connected_through_dashboard)
         self.io_provider = 'exotel'
 
     async def call_start(self, packet):

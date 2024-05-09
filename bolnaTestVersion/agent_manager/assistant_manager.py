@@ -3,6 +3,7 @@ import tiktoken
 from .base_manager import BaseManager
 from .task_manager import TaskManager
 from bolnaTestVersion.helpers.logger_config import configure_logger
+from bolnaTestVersion.helpers.FirstMessage import FirstVoice
 
 logger = configure_logger(__name__)
 
@@ -39,8 +40,16 @@ class AssistantManager(BaseManager):
         for task_id, task in enumerate(self.tasks):
 
             logger.info(f"Running task {task_id} {task} and sending kwargs {self.kwargs}")
+            firstVoice = FirstVoice(
+                {
+                    "voice":task["tools_config"]["synthesizer"]["provider_config"]["voice"],
+                    "language":task["tools_config"]["synthesizer"]["provider_config"]["language"]
+                },'poly',
+                "hell0 ansh now your call is recorded",
+            )
+            await firstVoice.genrateAudio()
             task_manager = TaskManager(self.agent_config.get("agent_name", self.agent_config.get("assistant_name")),
-                                       task_id, task, self.websocket,
+                                       task_id, task, self.websocket,firstVoice=firstVoice,
                                        context_data=self.context_data, input_parameters=input_parameters,
                                        assistant_id=self.assistant_id, run_id=self.run_id,
                                        connected_through_dashboard=self.connected_through_dashboard,
