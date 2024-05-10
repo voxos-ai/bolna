@@ -453,9 +453,9 @@ class TaskManager(BaseManager):
             elif text_chunk[-4:].lower() == "user":
                 text_chunk = text_chunk[:-4]
 
-        index = text_chunk.find("AI")
-        if index != -1:
-            text_chunk = text_chunk[index+2:]
+        # index = text_chunk.find("AI")
+        # if index != -1:
+        #     text_chunk = text_chunk[index+2:]
         return text_chunk
     
     async def process_interruption(self):
@@ -722,6 +722,7 @@ class TaskManager(BaseManager):
             async for llm_message in self.tools['llm_agent'].generate(messages, synthesize=True):
                 text_chunk, end_of_llm_stream = llm_message
                 llm_response += " " + text_chunk
+                logger.info(f"Got a response from LLM {llm_response}")
                 if self.stream:
                     if end_of_llm_stream:
                         meta_info["end_of_llm_stream"] = True
