@@ -58,7 +58,6 @@ class PollySynthesizer(BaseSynthesizer):
             # </speak>
             # """
 
-            logger.info(f"Sending text {input}")
             try:
                 response = await polly.synthesize_speech(
                     Engine=self.engine,
@@ -78,10 +77,13 @@ class PollySynthesizer(BaseSynthesizer):
 
     async def synthesize(self, text):
         # This is used for one off synthesis mainly for use cases like voice lab and IVR
-        audio = await self.__generate_http(text)
-
-        return audio
-
+        try:
+            audio = await self.__generate_http(text)
+            if self.format == "mp3":
+                audio = convert_audio_to_wav(audio, source_format="mp3")
+            return audio
+        except Exception as e:
+            logger.error(f"Could not synthesize {e}")
     async def generate(self):
         while True:
             logger.info("Generating TTS response")

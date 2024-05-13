@@ -147,12 +147,24 @@ class ToolsChainModel(BaseModel):
     execution: str = Field(..., pattern="^(parallel|sequential)$")
     pipelines: List[List[str]]
 
+class ConversationConfig(BaseModel):
+    optimize_latency: Optional[bool] = True  # This will work on in conversation
+    hangup_after_silence: Optional[int] = 10
+    incremental_delay: Optional[int] = 100  # use this to incrementally delay to handle long pauses
+    number_of_words_for_interruption: Optional[
+        int] = 1  # Maybe send half second of empty noise if needed for a while as soon as we get speaking true in nitro, use that to delay
+    interruption_backoff_period: Optional[int] = 100
+    hangup_after_LLMCall: Optional[bool] = False
+    call_cancellation_prompt: Optional[str] = None
+    backchanneling: Optional[bool] = False
+    backchanneling_message_gap: Optional[int] = 5
+    backchanneling_start_delay: Optional[int] = 5
 
 class Task(BaseModel):
     tools_config: ToolsConfig
     toolchain: ToolsChainModel
     task_type: Optional[str] = "conversation"  # extraction, summarization, notification
-
+    task_config: Optional[ConversationConfig]
 
 class AgentModel(BaseModel):
     agent_name: str
