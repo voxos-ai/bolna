@@ -60,14 +60,96 @@ Once the docker containers are up, you can now start to create your agents and i
 
 ## Creating your agent and invoking calls
 Once you have the above docker setup and running, you can create agents and initiate calls.
-1. Refer to the official [`Agent` API](https://docs.bolna.dev/api-reference/agent/create) to create an agent
-2. Initiate a call via API similar to [`Call` API](https://docs.bolna.dev/api-reference/calls/make) to receive a call
+1. Use the below payload to create an Agent via `http://localhost:5001/agent`
+
+<details>
+<summary>Agent Payload</summary><br>
+
+```yaml
+{
+    "agent_config": {
+        "agent_name": "Alfred",
+        "agent_type": "other",
+        "agent_welcome_message": "Welcome",
+        "tasks": [
+            {
+                "task_type": "conversation",
+                "toolchain": {
+                    "execution": "parallel",
+                    "pipelines": [
+                        [
+                            "transcriber",
+                            "llm",
+                            "synthesizer"
+                        ]
+                    ]
+                },
+                "tools_config": {
+                    "input": {
+                        "format": "pcm",
+                        "provider": "twilio"
+                    },
+                    "llm_agent": {
+                        "agent_flow_type": "streaming",
+                        "family": "openai",
+                        "request_json": true,
+                        "model": "gpt-3.5-turbo-16k",
+                        "use_fallback": true
+                    },
+                    "output": {
+                        "format": "pcm",
+                        "provider": "twilio"
+                    },
+                    "synthesizer": {
+                        "audio_format": "wav",
+                        "provider": "elevenlabs",
+                        "stream": true,
+                        "provider_config": {
+                            "voice": "Meera - high quality, emotive",
+                            "model": "eleven_multilingual_v2",
+                            "voice_id": "TTa58Hl9lmhnQEvhp1WM"
+                        },
+                        "buffer_size": 100.0
+                    },
+                    "transcriber": {
+                        "encoding": "linear16",
+                        "language": "en",
+                        "model": "deepgram",
+                        "stream": true
+                    }
+                },
+                "task_config": {
+                    "hangup_after_silence": 30.0
+                }
+            }
+        ]
+    },
+    "agent_prompts": {
+        "task_1": {
+            "system_prompt": "Ask if they are coming for party tonight"
+        }
+    }
+}
+```
+</details>
+
+2. The response of the previous API will return a uuid as the `agent_id`. Use this `agent_id` to initiate a call via the telephony server running on `8001` port at `http://localhost:8001/call`
+
+<details>
+<summary>Call Payload</summary><br>
+```yaml
+{
+    "agent_id": "4c19700b-227c-4c2d-8bgf-42dfe4b240fc",
+    "recipient_phone_number": "+19876543210",
+}
+```
+</details>
 
 
 ## Using your own providers
 You can populate the `.env` file to use your own keys for providers.
 
-<details open>
+<details>
 
 <summary>ASR Providers</summary><br>
 These are the current supported ASRs Providers:
@@ -79,7 +161,7 @@ These are the current supported ASRs Providers:
 </details>
 &nbsp;<br>
 
-<details open>
+<details>
 <summary>LLM Providers</summary><br>
 Bolna uses LiteLLM package to support multiple LLM integrations.
 
@@ -97,7 +179,7 @@ For LLMs hosted via VLLM, add the following to the `.env` file:<br>
 </details>
 &nbsp;<br>
 
-<details open>
+<details>
 
 <summary>TTS Providers</summary><br>
 These are the current supported TTS Providers:
