@@ -1390,8 +1390,7 @@ class TaskManager(BaseManager):
                     logger.info("Starting the first message task")
                     self.output_task = asyncio.create_task(self.__process_output_loop())
                     if not self.connected_through_dashboard:
-                        if "agent_welcome_message" in self.kwargs and self.kwargs['agent_welcome_message']:
-                            self.first_message_task = asyncio.create_task(self.__first_message())
+                        self.first_message_task = asyncio.create_task(self.__first_message())
                         if not self.use_llm_to_determine_hangup :
                             self.hangup_task = asyncio.create_task(self.__check_for_completion())
                         if self.should_backchannel:
