@@ -36,6 +36,5 @@ class BaseSynthesizer:
         audio_data = audio_buffer.read()
         return audio_data
 
-    @staticmethod
     def get_engine(self):
         return "default"

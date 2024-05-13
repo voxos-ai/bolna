@@ -1347,9 +1347,9 @@ class TaskManager(BaseManager):
                     if stream_sid is not None:
                         logger.info(f"Got stream sid and hence sending the first message {stream_sid}")
                         self.stream_sid = stream_sid
-                        logger.info(f"Generating {self.kwargs['agent_welcome_message']}")
+                        logger.info(f"Generating {self.kwargs.get('agent_welcome_message', None)}")
                         meta_info={'io': 'twilio', 'is_first_message': True, 'stream_sid': stream_sid, "request_id": str(uuid.uuid4()), "cached": True, "sequence_id": -1, 'format': 'pcm'}
-                        await self._synthesize(create_ws_data_packet(self.kwargs['agent_welcome_message'], meta_info= meta_info))
+                        await self._synthesize(create_ws_data_packet(self.kwargs.get('agent_welcome_message', None), meta_info= meta_info))
                         break
                     else:
                         logger.info(f"Stream id is still None, so not passing it")
@@ -1360,7 +1360,8 @@ class TaskManager(BaseManager):
                     break
 
         except Exception as e:
-            logger.error(f"Error happeneed {e}") 
+            logger.error(f"Error happeneed {e}")
+
     async def run(self):
         try:
             if self.task_id == 0:
@@ -1389,7 +1390,8 @@ class TaskManager(BaseManager):
                     logger.info("Starting the first message task")
                     self.output_task = asyncio.create_task(self.__process_output_loop())
                     if not self.connected_through_dashboard:
-                        self.first_message_task = asyncio.create_task(self.__first_message())
+                        if "agent_welcome_message" in self.kwargs and self.kwargs['agent_welcome_message']:
+                            self.first_message_task = asyncio.create_task(self.__first_message())
                         if not self.use_llm_to_determine_hangup :
                             self.hangup_task = asyncio.create_task(self.__check_for_completion())
                         if self.should_backchannel:
