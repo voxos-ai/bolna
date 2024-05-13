@@ -173,10 +173,11 @@ class TaskManager(BaseManager):
         self.request_logs = []
 
         if task_id == 0:
-            self.output_chunk_size = 16384 if self.sampling_rate == 24000 else 6144 #0.5 second chunk size for calls 
+            self.output_chunk_size = 16384 if self.sampling_rate == 24000 else 8192 #0.5 second chunk size for calls 
             # For nitro
             self.nitro = True 
-            conversation_config = task.get("task_config", None)
+            conversation_config = task.get("task_config", {})
+            logger.info(f"Conversation config {conversation_config}")
 
             # Routes
             self.routes = task['tools_config']['llm_agent'].get("routes", None)
@@ -1052,8 +1053,9 @@ class TaskManager(BaseManager):
                 logger.info("Listening to synthesizer")
                 async for message in self.tools["synthesizer"].generate():
                     meta_info = message["meta_info"]
+                    is_first_message = 'is_first_message' in meta_info and meta_info['is_first_message']
                     self.__convert_to_request_log(message = meta_info['text'], meta_info= meta_info, component="synthesizer", direction="response", model = self.synthesizer_provider, is_cached= 'is_cached' in meta_info and meta_info['is_cached'])
-                    if not self.conversation_ended and message["meta_info"]["sequence_id"] in self.sequence_ids:
+                    if is_first_message or (not self.conversation_ended and message["meta_info"]["sequence_id"] in self.sequence_ids):
                         logger.info(f"{message['meta_info']['sequence_id'] } is in sequence ids  {self.sequence_ids} and hence removing the sequence ids ")
                         if self.stream:   
                             if self.synthesizer_provider == "polly":
@@ -1120,8 +1122,6 @@ class TaskManager(BaseManager):
                 audio_chunk = await get_raw_audio_bytes(text, self.assistant_name,
                                                                 'pcm', local=self.is_local,
                                                                 assistant_id=self.assistant_id)
-                
-                logger.info(f"GOT THE AUDIO {text} and length {len(audio_chunk)}")
                 if not self.buffered_output_queue.empty():
                     logger.info(f"Output queue was not empty and hence emptying it")
                     self.buffered_output_queue = asyncio.Queue()
@@ -1234,7 +1234,7 @@ class TaskManager(BaseManager):
                 if "end_of_conversation" in message['meta_info']:
                     await self.__process_end_of_conversation()
                 
-                if 'sequence_id' in message['meta_info'] and message["meta_info"]["sequence_id"] in self.sequence_ids:
+                if ('is_first_message' in message['meta_info'] and message['meta_info']['is_first_message']) or ( 'sequence_id' in message['meta_info'] and message["meta_info"]["sequence_id"] in self.sequence_ids):
                     await self.tools["output"].handle(message)                    
                     duration = calculate_audio_duration(len(message["data"]), self.sampling_rate)
                     logger.info(f"Duration of the byte {duration}")
