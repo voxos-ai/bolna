@@ -15,7 +15,7 @@ from .base_manager import BaseManager
 from bolna.agent_types import *
 from bolna.providers import *
 from bolna.helpers.utils import calculate_audio_duration, create_ws_data_packet, get_file_names_in_directory, get_raw_audio_bytes, is_valid_md5, \
-    get_required_input_types, format_messages, get_prompt_responses, list_number_of_wav_files_in_directory, resample, save_audio_file_to_s3, update_prompt_with_context, get_md5_hash, clean_json_string, wav_bytes_to_pcm, write_request_logs, yield_chunks_from_memory
+    get_required_input_types, format_messages, get_prompt_responses, resample, save_audio_file_to_s3, update_prompt_with_context, get_md5_hash, clean_json_string, wav_bytes_to_pcm, write_request_logs, yield_chunks_from_memory
 from bolna.helpers.logger_config import configure_logger
 # import uvloop
 # asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
@@ -172,39 +172,14 @@ class TaskManager(BaseManager):
         #setup request logs
         self.request_logs = []
 
-        # for long pauses and rushing
         if task_id == 0:
-            self.output_chunk_size = 16384 if self.sampling_rate == 24000 else 6144 #0.5 second chunk size for calls 
+            self.output_chunk_size = 16384 if self.sampling_rate == 24000 else 8192 #0.5 second chunk size for calls 
             # For nitro
             self.nitro = True 
-            self.minimum_wait_duration = self.task_config["tools_config"]["transcriber"]["endpointing"]
-            logger.info(f"minimum wait duration {self.minimum_wait_duration}")
-            self.last_spoken_timestamp = time.time() * 1000
-            self.incremental_delay = task.get("incremental_delay", 100)
-            self.required_delay_before_speaking = max(self.minimum_wait_duration - self.incremental_delay, 0)  #Everytime we get a message we increase it by 100 miliseconds 
-            self.time_since_first_interim_result  = -1
+            conversation_config = task.get("task_config", {})
+            logger.info(f"Conversation config {conversation_config}")
 
-        #Cut conversation
-        self.hang_conversation_after = task.get("hangup_after_silence", 10)
-        self.last_transmitted_timesatamp = 0
-        self.let_remaining_audio_pass_through = False #Will be used to let remaining audio pass through in case of utterenceEnd event and there's still audio left to be sent
-        self.use_llm_to_determine_hangup = task.get("hangup_after_LLMCall", False)
-        self.check_for_completion_prompt = task.get("call_cancellation_prompt", None)
-        if self.check_for_completion_prompt is not None:
-            completion_json_format = {"answer": "A simple Yes or No based on if you should cut the phone or not"}
-            self.check_for_completion_prompt = f"{self.check_for_completion_prompt}\nYour response should be in the following json format\n{completion_json_format}"
-        self.check_for_completion_llm = os.getenv("CHECK_FOR_COMPLETION_LLM")
-        self.time_since_last_spoken_human_word = 0 
-
-        #Handling accidental interruption
-        self.number_of_words_for_interruption = task.get("number_of_words_for_interruption", 3)
-        self.started_transmitting_audio = False
-        #self.interruption_backoff_period = 1000 #task.get("interruption_backoff_period", 300) #this is the amount of time output loop will sleep before sending next audio
-        self.use_llm_for_hanging_up = task.get("hangup_after_LLMCall", False)
-        self.allow_extra_sleep = False #It'll help us to back off as soon as we hear interruption for a while
-
-        # Conversation
-        if task_id == 0:
+            # Routes
             self.routes = task['tools_config']['llm_agent'].get("routes", None)
             self.route_layer = None
             if self.routes:
@@ -220,29 +195,61 @@ class TaskManager(BaseManager):
                     self.__setup_routes(self.routes)
                     logger.info(f"Time to setup routes {time.time() - start_time}")
 
-        #Backchanneling
-        self.should_backchannel = task.get("backchanneling", False)
-        self.backchanneling_task = None
-        self.backchanneling_start_delay = task.get("backchanneling_start_delay", 5)
-        self.backchanneling_message_gap = task.get("backchanneling_message_gap", 2) #Amount of duration co routine will sleep
-        if self.should_backchannel and not connected_through_dashboard and task_id == 0:
-            logger.info(f"Should backchannel")
-            self.backchanneling_audios = f'{kwargs.get("backchanneling_audio_location", os.getenv("BACKCHANNELING_PRESETS_DIR"))}/{self.synthesizer_voice.lower()}'
-            #self.num_files = list_number_of_wav_files_in_directory(self.backchanneling_audios)
-            try:
-                self.filenames = get_file_names_in_directory(self.backchanneling_audios)
-                logger.info(f"Backchanneling audio location {self.backchanneling_audios}")
-            except Exception as e:
-                logger.info(f"Something went wrong an putting should backchannel to false")
-                self.should_backchannel = False
-        else:
-            logger.info(f"Not setting up backchanneling")
-            self.backchanneling_audio_map = []
-        # Agent welcome message
-        if "agent_welcome_message" in self.kwargs:
-            logger.info(f"Agent welcome message present {self.kwargs['agent_welcome_message']}")
-            self.first_message_task = None
+
+        # for long pauses and rushing
         
+            if conversation_config is not None:
+                self.minimum_wait_duration = self.task_config["tools_config"]["transcriber"]["endpointing"]
+                logger.info(f"minimum wait duration {self.minimum_wait_duration}")
+                self.last_spoken_timestamp = time.time() * 1000
+                self.incremental_delay = conversation_config.get("incremental_delay", 100)
+                logger.info(f"incremental_delay - {self.incremental_delay}")
+                self.required_delay_before_speaking = max(self.minimum_wait_duration - self.incremental_delay, 0)  #Everytime we get a message we increase it by 100 miliseconds 
+                self.time_since_first_interim_result  = -1
+
+                #Cut conversation
+                self.hang_conversation_after = conversation_config.get("hangup_after_silence", 10)
+                logger.info(f"hangup_after_silence {self.hang_conversation_after}")
+                self.last_transmitted_timesatamp = 0
+                self.let_remaining_audio_pass_through = False #Will be used to let remaining audio pass through in case of utterenceEnd event and there's still audio left to be sent
+                self.use_llm_to_determine_hangup = conversation_config.get("hangup_after_LLMCall", False)
+                self.check_for_completion_prompt = conversation_config.get("call_cancellation_prompt", None)
+                if self.check_for_completion_prompt is not None:
+                    completion_json_format = {"answer": "A simple Yes or No based on if you should cut the phone or not"}
+                    self.check_for_completion_prompt = f"{self.check_for_completion_prompt}\nYour response should be in the following json format\n{completion_json_format}"
+                self.check_for_completion_llm = os.getenv("CHECK_FOR_COMPLETION_LLM")
+                self.time_since_last_spoken_human_word = 0 
+
+                #Handling accidental interruption
+                self.number_of_words_for_interruption = conversation_config.get("number_of_words_for_interruption", 3)
+                self.started_transmitting_audio = False
+                #self.interruption_backoff_period = 1000 #conversation_config.get("interruption_backoff_period", 300) #this is the amount of time output loop will sleep before sending next audio
+                self.use_llm_for_hanging_up = conversation_config.get("hangup_after_LLMCall", False)
+                self.allow_extra_sleep = False #It'll help us to back off as soon as we hear interruption for a while
+
+                #Backchanneling
+                self.should_backchannel = conversation_config.get("backchanneling", False)
+                self.backchanneling_task = None
+                self.backchanneling_start_delay = conversation_config.get("backchanneling_start_delay", 5)
+                self.backchanneling_message_gap = conversation_config.get("backchanneling_message_gap", 2) #Amount of duration co routine will sleep
+                if self.should_backchannel and not connected_through_dashboard and task_id == 0:
+                    logger.info(f"Should backchannel")
+                    self.backchanneling_audios = f'{kwargs.get("backchanneling_audio_location", os.getenv("BACKCHANNELING_PRESETS_DIR"))}/{self.synthesizer_voice.lower()}'
+                    #self.num_files = list_number_of_wav_files_in_directory(self.backchanneling_audios)
+                    try:
+                        self.filenames = get_file_names_in_directory(self.backchanneling_audios)
+                        logger.info(f"Backchanneling audio location {self.backchanneling_audios}")
+                    except Exception as e:
+                        logger.info(f"Something went wrong an putting should backchannel to false")
+                        self.should_backchannel = False
+                else:
+                    logger.info(f"Not setting up backchanneling")
+                    self.backchanneling_audio_map = []
+                # Agent welcome message
+                if "agent_welcome_message" in self.kwargs:
+                    logger.info(f"Agent welcome message present {self.kwargs['agent_welcome_message']}")
+                    self.first_message_task = None
+                
             
             
     def __setup_routes(self, routes):
@@ -1046,8 +1053,9 @@ class TaskManager(BaseManager):
                 logger.info("Listening to synthesizer")
                 async for message in self.tools["synthesizer"].generate():
                     meta_info = message["meta_info"]
+                    is_first_message = 'is_first_message' in meta_info and meta_info['is_first_message']
                     self.__convert_to_request_log(message = meta_info['text'], meta_info= meta_info, component="synthesizer", direction="response", model = self.synthesizer_provider, is_cached= 'is_cached' in meta_info and meta_info['is_cached'])
-                    if not self.conversation_ended and message["meta_info"]["sequence_id"] in self.sequence_ids:
+                    if is_first_message or (not self.conversation_ended and message["meta_info"]["sequence_id"] in self.sequence_ids):
                         logger.info(f"{message['meta_info']['sequence_id'] } is in sequence ids  {self.sequence_ids} and hence removing the sequence ids ")
                         if self.stream:   
                             if self.synthesizer_provider == "polly":
@@ -1075,7 +1083,6 @@ class TaskManager(BaseManager):
                                     first_chunk_generation_timestamp = time.time()
                                     meta_info["synthesizer_first_chunk_latency"] = first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time']
                                     #self.latency_dict[message['meta_info']["request_id"]]['synthesizer'] = {"first_chunk_generation_latency": first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time'], "first_chunk_generation_timestamp": first_chunk_generation_timestamp}
-                                
                                 if self.yield_chunks:
                                     number_of_chunks = (len(message['data'])/self.output_chunk_size)
                                     i = 0
@@ -1084,7 +1091,6 @@ class TaskManager(BaseManager):
                                         self.__enqueue_chunk(chunk, i, number_of_chunks, meta_info)
                                 else:
                                     self.buffered_output_queue.put_nowait(message)
-                            
                         else:
                             logger.info("Stream is not enabled and hence sending entire audio")
                             first_chunk_generation_timestamp = time.time()
@@ -1116,16 +1122,19 @@ class TaskManager(BaseManager):
                 audio_chunk = await get_raw_audio_bytes(text, self.assistant_name,
                                                                 'pcm', local=self.is_local,
                                                                 assistant_id=self.assistant_id)
-                
-                logger.info(f"GOT THE AUDIO {text} and length {len(audio_chunk)}")
                 if not self.buffered_output_queue.empty():
                     logger.info(f"Output queue was not empty and hence emptying it")
                     self.buffered_output_queue = asyncio.Queue()
 
                 if 'is_first_message' in meta_info:
-                    logger.info(f"Sending the agent welcome message")
-                    message = create_ws_data_packet(audio_chunk, meta_info)
-                    await self.tools["output"].handle(message)
+                    if audio_chunk is None:
+                        logger.info(f"File doesn't exist in S3. Hence we're synthesizing it from synthesizer")
+                        meta_info['cached'] = False
+                        await self._synthesize(create_ws_data_packet(self.kwargs['agent_welcome_message'], meta_info= meta_info))
+                    else:
+                        logger.info(f"Sending the agent welcome message")
+                        message = create_ws_data_packet(audio_chunk, meta_info)
+                        await self.tools["output"].handle(message)
 
                 elif self.yield_chunks:
                     for chunk in yield_chunks_from_memory(audio_chunk, chunk_size=self.output_chunk_size):
@@ -1225,7 +1234,7 @@ class TaskManager(BaseManager):
                 if "end_of_conversation" in message['meta_info']:
                     await self.__process_end_of_conversation()
                 
-                if 'sequence_id' in message['meta_info'] and message["meta_info"]["sequence_id"] in self.sequence_ids:
+                if ('is_first_message' in message['meta_info'] and message['meta_info']['is_first_message']) or ( 'sequence_id' in message['meta_info'] and message["meta_info"]["sequence_id"] in self.sequence_ids):
                     await self.tools["output"].handle(message)                    
                     duration = calculate_audio_duration(len(message["data"]), self.sampling_rate)
                     logger.info(f"Duration of the byte {duration}")
