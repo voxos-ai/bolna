@@ -17,8 +17,8 @@ from bolna.providers import *
 from bolna.helpers.utils import calculate_audio_duration, create_ws_data_packet, get_file_names_in_directory, get_raw_audio_bytes, is_valid_md5, \
     get_required_input_types, format_messages, get_prompt_responses, list_number_of_wav_files_in_directory, resample, save_audio_file_to_s3, update_prompt_with_context, get_md5_hash, clean_json_string, wav_bytes_to_pcm, write_request_logs, yield_chunks_from_memory
 from bolna.helpers.logger_config import configure_logger
-import uvloop
-asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+# import uvloop
+# asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 from semantic_router import Route
 from semantic_router.layer import RouteLayer
 from semantic_router.encoders import FastEmbedEncoder
@@ -173,9 +173,8 @@ class TaskManager(BaseManager):
         self.request_logs = []
 
         # for long pauses and rushing
-        
         if task_id == 0:
-            self.output_chunk_size = 16384 if self.sampling_rate == 24000 else 4096 #0.5 second chunk size for calls 
+            self.output_chunk_size = 16384 if self.sampling_rate == 24000 else 6144 #0.5 second chunk size for calls 
             # For nitro
             self.nitro = True 
             self.minimum_wait_duration = self.task_config["tools_config"]["transcriber"]["endpointing"]
@@ -484,6 +483,7 @@ class TaskManager(BaseManager):
             self.llm_task = None
         
         if self.first_message_task is not None:
+            logger.info("Cancelling first message task")
             self.first_message_task.cancel()
             self.first_message_task = None
 
@@ -718,7 +718,7 @@ class TaskManager(BaseManager):
             
             logger.info(f"Cached response {cache_response}")
             meta_info['cached'] = True
-            meta_info["end_of_llm_stream"] = True
+            meta_info["end_of_llm_stream"] = True            
                 
             await self._handle_llm_output(next_step, cache_response, should_bypass_synth, meta_info)
             self.llm_processed_request_ids.add(self.current_request_id)
@@ -883,7 +883,7 @@ class TaskManager(BaseManager):
                     num_words = 0
                     if message['data'] == "TRANSCRIBER_BEGIN":
                         response_started = False #This signifies if we've gotten the first bit of interim text for the given response or not
-                        self.callee_silent = False
+                        # self.callee_silent = False
                         if self.nitro:
                             logger.info(f"Just a nitro thingy")
                             should_interrupt = meta_info.get("should_interrupt", True)
@@ -1175,9 +1175,10 @@ class TaskManager(BaseManager):
     ############################################################
     # Output handling
     ############################################################
-    async def __handle_initial_silence(self):
-        logger.info(f"Checking for initial silence")
-        await asyncio.sleep(5)
+    async def __handle_initial_silence(self, duration = 5):
+        logger.info(f"Checking for initial silence {duration}")
+        await asyncio.sleep(duration)
+        logger.info(f"Woke up from my slumber {self.callee_silent}, {self.history}, {self.interim_history}")
         if self.callee_silent and len(self.history) == 1 and len(self.interim_history) == 1:
             logger.info(f"Calee was silent and hence speaking Hello on callee's behalf")
             meta_info = self.__get_updated_meta_info()
@@ -1302,6 +1303,21 @@ class TaskManager(BaseManager):
             else:
                 logger.info(f"Only {time_since_last_spoken_AI_word} seconds since last spoken time stamp and hence not cutting the phone call")
     
+    async def __check_for_completion(self):
+        while True:
+            await asyncio.sleep(2)
+            if self.last_transmitted_timesatamp == 0:
+                logger.info(f"Last transmitted timestamp is simply 0 and hence continuing")
+                continue
+
+            time_since_last_spoken_AI_word = (time.time() - self.last_transmitted_timesatamp) 
+            if time_since_last_spoken_AI_word > self.hang_conversation_after and self.time_since_last_spoken_human_word < self.last_transmitted_timesatamp:
+                logger.info(f"{time_since_last_spoken_AI_word} seconds since last spoken time stamp and hence cutting the phone call and last transmitted timestampt ws {self.last_transmitted_timesatamp} and time since last spoken human word {self.time_since_last_spoken_human_word}")
+                await self.__process_end_of_conversation()
+                break
+            else:
+                logger.info(f"Only {time_since_last_spoken_AI_word} seconds since last spoken time stamp and hence not cutting the phone call")
+    
     async def __check_for_backchanneling(self):
         while True:
             if self.callee_speaking and time.time() - self.callee_speaking_start_time > self.backchanneling_start_delay:
@@ -1319,19 +1335,23 @@ class TaskManager(BaseManager):
         logger.info(f"Executing the first message task")
         try:
             while True:
-                if not self.stream_sid:
+                if not self.stream_sid and not self.should_record:
                     stream_sid = self.tools["input"].get_stream_sid()
                     if stream_sid is not None:
                         logger.info(f"Got stream sid and hence sending the first message {stream_sid}")
                         self.stream_sid = stream_sid
                         logger.info(f"Generating {self.kwargs['agent_welcome_message']}")
-                        meta_info = {'io': 'twilio', 'call_sid': 'CA2476833f2407289b46855456211aedcf',  'is_first_message': True, "cached": True, 'stream_sid': stream_sid, 'sequence': -1, 'is_md5_hash': False, 'llm_generated': False, 'request_id': '31479e4a-1f35-4909-90cb-897c42a8b3d1', 'should_interrupt': False, 'include_latency': False, 'utterance_end': 1715520891.0937662, 'time_received': 1715520891.2958128, 'transcriber_latency': 0.20204663276672363, 'sequence_id': 1, 'origin': 'transcriber', 'llm_start_time': 1715520891.2980957, 'llm_first_buffer_generation_latency': 0.540978193283081, 'type': 'audio', 'synthesizer_start_time': 1715520891.849409, 'is_first_chunk': True, 'text': 'Hey there! Thanks for calling us today.', 'synthesizer_first_chunk_latency': 0.5498526096343994, 'is_first_chunk_of_entire_response': True}
-                        # meta_info={'io': 'twilio', 'is_first_message': True, 'stream_sid': stream_sid, "request_id": str(uuid.uuid4()), "cached": True, "sequence_id": -1, 'format': 'pcm'}
-                        logger.info("Sleepiong for 3 seconds")
+                        meta_info={'io': 'twilio', 'is_first_message': True, 'stream_sid': stream_sid, "request_id": str(uuid.uuid4()), "cached": True, "sequence_id": -1, 'format': 'pcm'}
                         await self._synthesize(create_ws_data_packet(self.kwargs['agent_welcome_message'], meta_info= meta_info))
+                        break
                     else:
                         logger.info(f"Stream id is still None, so not passing it")
                         await asyncio.sleep(0.5) #Sleep for half a second to see if stream id goes past None 
+                elif self.should_record:
+                    meta_info={'io': 'default', 'is_first_message': True, "request_id": str(uuid.uuid4()), "cached": True, "sequence_id": -1, 'format': 'wav'}
+                    await self._synthesize(create_ws_data_packet(self.kwargs['agent_welcome_message'], meta_info= meta_info))
+                    break
+
         except Exception as e:
             logger.error(f"Error happeneed {e}") 
     async def run(self):
@@ -1341,7 +1361,7 @@ class TaskManager(BaseManager):
                 logger.info("starting task_id {}".format(self.task_id))                
                 tasks = [asyncio.create_task(self.tools['input'].handle())]
                 if not self.connected_through_dashboard:
-                    self.background_check_task = asyncio.create_task(self.__handle_initial_silence())
+                    self.background_check_task = asyncio.create_task(self.__handle_initial_silence(duration = 10))
                 if "transcriber" in self.tools:
                     tasks.append(asyncio.create_task(self._listen_transcriber()))
                     self.transcriber_task = asyncio.create_task(self.tools["transcriber"].run())
@@ -1360,9 +1380,9 @@ class TaskManager(BaseManager):
                         traceback.print_exc()
                 if self._is_conversation_task():
                     logger.info("Starting the first message task")
-                    self.first_message_task = asyncio.create_task(self.__first_message())
                     self.output_task = asyncio.create_task(self.__process_output_loop())
                     if not self.connected_through_dashboard:
+                        self.first_message_task = asyncio.create_task(self.__first_message())
                         if not self.use_llm_to_determine_hangup :
                             self.hangup_task = asyncio.create_task(self.__check_for_completion())
                         if self.should_backchannel:
