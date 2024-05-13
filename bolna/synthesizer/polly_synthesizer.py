@@ -1,8 +1,8 @@
+import os
 from dotenv import load_dotenv
 from botocore.exceptions import BotoCoreError, ClientError
 from aiobotocore.session import AioSession
 from contextlib import AsyncExitStack
-import audioop
 from bolna.helpers.logger_config import configure_logger
 from bolna.helpers.utils import convert_audio_to_wav, create_ws_data_packet, pcm_to_wav_bytes, resample
 from .base_synthesizer import BaseSynthesizer
@@ -41,8 +41,15 @@ class PollySynthesizer(BaseSynthesizer):
 
     @staticmethod
     async def create_client(service: str, session: AioSession, exit_stack: AsyncExitStack):
-        # creates AWS session from system environment credentials & config
-        return await exit_stack.enter_async_context(session.create_client(service))
+        if os.getenv('AWS_ACCESS_KEY_ID'):
+            return await exit_stack.enter_async_context(session.create_client(
+                service,
+                aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+                aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+                region_name=os.getenv('AWS_REGION')
+            ))
+        else:
+            return await exit_stack.enter_async_context(session.create_client(service))
 
     async def __generate_http(self, text):
         session = AioSession()
