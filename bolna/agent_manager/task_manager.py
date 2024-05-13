@@ -17,8 +17,6 @@ from bolna.providers import *
 from bolna.helpers.utils import calculate_audio_duration, create_ws_data_packet, get_file_names_in_directory, get_raw_audio_bytes, is_valid_md5, \
     get_required_input_types, format_messages, get_prompt_responses, resample, save_audio_file_to_s3, update_prompt_with_context, get_md5_hash, clean_json_string, wav_bytes_to_pcm, write_request_logs, yield_chunks_from_memory
 from bolna.helpers.logger_config import configure_logger
-# import uvloop
-# asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 from semantic_router import Route
 from semantic_router.layer import RouteLayer
 from semantic_router.encoders import FastEmbedEncoder
@@ -665,7 +663,6 @@ class TaskManager(BaseManager):
             if self.callee_silent:
                 logger.info("When we got utterance end, maybe LLM was still generating response. So, copying into history")
                 self.history = copy.deepcopy(self.interim_history)
-
 
     async def _process_conversation_formulaic_task(self, message, sequence, meta_info):
         llm_response = ""
