@@ -35,3 +35,7 @@ class BaseSynthesizer:
         audio_buffer.seek(0)
         audio_data = audio_buffer.read()
         return audio_data
+
+    @staticmethod
+    def get_engine(self):
+        return "default"

@@ -605,7 +605,7 @@ class TaskManager(BaseManager):
         logger.info(f"It's a preprocessed flow and hence updating current node")
         self.tools['llm_agent'].update_current_node()
     
-    def __convert_to_request_log(self, message, meta_info, model, component = "transcriber", direction = 'response', is_cached = False):
+    def __convert_to_request_log(self, message, meta_info, model, component = "transcriber", direction = 'response', is_cached = False, engine=None):
         log = dict()
         log['direction'] = direction
         log['data'] = message
@@ -620,6 +620,7 @@ class TaskManager(BaseManager):
                 log['is_final'] = True
         else:
             log['is_final'] = False #This is logged only for users to know final transcript from the transcriber
+        log['engine'] = engine
         asyncio.create_task(write_request_logs(log, self.run_id))
 
     ##############################################################
@@ -1054,7 +1055,7 @@ class TaskManager(BaseManager):
                 async for message in self.tools["synthesizer"].generate():
                     meta_info = message["meta_info"]
                     is_first_message = 'is_first_message' in meta_info and meta_info['is_first_message']
-                    self.__convert_to_request_log(message = meta_info['text'], meta_info= meta_info, component="synthesizer", direction="response", model = self.synthesizer_provider, is_cached= 'is_cached' in meta_info and meta_info['is_cached'])
+                    self.__convert_to_request_log(message = meta_info['text'], meta_info= meta_info, component="synthesizer", direction="response", model = self.synthesizer_provider, is_cached= 'is_cached' in meta_info and meta_info['is_cached'], engine=self.tools['synthesizer'].get_engine())
                     if is_first_message or (not self.conversation_ended and message["meta_info"]["sequence_id"] in self.sequence_ids):
                         logger.info(f"{message['meta_info']['sequence_id'] } is in sequence ids  {self.sequence_ids} and hence removing the sequence ids ")
                         if self.stream:   
@@ -1163,11 +1164,11 @@ class TaskManager(BaseManager):
                 elif self.synthesizer_provider in SUPPORTED_SYNTHESIZER_MODELS.keys():
                     # self.sequence_ids.add(meta_info["sequence_id"])
                     # logger.info(f"After adding into sequence id {self.sequence_ids}")
-                    self.__convert_to_request_log(message = text, meta_info= meta_info, component="synthesizer", direction="request", model = self.synthesizer_provider)
+                    self.__convert_to_request_log(message = text, meta_info= meta_info, component="synthesizer", direction="request", model = self.synthesizer_provider, engine=self.tools['synthesizer'].get_engine())
                     logger.info('##### sending text to {} for generation: {} '.format(self.synthesizer_provider, text))
                     if 'cached' in message['meta_info'] and meta_info['cached'] == True:
                         logger.info(f"Cached response and hence sending preprocessed text")
-                        self.__convert_to_request_log(message = text, meta_info= meta_info, component="synthesizer", direction="response", model = self.synthesizer_provider, is_cached= True)
+                        self.__convert_to_request_log(message = text, meta_info= meta_info, component="synthesizer", direction="response", model = self.synthesizer_provider, is_cached= True, engine=self.tools['synthesizer'].get_engine())
                         await self.__send_preprocessed_audio(meta_info, get_md5_hash(text))
                     else:
                         self.synthesizer_characters += len(text)
