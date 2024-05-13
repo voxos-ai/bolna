@@ -19,22 +19,13 @@ class OpenAiLLM(BaseLLM):
         self.temperature = temperature
         self.vllm_model = "vllm" in self.model
         self.model_args = { "max_tokens": self.max_tokens, "temperature": self.temperature, "model": self.model}
-
-        if self.vllm_model:
-            base_url = kwargs.get("base_url", None)
-            if base_url is None:
-                raise Exception("Cannot run a custom LLM without base URL")
+        if model == "Krutrim-spectre-v2":
+            logger.info(f"Connecting to Ola's krutrim model")
+            base_url = kwargs.get("base_url", os.getenv("OLA_KRUTRIM_BASE_URL"))
             api_key=kwargs.get('llm_key', None)
             if api_key is not None and len(api_key) > 0:
                 api_key = api_key
-            else:
-                api_key = "EMPTY"
             self.async_client = AsyncOpenAI( base_url=base_url, api_key= api_key)
-            self.model = self.model[5:]
-            self.model_args["model"] = self.model
-            if "top_k" in kwargs:
-                self.model_args["top_k"] = kwargs["top_k"]
-            logger.info(f"Using VLLM model base_url {base_url} and model {self.model} and api key {api_key}")
         else:
             llm_key = kwargs.get('llm_key', os.getenv('OPENAI_API_KEY'))
             if llm_key != "sk-":
@@ -42,16 +33,7 @@ class OpenAiLLM(BaseLLM):
             else:
                 llm_key = kwargs['llm_key']
             self.async_client = AsyncOpenAI(api_key=llm_key)
-        
-        if "top_p" in kwargs:
-            self.model_args["top_p"] = kwargs["top_p"]
-        if "stop" in kwargs:
-            self.model_args["stop"] = kwargs["stop"]        
-        if "presence_penalty" in kwargs:
-            self.model_args["presence_penalty"] = kwargs["presence_penalty"]
-        if  "frequency_penalty" in kwargs:
-            self.model_args["frequency_penalty"] = kwargs["frequency_penalty"]
-
+            
     async def generate_stream(self, messages, synthesize=True, request_json=False):
         if len(messages) == 0:
             raise Exception("No messages provided")
