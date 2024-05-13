@@ -405,7 +405,9 @@ Message type
 6. num_output_tokens 
 7. num_characters 
 8. is_final
+9. engine
 '''
+
 async def write_request_logs(message, run_id):
     component_details = [None, None, None, None, None]
     logger.info(f"Message {message}")
@@ -415,21 +417,21 @@ async def write_request_logs(message, run_id):
     elif message["component"] == "transcriber":
         component_details = [message['data'], None, None, None, False ,message.get('is_final', False)]
     elif message["component"] == "synthesizer":
-        component_details = [message['data'], None, None,len(message['data']), message['cached'] ,None]
-    
+        component_details = [message['data'], None, None,len(message['data']), message['cached'], None, message['engine']]
+
     row = row + component_details
-    
-    header = "Time,Component,Direction,Leg ID,Sequence ID,Model,Data,Input Tokens,Output Tokens,Characters,Cached,Final Transcript\n"
-    log_string = ','.join(['"' + str(item).replace('"', '""') + '"' if item is not None else '' for item in row]) + '\n'    
+
+    header = "Time,Component,Direction,Leg ID,Sequence ID,Model,Data,Input Tokens,Output Tokens,Characters,Cached,Final Transcript,Engine\n"
+    log_string = ','.join(['"' + str(item).replace('"', '""') + '"' if item is not None else '' for item in row]) + '\n'
     log_dir = f"./logs/{run_id.split('#')[0]}"
-    os.makedirs(log_dir, exist_ok=True) 
+    os.makedirs(log_dir, exist_ok=True)
     log_file_path = f"{log_dir}/{run_id.split('#')[1]}.csv"
     file_exists = os.path.exists(log_file_path)
-    
+
     async with aiofiles.open(log_file_path, mode='a') as log_file:
         if not file_exists:
             await log_file.write(header+log_string)
-        else:    
+        else:
             await log_file.write(log_string)
 
 async def save_audio_file_to_s3(conversation_recording, sampling_rate = 24000, assistant_id = None, run_id = None):

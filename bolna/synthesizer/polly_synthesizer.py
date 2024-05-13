@@ -30,6 +30,9 @@ class PollySynthesizer(BaseSynthesizer):
     def get_synthesized_characters(self):
         return self.synthesized_characters
     
+    def get_engine(self):
+        return self.engine
+
     def get_format(self, audio_format):
         if audio_format == "pcm":
             return "pcm"

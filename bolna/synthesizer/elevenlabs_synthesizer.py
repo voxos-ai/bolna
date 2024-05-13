@@ -50,7 +50,10 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
             return "ulaw_8000"
         return f"mp3_44100_128"
 
-    # Don't send EOS signal. Let        
+    def get_engine(self):
+        return self.model
+
+    # Don't send EOS signal. Let
     async def sender(self, text, end_of_llm_stream=False):  # sends text to websocket
         if self.websocket_connection is not None and not self.websocket_connection.open:
             self.connection_open = False
