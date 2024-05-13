@@ -137,6 +137,7 @@ Once you have the above docker setup and running, you can create agents and init
 
 <details>
 <summary>Call Payload</summary><br>
+
 ```yaml
 {
     "agent_id": "4c19700b-227c-4c2d-8bgf-42dfe4b240fc",
