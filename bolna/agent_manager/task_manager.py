@@ -45,8 +45,6 @@ class TaskManager(BaseManager):
         self.enforce_streaming = kwargs.get("enforce_streaming", False)
         self.callee_silent = True
         self.yield_chunks = yield_chunks
-        self.kwargs["process_interim_results"] = "true" if task.get("optimize_latency", False) is True else "false"
-        logger.info(f"Processing interim results {self.kwargs['process_interim_results'] }")
         # Set up communication queues between processes
         self.audio_queue = asyncio.Queue()
         self.llm_queue = asyncio.Queue()
@@ -176,7 +174,8 @@ class TaskManager(BaseManager):
             self.nitro = True 
             conversation_config = task.get("task_config", {})
             logger.info(f"Conversation config {conversation_config}")
-
+            self.kwargs["process_interim_results"] = "true" if conversation_config.get("optimize_latency", False) is True else "false"
+            logger.info(f"Processing interim results {self.kwargs['process_interim_results'] }")
             # Routes
             self.routes = task['tools_config']['llm_agent'].get("routes", None)
             self.route_layer = None
@@ -888,7 +887,7 @@ class TaskManager(BaseManager):
                     num_words = 0
                     if message['data'] == "TRANSCRIBER_BEGIN":
                         response_started = False #This signifies if we've gotten the first bit of interim text for the given response or not
-                        # self.callee_silent = False
+                        self.callee_silent = False
                         if self.nitro:
                             logger.info(f"Just a nitro thingy")
                             should_interrupt = meta_info.get("should_interrupt", True)
