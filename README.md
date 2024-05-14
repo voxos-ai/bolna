@@ -1,7 +1,7 @@
 <h1 align="center">
 </h1>
 <p align="center">
-  <p align="center"><b>End-to-end open-source voice agents platform</b>: Quickly build LLM based voice driven conversational applications</p>
+  <p align="center"><b>End-to-end open-source voice agents platform</b>: Quickly build voice firsts conversational assistants through a json. </p>
 </p>
 
 <h4 align="center">
