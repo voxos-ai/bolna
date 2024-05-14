@@ -74,8 +74,9 @@ async def get_all_agents():
         agent_config = await redis_client.get(agent_id)
         if agent_config:
             agent_config = json.loads(agent_config)
-            agents_data.append(agent_config)
-
+            agent_name = agent_config.get("agent_name")
+            if agent_name:
+                agents_data.append(agent_config)
     return JSONResponse(content=agents_data, status_code=200)
 
 
