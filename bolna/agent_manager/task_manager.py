@@ -1296,21 +1296,6 @@ class TaskManager(BaseManager):
             traceback.print_exc()
             logger.error(f'Error in processing message output')
 
-    async def __check_for_completion(self):
-        while True:
-            await asyncio.sleep(2)
-
-            if self.last_transmitted_timesatamp == 0:
-                logger.info(f"Last transmitted timestamp is simply 0 and hence continuing")
-                continue
-
-            time_since_last_spoken_AI_word = (time.time() - self.last_transmitted_timesatamp) 
-            if time_since_last_spoken_AI_word > self.hang_conversation_after and self.time_since_last_spoken_human_word < self.last_transmitted_timesatamp:
-                logger.info(f"{time_since_last_spoken_AI_word} seconds since last spoken time stamp and hence cutting the phone call and last transmitted timestampt ws {self.last_transmitted_timesatamp} and time since last spoken human word {self.time_since_last_spoken_human_word}")
-                await self.__process_end_of_conversation()
-                break
-            else:
-                logger.info(f"Only {time_since_last_spoken_AI_word} seconds since last spoken time stamp and hence not cutting the phone call")
     
     async def __check_for_completion(self):
         while True:
@@ -1370,7 +1355,7 @@ class TaskManager(BaseManager):
                 logger.info("starting task_id {}".format(self.task_id))                
                 tasks = [asyncio.create_task(self.tools['input'].handle())]
                 if not self.connected_through_dashboard:
-                    self.background_check_task = asyncio.create_task(self.__handle_initial_silence(duration = 10))
+                    self.background_check_task = asyncio.create_task(self.__handle_initial_silence(duration = 15))
                 if "transcriber" in self.tools:
                     tasks.append(asyncio.create_task(self._listen_transcriber()))
                     self.transcriber_task = asyncio.create_task(self.tools["transcriber"].run())
