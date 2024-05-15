@@ -76,7 +76,11 @@ async def get_all_agents():
             agent_config = json.loads(agent_config)
             agent_name = agent_config.get("agent_name")
             if agent_name:
-                agents_data.append(agent_config)
+                agent_data = {
+                    "agent_id": agent_id,
+                    "agent_config": agent_config
+                }
+                agents_data.append(agent_data)
     return JSONResponse(content=agents_data, status_code=200)
 
 
