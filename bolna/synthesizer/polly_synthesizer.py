@@ -22,16 +22,6 @@ class PollySynthesizer(BaseSynthesizer):
         self.sample_rate = str(sampling_rate)
         self.client = None
         self.first_chunk_generated = False
-        self.speaking_rate = speaking_rate
-        self.volume = volume
-        self.synthesized_characters = 0
-        self.cache = cache
-
-    def get_synthesized_characters(self):
-        return self.synthesized_characters
-    
-    def get_engine(self):
-        return self.engine
 
     def get_format(self, audio_format):
         if audio_format == "pcm":
@@ -52,19 +42,11 @@ class PollySynthesizer(BaseSynthesizer):
             return await exit_stack.enter_async_context(session.create_client(service))
 
     async def __generate_http(self, text):
+        self.synthesized_characters += len(text)
         session = AioSession()
         async with AsyncExitStack() as exit_stack:
             polly = await self.create_client("polly", session, exit_stack)
             logger.info(f"Generating TTS response for text: {text}, SampleRate {self.sample_rate} format {self.format}")
-            # input = f"""
-            # <speak> 
-            #     <amazon:auto-breaths volume= "x-loud" frequency="x-high" duration="x-long"> 
-            #         <prosody volume="{self.volume}" rate="{self.speaking_rate}"> {text} 
-            #         </prosody> 
-            #     </amazon:auto-breaths>
-            # </speak>
-            # """
-
             try:
                 response = await polly.synthesize_speech(
                     Engine=self.engine,
@@ -97,14 +79,7 @@ class PollySynthesizer(BaseSynthesizer):
             message = await self.internal_queue.get()
             logger.info(f"Generating TTS response for message: {message}")
             meta_info, text = message.get("meta_info"), message.get("data")
-            if self.cache.get(text):
-                logger.info(f"Cache hit and hence returning quickly {text}")
-                message = self.cache.get(text)
-            else:
-                logger.info(f"Not a cache hit {list(self.cache.data_dict)}")
-                self.synthesized_characters += len(text)
-                message = await self.__generate_http(text)
-                self.cache.set(text, message)
+            message = await self.__generate_http(text)
             if self.format == "mp3":
                 message = convert_audio_to_wav(message, source_format="mp3")
             if not self.first_chunk_generated:
