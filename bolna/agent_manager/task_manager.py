@@ -93,7 +93,7 @@ class TaskManager(BaseManager):
 
         # Agent stuff
         # Need to maintain current conversation history and overall persona/history kinda thing. 
-        # Soon we will maintain a seperate history for this 
+        # Soon we will maintain a separate history for this 
         self.history = [] if conversation_history is None else conversation_history 
         self.interim_history = copy.deepcopy(self.history.copy())
         logger.info(f'History {self.history}')
