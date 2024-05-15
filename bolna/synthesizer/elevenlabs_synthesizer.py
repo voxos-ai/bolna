@@ -7,6 +7,8 @@ import aiohttp
 import os
 import traceback
 from collections import deque
+
+from bolna.memory.cache.inmemory_scalar_cache import InmemoryScalarCache
 from .base_synthesizer import BaseSynthesizer
 from bolna.helpers.logger_config import configure_logger
 from bolna.helpers.utils import convert_audio_to_wav, create_ws_data_packet, pcm_to_wav_bytes, resample
@@ -18,7 +20,7 @@ logger = configure_logger(__name__)
 class ElevenlabsSynthesizer(BaseSynthesizer):
     def __init__(self, voice, voice_id, model="eleven_multilingual_v1", audio_format="mp3", sampling_rate="16000",
                  stream=False, buffer_size=400, temperature = 0.5, similarity_boost = 0.5, synthesier_key=None, 
-                 cache=None, **kwargs):
+                 caching=True, **kwargs):
         super().__init__(stream)
         self.api_key = os.environ["ELEVENLABS_API_KEY"] if synthesier_key is None else synthesier_key
         self.voice = voice_id
@@ -39,7 +41,9 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
         self.meta_info = None
         self.temperature = temperature
         self.similarity_boost = similarity_boost
-        self.cache = cache
+        self.caching = caching
+        if self.caching:
+            self.cache = InmemoryScalarCache()
         self.synthesized_characters = 0
 
     # Ensuring we only do wav output for now
@@ -189,17 +193,21 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                     message = await self.internal_queue.get()
                     logger.info(f"Generating TTS response for message: {message}")
                     meta_info, text = message.get("meta_info"), message.get("data")
-                    if self.cache.get(text):
-                        logger.info(f"Cache hit and hence returning quickly {text}")
-                        message = self.cache.get(text)
-                        meta_info['is_cached'] = True
+                    if self.caching:
+                        if self.cache.get(text):
+                            logger.info(f"Cache hit and hence returning quickly {text}")
+                            message = self.cache.get(text)
+                            meta_info['is_cached'] = True
+                        else:
+                            c = len(text)
+                            self.synthesized_characters += c
+                            logger.info(f"Not a cache hit {list(self.cache.data_dict)} and hence increasing characters by {c}")
+                            meta_info['is_cached'] = False
+                            audio = await self.__generate_http(text)
+                            self.cache.set(text, audio)
                     else:
-                        c = len(text)
-                        self.synthesized_characters += c
-                        logger.info(f"Not a cache hit {list(self.cache.data_dict)} and hence increasing characters by {c}")
                         meta_info['is_cached'] = False
                         audio = await self.__generate_http(text)
-                        self.cache.set(text, audio)
                         
                     meta_info['text'] = text
                     if not self.first_chunk_generated:
