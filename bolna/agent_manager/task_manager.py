@@ -9,6 +9,7 @@ import uuid
 import copy
 from datetime import datetime
 
+from bolna.constants import ACCIDENTAL_INTERRUPTION_PHRASES
 from bolna.memory.cache.inmemory_scalar_cache import InmemoryScalarCache
 from bolna.memory.cache.vector_cache import VectorCache
 from .base_manager import BaseManager
@@ -220,6 +221,7 @@ class TaskManager(BaseManager):
                 #Handling accidental interruption
                 self.number_of_words_for_interruption = conversation_config.get("number_of_words_for_interruption", 3)
                 self.started_transmitting_audio = False
+                self.accidental_interruption_phrases = set(ACCIDENTAL_INTERRUPTION_PHRASES)
                 #self.interruption_backoff_period = 1000 #conversation_config.get("interruption_backoff_period", 300) #this is the amount of time output loop will sleep before sending next audio
                 self.use_llm_for_hanging_up = conversation_config.get("hangup_after_LLMCall", False)
                 self.allow_extra_sleep = False #It'll help us to back off as soon as we hear interruption for a while
@@ -962,7 +964,7 @@ class TaskManager(BaseManager):
                             
                             # If we've started transmitting audio this is probably an interruption, so calculate number of words
                             if self.nitro and self.started_transmitting_audio:
-                                if num_words > self.number_of_words_for_interruption:
+                                if num_words > self.number_of_words_for_interruption or message['data'].strip() in self.accidental_interruption_phrases:
                                     #Process interruption only if number of words is higher than the threshold 
                                     logger.info(f"###### Number of words {num_words} is higher than the required number of words for interruption, hence, definitely interrupting")
                                     await self.__cleanup_downstream_tasks()
