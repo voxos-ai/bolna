@@ -26,7 +26,7 @@ redis_client = redis.Redis.from_pool(redis_pool)
 
 
 def populate_ngrok_tunnels():
-    response = requests.get("http://ngrok:4040/api/tunnels")  # ngrok interface
+    response = requests.get("http://localhost:4040/api/tunnels")  # ngrok interface
     app_callback_url, websocket_url = None, None
 
     if response.status_code == 200:
@@ -59,11 +59,8 @@ async def make_call(request: Request):
         if not call_details or "recipient_phone_number" not in call_details:
             raise HTTPException(status_code=404, detail="Recipient phone number not provided")
         user_id = str(uuid.uuid4())
-        app_callback_url = os.getenv('APP_CALLBACK_URL')
-        websocket_url = os.getenv('WEBSOCKET_URL')
 
-        if os.getenv('ENVIRONMENT') == 'local':
-            app_callback_url, websocket_url = populate_ngrok_tunnels()
+        app_callback_url, websocket_url = populate_ngrok_tunnels()
 
         print(f'app_callback_url: {app_callback_url}')
         print(f'websocket_url: {websocket_url}')

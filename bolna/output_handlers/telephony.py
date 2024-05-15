@@ -33,16 +33,20 @@ class TelephonyOutputHandler(DefaultOutputHandler):
         try:
             audio_chunk = ws_data_packet.get('data')
             meta_info = ws_data_packet.get('meta_info')
-            self.stream_sid = meta_info.get('stream_sid', None)
-
+            if self.stream_sid is None:
+                self.stream_sid = meta_info.get('stream_sid', None)
+            logger.info(f"Sending Message {self.current_request_id} and {self.stream_sid} and  {meta_info}")
             try:
                 if self.current_request_id == meta_info['request_id']:
                     if len(audio_chunk) == 1:
                         audio_chunk += b'\x00'
 
                 if audio_chunk and self.stream_sid and len(audio_chunk) != 1:
+                    
                     audio_format = meta_info.get("format", "wav")
+                    logger.info(f"Sending message {len(audio_chunk)} {audio_format}")
                     media_message = await self.form_media_message(audio_chunk, audio_format)
+                    logger.info(f"Got media message {media_message['streamSid']}")
                     await self.websocket.send_text(json.dumps(media_message))
 
                     mark_id = str(uuid.uuid4())
@@ -50,6 +54,8 @@ class TelephonyOutputHandler(DefaultOutputHandler):
 
                     mark_message = await self.form_mark_message(mark_id)
                     await self.websocket.send_text(json.dumps(mark_message))
+                else:
+                    logger.info("Not sending")
             except Exception as e:
                 traceback.print_exc()
                 logger.error(f'something went wrong while sending message to twilio {e}')
