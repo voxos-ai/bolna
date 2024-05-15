@@ -70,6 +70,7 @@ class Synthesizer(BaseModel):
     stream: bool = False
     buffer_size: Optional[int] = 40  # 40 characters in a buffer
     audio_format: Optional[str] = "pcm"
+    caching: Optional[bool] = True
 
     @validator("provider")
     def validate_model(cls, value):
