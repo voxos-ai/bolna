@@ -189,9 +189,12 @@ async def get_raw_audio_bytes(filename, agent_name = None, audio_format='mp3', a
             file_name = f"{PREPROCESS_DIR}/{agent_name}/{audio_format}/{filename}.{audio_format}"
         else:
             file_name = filename
-        with open(file_name, 'rb') as file:
-            # Read the entire file content into a variable
-            audio_data = file.read()
+        if os.path.isfile(file_name):
+            with open(file_name, 'rb') as file:
+                # Read the entire file content into a variable
+                audio_data = file.read()
+        else:
+            audio_data = None
     else:
         if not is_location:
             object_key = f"{assistant_id}/audio/{filename}.{audio_format}"
