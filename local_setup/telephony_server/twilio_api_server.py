@@ -26,7 +26,7 @@ redis_client = redis.Redis.from_pool(redis_pool)
 
 
 def populate_ngrok_tunnels():
-    response = requests.get("http://localhost:4040/api/tunnels")  # ngrok interface
+    response = requests.get("http://ngrok:4040/api/tunnels")  # ngrok interface
     app_callback_url, websocket_url = None, None
 
     if response.status_code == 200:
