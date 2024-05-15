@@ -13,7 +13,7 @@ from bolna.helpers.utils import create_ws_data_packet, int2float
 from bolna.helpers.vad import VAD
 from audioop import ulaw2lin, ratecv
 import json
-import uuid
+import os
 import time
 from queue import Queue
 from websocket import WebSocket
@@ -56,7 +56,7 @@ class WhisperTranscriber(BaseTranscriber):
 
         self.keywords = keywords
         self.interruption_signalled:bool = False
-        self.url:str = "ws://44.221.66.152:9000"
+        self.url:str = os.getenv('WHISPER_URL')
         
         # audio submitted
         self.audio_submission_time:float = None
