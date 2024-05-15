@@ -16,7 +16,6 @@ import json
 import os
 import time
 from queue import Queue
-from websocket import WebSocket
 from websockets.exceptions import *
 
 import uvloop
@@ -101,7 +100,7 @@ class WhisperTranscriber(BaseTranscriber):
 
 
     # TODO: add a server end  process in the server code
-    async def _check_and_process_end_of_stream(self, ws_data_packet:dict, ws:WebSocket):
+    async def _check_and_process_end_of_stream(self, ws_data_packet, ws):
         if 'eos' in ws_data_packet['meta_info'] and ws_data_packet['meta_info']['eos'] is True:
             logger.info("First closing transcription websocket")
             await self.heartbeat_task.send(b"END_OF_AUDIO")
@@ -114,7 +113,7 @@ class WhisperTranscriber(BaseTranscriber):
         return self.meta_info
 
 
-    async def sender_stream(self, ws:websockets.WebSocketClientProtocol=None):
+    async def sender_stream(self, ws=None):
         try:
             while True:
                 ws_data_packet = await self.input_queue.get()
@@ -144,7 +143,7 @@ class WhisperTranscriber(BaseTranscriber):
             logger.error('Error while sending: ' + str(e))
             raise Exception("Something went wrong")
 
-    async def receiver(self, ws:WebSocket):
+    async def receiver(self, ws):
         async for msg in ws:
             try:
                 msg:dict = json.loads(msg)
