@@ -6,7 +6,6 @@ from bolna.helpers.logger_config import configure_logger
 
 logger = configure_logger(__name__)
 
-enc = tiktoken.get_encoding("cl100k_base")
 
 
 class AssistantManager(BaseManager):

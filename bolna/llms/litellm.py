@@ -25,16 +25,16 @@ class LiteLLM(BaseLLM):
         if self.api_base:
             self.model_args["api_base"] = self.api_base
 
-        if "top_k" in kwargs:
-            self.model_args["top_k"] = kwargs["top_k"]
-        if "top_p" in kwargs:
-            self.model_args["top_p"] = kwargs["top_p"]
-        if "stop" in kwargs:
-            self.model_args["stop"] = kwargs["stop"]
-        if "presence_penalty" in kwargs:
-            self.model_args["presence_penalty"] = kwargs["presence_penalty"]
-        if "frequency_penalty" in kwargs:
-            self.model_args["frequency_penalty"] = kwargs["frequency_penalty"]
+        # if "top_k" in kwargs:
+        #     self.model_args["top_k"] = kwargs["top_k"]
+        # if "top_p" in kwargs:
+        #     self.model_args["top_p"] = kwargs["top_p"]
+        # if "stop" in kwargs:
+        #     self.model_args["stop"] = kwargs["stop"]
+        # if "presence_penalty" in kwargs:
+        #     self.model_args["presence_penalty"] = kwargs["presence_penalty"]
+        # if "frequency_penalty" in kwargs:
+        #     self.model_args["frequency_penalty"] = kwargs["frequency_penalty"]
 
         if len(kwargs) != 0:
             if "base_url" in kwargs:
@@ -49,7 +49,7 @@ class LiteLLM(BaseLLM):
         model_args["messages"] = messages
         model_args["stream"] = True
 
-        logger.info(f"request to model: {self.model}: {messages}")
+        logger.info(f"request to model: {self.model}: {messages} and model args {model_args}")
         start_time = time.time()
         async for chunk in await litellm.acompletion(**model_args):
             if (text_chunk := chunk['choices'][0]['delta'].content) and not chunk['choices'][0].finish_reason:
@@ -71,7 +71,7 @@ class LiteLLM(BaseLLM):
         else:
             yield answer, True
         self.started_streaming = False
-        logger.info(f"Time to generate response {time.time() - start_time}")
+        logger.info(f"Time to generate response {time.time() - start_time} {answer}")
 
     async def generate(self, messages, classification_task=False, stream=False, synthesize=True, request_json=False):
         text = ""
