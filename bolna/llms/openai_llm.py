@@ -32,10 +32,7 @@ class OpenAiLLM(BaseLLM):
         self.model = model
         self.trigger_function_call = kwargs.get("trigger_function_call", None)
         self.custom_tools = kwargs.get("tools", None)
-        self.url = kwargs.get("url", None)
-        self.method = kwargs.get("method", None)
-        self.param = kwargs.get("param", None)
-        self.api_token = kwargs.get("api_token", None)
+        self.api_params = kwargs.get("api_params", None)
         self.started_streaming = False
         logger.info(f"Initializing OpenAI LLM with model: {self.model} and maxc tokens {max_tokens}")
         self.max_tokens = max_tokens
@@ -63,7 +60,7 @@ class OpenAiLLM(BaseLLM):
         
         response_format = self.get_response_format(request_json)
 
-        answer, buffer, resp, called_fun, i = "", "", "", "", 0
+        answer, buffer, resp, called_fun, api_params, i = "", "", "", "", "", 0
         logger.info(f"request to open ai {messages} max tokens {self.max_tokens} ")
         model_args = self.model_args
         model_args["response_format"] = response_format
@@ -73,6 +70,7 @@ class OpenAiLLM(BaseLLM):
         trigger_function_call = self.trigger_function_call
         if trigger_function_call:
             tool = json.loads(self.custom_tools)
+            api_params = self.api_params
             model_args["functions"]=tool
             model_args["function_call"]="auto"
         async for chunk in await self.async_client.chat.completions.create(**model_args):
@@ -95,10 +93,15 @@ class OpenAiLLM(BaseLLM):
                     yield text, False
                     buffer = buffer_words[-1]
 
-        if trigger_function_call and (all(key in resp for key in tool[i]["parameters"]["properties"].keys())):
+        if trigger_function_call and (all(key in resp for key in tool[i]["parameters"]["properties"].keys())) and (called_fun in api_params):
             resp  = json.loads(resp)
-            response = await trigger_api(url=self.url, method=self.method, param=self.param, api_token=self.api_token, **resp)
-            content = f"We did made a function calling for user. We hit the function : {called_fun}, we hit the url {self.url} and send a {self.method} request and it returned us the response as given below: {str(response)} \n\n . Kindly understand the above response and convey this response in a conextual to user."
+            func_dict = api_params[called_fun]
+            url = func_dict['url']
+            method = func_dict['method']
+            param = func_dict['param']
+            api_token = func_dict['api_token']
+            response = await trigger_api(url=url, method=method.lower(), param=param, api_token=api_token, **resp)
+            content = f"We did made a function calling for user. We hit the function : {called_fun}, we hit the url {url} and send a {method} request and it returned us the response as given below: {str(response)} \n\n . Kindly understand the above response and convey this response in a conextual to user."
             model_args["messages"].append({"role":"system","content":content})
             async for chunk in await self.async_client.chat.completions.create(**model_args):
                 if text_chunk := chunk.choices[0].delta.content:
