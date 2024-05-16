@@ -7,6 +7,7 @@ from bolna.helpers.logger_config import configure_logger
 logger = configure_logger(__name__)
 
 
+
 class AssistantManager(BaseManager):
     def __init__(self, agent_config, ws=None, assistant_id=None, context_data=None, conversation_history=None,
                  connected_through_dashboard=None, cache=None, input_queue=None, output_queue=None, **kwargs):
