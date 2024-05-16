@@ -1,6 +1,6 @@
 region: us
 version: '2'
-authtoken: <your-auth-token>
+authtoken: 2gXxexY4LgcNqAK2QEbNdfhJPNc_4sP7ByHiVFM9rLmD8a5Qs
 tunnels:
   twilio-app:
     addr: twilio-app:8001

@@ -25,21 +25,11 @@ services:
       - ../agent_data:/app/agent_data
       - $HOME/.aws/credentials:/root/.aws/credentials:ro
       - $HOME/.aws/config:/root/.aws/config:ro
-    develop:
-      watch:
-        - action: sync+restart
-          path: .
-          target: /app
-          ignore:
-            - requirements.txt
-            - telephony_server/
-            - dockerfile/
 
-            
   redis:
     image: "redis:latest"
-    #ports:
-     # - "6379:6379"
+    ports:
+      - "6379:6379"
 
   ngrok:
     image: ngrok/ngrok:latest
