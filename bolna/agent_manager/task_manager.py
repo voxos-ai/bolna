@@ -88,6 +88,8 @@ class TaskManager(BaseManager):
         }
         #IO HANDLERS
         if task_id == 0:
+            self.default_io = self.task_config["tools_config"]["output"]["provider"] == 'default'
+            logger.info(f"Connected via websocket")
             self.should_record = self.task_config["tools_config"]["output"]["provider"] == 'default' and self.enforce_streaming #In this case, this is a websocket connection and we should record 
             self.__setup_input_handlers(connected_through_dashboard, input_queue, self.should_record)
         self.__setup_output_handlers(connected_through_dashboard, output_queue)
@@ -344,7 +346,9 @@ class TaskManager(BaseManager):
             raise "Other input handlers not supported yet"
 
     def __setup_transcriber(self):
+        
         if self.task_config["tools_config"]["transcriber"] is not None:
+            logger.info("Setting up transcriber")
             provider = "playground" if self.connected_through_dashboard else self.task_config["tools_config"]["input"][
                 "provider"]
             self.task_config["tools_config"]["transcriber"]["input_queue"] = self.audio_queue
@@ -1148,8 +1152,10 @@ class TaskManager(BaseManager):
                         await self._synthesize(create_ws_data_packet(self.kwargs['agent_welcome_message'], meta_info= meta_info))
                     else:
                         logger.info(f"Sending the agent welcome message")
-                        message = create_ws_data_packet(audio_chunk, meta_info)
-                        await self.tools["output"].handle(message)
+                        for chunk in yield_chunks_from_memory(audio_chunk, chunk_size=self.output_chunk_size):
+                            logger.debug("Sending chunk to output queue")
+                            message = create_ws_data_packet(chunk, meta_info)
+                            self.buffered_output_queue.put_nowait(message)
 
                 elif self.yield_chunks:
                     for chunk in yield_chunks_from_memory(audio_chunk, chunk_size=self.output_chunk_size):
@@ -1344,7 +1350,7 @@ class TaskManager(BaseManager):
         logger.info(f"Executing the first message task")
         try:
             while True:
-                if not self.stream_sid and not self.should_record:
+                if not self.stream_sid and not self.default_io:
                     stream_sid = self.tools["input"].get_stream_sid()
                     if stream_sid is not None:
                         logger.info(f"Got stream sid and hence sending the first message {stream_sid}")
@@ -1356,9 +1362,10 @@ class TaskManager(BaseManager):
                     else:
                         logger.info(f"Stream id is still None, so not passing it")
                         await asyncio.sleep(0.5) #Sleep for half a second to see if stream id goes past None 
-                elif self.should_record:
-                    meta_info={'io': 'default', 'is_first_message': True, "request_id": str(uuid.uuid4()), "cached": True, "sequence_id": -1, 'format': 'wav'}
-                    await self._synthesize(create_ws_data_packet(self.kwargs['agent_welcome_message'], meta_info= meta_info))
+                elif self.default_io:
+                    logger.info(f"Shouldn't record")
+                    # meta_info={'io': 'default', 'is_first_message': True, "request_id": str(uuid.uuid4()), "cached": True, "sequence_id": -1, 'format': 'wav'}
+                    # await self._synthesize(create_ws_data_packet(self.kwargs['agent_welcome_message'], meta_info= meta_info))
                     break
 
         except Exception as e:
