@@ -13,31 +13,40 @@ async def trigger_api(url, method, param, api_token, req="", **kwargs):
     exec(code, globals(), kwargs)
     try:
         headers = {'Content-Type': 'application/json'}
-        req=kwargs['req']
+
+        logger.info(f"Request to API {req} {code} {method} {url}")
         if api_token:
-            headers = {'Content-Type': 'application/json', 'Authorization': api_token}
+            headers = {'Content-Type': 'application/json', 'Authorization': f"Bearer {api_token}"}
         if method == "get":
             response = requests.get(url, params=req, headers=headers)
             return response.text
         elif method == "post":
+            logger.info(f"Sending to SERVER")
             response = requests.post(url, data=json.dumps(req), headers=headers)
+            logger.info(f"Response from The sercvers {response.text}")
             return response.text
     except Exception as e:
         message = str(f"We send {method} request to {url} & it returned us this error:", e)
+        logger.error(message)
         return message
 
 class OpenAiLLM(BaseLLM):
     def __init__(self, max_tokens=100, buffer_size=40, model="gpt-3.5-turbo-16k", temperature= 0.1, **kwargs):
         super().__init__(max_tokens, buffer_size)
         self.model = model
-        self.trigger_function_call = kwargs.get("trigger_function_call", None)
-        self.custom_tools = kwargs.get("tools", None)
-        self.api_params = kwargs.get("api_params", None)
+        self.custom_tools = kwargs.get("api_tools", None)
+        logger.info(f"API Tools {self.custom_tools}")
+        if self.custom_tools is not None:
+            self.trigger_function_call = True
+            self.api_params = self.custom_tools['tools_params']
+            self.tools = self.custom_tools['tools']
+        else:
+            self.trigger_function_call = False
+
         self.started_streaming = False
         logger.info(f"Initializing OpenAI LLM with model: {self.model} and maxc tokens {max_tokens}")
         self.max_tokens = max_tokens
         self.temperature = temperature
-        self.vllm_model = "vllm" in self.model
         self.model_args = { "max_tokens": self.max_tokens, "temperature": self.temperature, "model": self.model}
         if model == "Krutrim-spectre-v2":
             logger.info(f"Connecting to Ola's krutrim model")
@@ -67,20 +76,19 @@ class OpenAiLLM(BaseLLM):
         model_args["messages"] = messages
         model_args["stream"] = True
         model_args["stop"] = ["User:"]
-        trigger_function_call = self.trigger_function_call
-        if trigger_function_call:
-            tool = json.loads(self.custom_tools)
-            api_params = self.api_params
-            model_args["functions"]=tool
+        if self.trigger_function_call:
+            tools = json.loads(self.tools)
+            model_args["functions"]=tools
             model_args["function_call"]="auto"
         async for chunk in await self.async_client.chat.completions.create(**model_args):
-            if trigger_function_call and dict(chunk.choices[0].delta).get('function_call'):
+            if self.trigger_function_call and dict(chunk.choices[0].delta).get('function_call'):
                 if chunk.choices[0].delta.function_call.name:
+                    logger.info(f"Should do a function call {chunk.choices[0].delta.function_call.name}")
                     called_fun = str(chunk.choices[0].delta.function_call.name)
-                    i = [i for i in range(len(tool)) if called_fun == tool[i]["name"]][0]
+                    i = [i for i in range(len(tools)) if called_fun == tools[i]["name"]][0]
                 if (text_chunk := chunk.choices[0].delta.function_call.arguments):
                     resp += text_chunk
-            if text_chunk := chunk.choices[0].delta.content:
+            elif text_chunk := chunk.choices[0].delta.content:
                 answer += text_chunk
                 buffer += text_chunk
 
@@ -93,14 +101,15 @@ class OpenAiLLM(BaseLLM):
                     yield text, False
                     buffer = buffer_words[-1]
 
-        if trigger_function_call and (all(key in resp for key in tool[i]["parameters"]["properties"].keys())) and (called_fun in api_params):
+        if self.trigger_function_call and (all(key in resp for key in tools[i]["parameters"]["properties"].keys())) and (called_fun in self.api_params):
             resp  = json.loads(resp)
-            func_dict = api_params[called_fun]
+            logger.info(f"PAyload to send {resp}")
+            func_dict = self.api_params[called_fun]
             url = func_dict['url']
             method = func_dict['method']
             param = func_dict['param']
             api_token = func_dict['api_token']
-            response = await trigger_api(url=url, method=method.lower(), param=param, api_token=api_token, **resp)
+            response = await trigger_api(url=url, method=method.lower(), param=param, api_token=api_token, req = resp, **resp)
             content = f"We did made a function calling for user. We hit the function : {called_fun}, we hit the url {url} and send a {method} request and it returned us the response as given below: {str(response)} \n\n . Kindly understand the above response and convey this response in a conextual to user."
             model_args["messages"].append({"role":"system","content":content})
             async for chunk in await self.async_client.chat.completions.create(**model_args):

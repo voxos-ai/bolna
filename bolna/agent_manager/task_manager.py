@@ -34,6 +34,10 @@ class TaskManager(BaseManager):
         # Latency and logging 
         self.latency_dict = defaultdict(dict)
         self.kwargs = kwargs
+        logger.info(f"API TOOLS IN TOOLS CONFIG {task['tools_config'].get('api_tools')}")
+        if task['tools_config'].get('api_tools', None) is not None:
+            logger.info(f"API TOOLS is present {task['tools_config']['api_tools']}")
+            self.kwargs['api_tools'] = task['tools_config']['api_tools']
 
         logger.info(f"doing task {task}")
         self.task_id = task_id
@@ -404,7 +408,7 @@ class TaskManager(BaseManager):
             self.tools["llm_agent"] = SummarizationContextualAgent(llm, prompt=self.system_prompt)
             self.summarized_data = None
         elif self.task_config["task_type"] == "webhook":
-            zap_url = self.task_config["tools_config"]["api_tools"]["webhookURL"]
+            zap_url = self.task_config["tools_config"]["api_tools"]["tools_params"]["webhook"]["url"]
             logger.info(f"Zap URL {zap_url}")
             self.tools["webhook_agent"] = ZapierAgent(zap_url=zap_url)
 
@@ -513,6 +517,7 @@ class TaskManager(BaseManager):
         #This is used in case there's silence from callee's side
         if meta_info is None:
             meta_info = self.tools["transcriber"].get_meta_info()
+            logger.info(f"Metainfo {meta_info}")
         meta_info_copy = meta_info.copy()
         self.curr_sequence_id +=1
         meta_info_copy["sequence_id"] = self.curr_sequence_id
