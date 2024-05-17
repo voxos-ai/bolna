@@ -359,13 +359,14 @@ class TaskManager(BaseManager):
 
     def __setup_synthesizer(self, llm_config):
         logger.info(f"Synthesizer config: {self.task_config['tools_config']['synthesizer']}")
-        if "caching" in self.task_config['tools_config']['synthesizer']:
-            caching = self.task_config["tools_config"]["synthesizer"].pop("caching")
-        else:
-            caching = True
         if self._is_conversation_task():
             self.kwargs["use_turbo"] = self.task_config["tools_config"]["transcriber"]["language"] == "en"
         if self.task_config["tools_config"]["synthesizer"] is not None:
+            if "caching" in self.task_config['tools_config']['synthesizer']:
+                caching = self.task_config["tools_config"]["synthesizer"].pop("caching")
+            else:
+                caching = True
+
             self.synthesizer_provider = self.task_config["tools_config"]["synthesizer"].pop("provider")
             synthesizer_class = SUPPORTED_SYNTHESIZER_MODELS.get(self.synthesizer_provider)
             provider_config = self.task_config["tools_config"]["synthesizer"].pop("provider_config")
@@ -407,9 +408,9 @@ class TaskManager(BaseManager):
             self.tools["llm_agent"] = SummarizationContextualAgent(llm, prompt=self.system_prompt)
             self.summarized_data = None
         elif self.task_config["task_type"] == "webhook":
-            zap_url = self.task_config["tools_config"]["api_tools"]["webhookURL"]
-            logger.info(f"Zap URL {zap_url}")
-            self.tools["webhook_agent"] = ZapierAgent(zap_url=zap_url)
+            webhook_url = self.task_config["tools_config"]["api_tools"]["webhookURL"]
+            logger.info(f"Webhook URL {webhook_url}")
+            self.tools["webhook_agent"] = WebhookAgent(webhook_url=webhook_url)
 
         logger.info("prompt and config setup completed")
         
@@ -577,7 +578,7 @@ class TaskManager(BaseManager):
         logger.info(f" TASK CONFIG  {self.task_config['task_type']}")
         if self.task_config["task_type"] == "webhook":
             logger.info(f"Input patrameters {self.input_parameters}")
-            logger.info(f"DOING THE POST REQUEST TO ZAPIER WEBHOOK {self.input_parameters['extraction_details']}")
+            logger.info(f"DOING THE POST REQUEST TO WEBHOOK {self.input_parameters['extraction_details']}")
             self.webhook_response = await self.tools["webhook_agent"].execute(self.input_parameters['extraction_details'])
             logger.info(f"Response from the server {self.webhook_response}")
         else:

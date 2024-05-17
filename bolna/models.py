@@ -167,7 +167,7 @@ class Task(BaseModel):
     tools_config: ToolsConfig
     toolchain: ToolsChainModel
     task_type: Optional[str] = "conversation"  # extraction, summarization, notification
-    task_config: Optional[ConversationConfig]
+    task_config: ConversationConfig = dict()
 
 class AgentModel(BaseModel):
     agent_name: str
