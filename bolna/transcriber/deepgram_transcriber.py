@@ -23,7 +23,7 @@ class DeepgramTranscriber(BaseTranscriber):
     def __init__(self, provider, input_queue=None, model='deepgram', stream=True, language="en", endpointing="400",
                  sampling_rate="16000", encoding="linear16", output_queue=None, keywords=None,
                  process_interim_results="true", **kwargs):
-        logger.info(f"Initializing transcriber")
+        logger.info(f"Initializing transcriber {kwargs}")
         super().__init__(input_queue)
         self.endpointing = endpointing
         self.language = language
@@ -53,7 +53,7 @@ class DeepgramTranscriber(BaseTranscriber):
         self.connection_start_time = None
         self.process_interim_results = process_interim_results
         self.audio_frame_duration = 0.0
-
+        self.connected_via_dashboard = kwargs.get("enforce_streaming", True)
         #Message states
         self.curr_message = ''
         self.finalized_transcript = ""
@@ -77,6 +77,11 @@ class DeepgramTranscriber(BaseTranscriber):
             dg_params['encoding'] = self.encoding
             dg_params['sample_rate'] = self.sampling_rate
             dg_params['channels'] = "1"
+        elif not self.connected_via_dashboard:
+            dg_params['encoding'] = "linear16"
+            dg_params['sample_rate'] = 16000
+            dg_params['channels'] = "1"
+
 
         if self.provider == "playground":
             logger.info(f"CONNECTED THROUGH PLAYGROUND")
