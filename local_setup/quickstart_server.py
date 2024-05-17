@@ -49,7 +49,7 @@ async def create_agent(agent_data: CreateAgentPayload):
         for index, task in enumerate(data_for_db['tasks']):
             if task['task_type'] == "extraction":
                 extraction_prompt_llm = os.getenv("EXTRACTION_PROMPT_GENERATION_MODEL")
-                extraction_prompt_generation_llm = LiteLLM(streaming_model=extraction_prompt_llm, max_tokens=2000)
+                extraction_prompt_generation_llm = LiteLLM(model=extraction_prompt_llm, max_tokens=2000)
                 extraction_prompt = await extraction_prompt_generation_llm.generate(
                     messages=[
                         {'role': 'system', 'content': EXTRACTION_PROMPT_GENERATION_PROMPT},
