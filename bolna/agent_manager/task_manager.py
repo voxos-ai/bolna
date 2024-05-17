@@ -15,6 +15,7 @@ from bolna.memory.cache.vector_cache import VectorCache
 from .base_manager import BaseManager
 from bolna.agent_types import *
 from bolna.providers import *
+from bolna.prompts import *
 from bolna.helpers.utils import calculate_audio_duration, create_ws_data_packet, get_file_names_in_directory, get_raw_audio_bytes, is_valid_md5, \
     get_required_input_types, format_messages, get_prompt_responses, resample, save_audio_file_to_s3, update_prompt_with_context, get_md5_hash, clean_json_string, wav_bytes_to_pcm, write_request_logs, yield_chunks_from_memory
 from bolna.helpers.logger_config import configure_logger
@@ -431,7 +432,8 @@ class TaskManager(BaseManager):
             prompt_responses = kwargs.get('prompt_responses', None)
             if not prompt_responses:
                 prompt_responses = await get_prompt_responses(assistant_id=self.assistant_id, local=self.is_local)
-            self.prompts = prompt_responses["task_{}".format(task_id + 1)]
+            current_task = "task_{}".format(task_id + 1)
+            self.prompts = self.__prefill_prompts(self.task_config, prompt_responses.get(current_task, None), self.task_config['task_type'])
             if self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "preprocessed":
                 self.tools["llm_agent"].load_prompts_and_create_graph(self.prompts)
 
@@ -457,6 +459,17 @@ class TaskManager(BaseManager):
             self.history = [self.system_prompt] if len(self.history) == 0 else [self.system_prompt] + self.history
 
         self.interim_history = copy.deepcopy(self.history)
+
+    def __prefill_prompts(self, task, prompt, task_type):
+        if not prompt and task_type in ('extraction', 'summarization'):
+            if task_type == 'extraction':
+                extraction_json = task.get("tools_config").get('llm_agent').get('extraction_json')
+                prompt = EXTRACTION_PROMPT.format(extraction_json)
+                return {"system_prompt": prompt}
+            elif task_type == 'summarization':
+                return {"system_prompt": SUMMARIZATION_PROMPT}
+
+        return prompt
 
     def __process_stop_words(self, text_chunk, meta_info):
          #THis is to remove stop words. Really helpful in smaller 7B models
@@ -1167,7 +1180,7 @@ class TaskManager(BaseManager):
                     # logger.info(f"After adding into sequence id {self.sequence_ids}")
                     self.__convert_to_request_log(message = text, meta_info= meta_info, component="synthesizer", direction="request", model = self.synthesizer_provider, engine=self.tools['synthesizer'].get_engine())
                     logger.info('##### sending text to {} for generation: {} '.format(self.synthesizer_provider, text))
-                    if 'cached' in message['meta_info'] and meta_info['cached'] == True:
+                    if 'cached' in message['meta_info'] and meta_info['cached'] is True:
                         logger.info(f"Cached response and hence sending preprocessed text")
                         self.__convert_to_request_log(message = text, meta_info= meta_info, component="synthesizer", direction="response", model = self.synthesizer_provider, is_cached= True, engine=self.tools['synthesizer'].get_engine())
                         await self.__send_preprocessed_audio(meta_info, get_md5_hash(text))
