@@ -25,6 +25,9 @@ class BaseSynthesizer:
     def synthesize(self, text):
         pass
 
+    def get_synthesized_characters(self):
+        return 0
+
     def resample(self, audio_bytes):
         audio_buffer = io.BytesIO(audio_bytes)
         waveform, orig_sample_rate = torchaudio.load(audio_buffer)

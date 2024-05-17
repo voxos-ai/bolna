@@ -113,6 +113,8 @@ class LLM(BaseModel):
     provider: Optional[str] = "openai"
     base_url: Optional[str] = None
     routes: Optional[Routes] = None
+    extraction_details: Optional[str] = None
+    summarization_details: Optional[str] = None
 
 class MessagingModel(BaseModel):
     provider: str
