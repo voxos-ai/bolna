@@ -1106,8 +1106,8 @@ class TaskManager(BaseManager):
                                     number_of_chunks = (len(message['data'])/self.output_chunk_size)
                                     i = 0
                                     for chunk in yield_chunks_from_memory(message['data'], chunk_size=self.output_chunk_size):
-                                        i+=1
                                         self.__enqueue_chunk(chunk, i, number_of_chunks, meta_info)
+                                        i+=1
                                 else:
                                     self.buffered_output_queue.put_nowait(message)
                         else:
