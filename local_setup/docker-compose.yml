@@ -1,6 +1,7 @@
 version: '3'
 services:
   twilio-app:
+    image: twilio-app:latest
     build:
       context: .
       dockerfile: dockerfiles/twilio_server.Dockerfile
@@ -12,6 +13,7 @@ services:
       - .env
 
   bolna-app:
+    image: bolna-app:latest
     build:
       context: .
       dockerfile: dockerfiles/bolna_server.Dockerfile
@@ -27,7 +29,7 @@ services:
       - $HOME/.aws/config:/root/.aws/config:ro
 
   redis:
-    image: "redis:latest"
+    image: redis:latest
     ports:
       - "6379:6379"
 
