@@ -8,20 +8,47 @@ from bolna.helpers.logger_config import configure_logger
 logger = configure_logger(__name__)
 load_dotenv()
 
-async def trigger_api(url, method, param, api_token, req="", **kwargs):
-    code = compile(param % kwargs, "<string>", "exec")
-    exec(code, globals(), kwargs)
-    try:
-        headers = {'Content-Type': 'application/json'}
+# async def trigger_api(url, method, param, api_token, req="", **kwargs):
+#     response = await trigger_api(url=self.url, method=self.method.lower(), param=self.param, api_token=self.api_token, **resp)
+#     code = compile(param % kwargs, "<string>", "exec")
+#     exec(code, globals(), kwargs)
+#     req=kwargs['req']
 
-        logger.info(f"Request to API {req} {code} {method} {url}")
+#     try:
+#         headers = {'Content-Type': 'application/json'}
+
+#         logger.info(f"Request to API {req} {code} {method} {url}")
+#         if api_token:
+#             headers = {'Content-Type': 'application/json', 'Authorization': f"Bearer {api_token}"}
+#         if method == "get":
+#             response = requests.get(url, params=req, headers=headers)
+#             return response.text
+#         elif method == "post":
+#             logger.info(f"Sending to SERVER")
+#             response = requests.post(url, data=json.dumps(req), headers=headers)
+#             logger.info(f"Response from The sercvers {response.text}")
+#             return response.text
+#     except Exception as e:
+#         message = str(f"We send {method} request to {url} & it returned us this error:", e)
+#         logger.error(message)
+#         return message
+
+
+async def trigger_api(url, method, param, api_token, **kwargs):
+    try:
+        code = compile(param % kwargs, "<string>", "exec")
+        exec(code, globals(), kwargs)
+        req = param % kwargs
+        logger.info(f"PArams {param % kwargs}")
+
+        headers = {'Content-Type': 'application/json'}
         if api_token:
-            headers = {'Content-Type': 'application/json', 'Authorization': f"Bearer {api_token}"}
+            headers = {'Content-Type': 'application/json', 'Authorization': api_token}
         if method == "get":
             response = requests.get(url, params=req, headers=headers)
             return response.text
         elif method == "post":
-            logger.info(f"Sending to SERVER")
+            logger.info(f"Sending request {req}, {url}")
             response = requests.post(url, data=json.dumps(req), headers=headers)
             logger.info(f"Response from The sercvers {response.text}")
             return response.text
@@ -29,6 +56,7 @@ async def trigger_api(url, method, param, api_token, req="", **kwargs):
         message = str(f"We send {method} request to {url} & it returned us this error:", e)
         logger.error(message)
         return message
+    
 
 class OpenAiLLM(BaseLLM):
     def __init__(self, max_tokens=100, buffer_size=40, model="gpt-3.5-turbo-16k", temperature= 0.1, **kwargs):
@@ -109,7 +137,7 @@ class OpenAiLLM(BaseLLM):
             method = func_dict['method']
             param = func_dict['param']
             api_token = func_dict['api_token']
-            response = await trigger_api(url=url, method=method.lower(), param=param, api_token=api_token, req = resp, **resp)
+            response = await trigger_api(url= url, method=method.lower(), param= param, api_token= api_token, **resp)
             content = f"We did made a function calling for user. We hit the function : {called_fun}, we hit the url {url} and send a {method} request and it returned us the response as given below: {str(response)} \n\n . Kindly understand the above response and convey this response in a conextual to user."
             model_args["messages"].append({"role":"system","content":content})
             async for chunk in await self.async_client.chat.completions.create(**model_args):
