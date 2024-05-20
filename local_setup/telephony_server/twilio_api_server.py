@@ -90,9 +90,6 @@ async def twilio_callback(ws_url: str = Query(...), agent_id: str = Query(...), 
         response = VoiceResponse()
 
         connect = Connect()
-        print("connected")
-        response.say('Please speak now')
-
         websocket_twilio_route = f'{ws_url}/chat/v1/{agent_id}'
         connect.stream(url=websocket_twilio_route)
         print(f"websocket connection done to {websocket_twilio_route}")

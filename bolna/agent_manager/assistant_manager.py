@@ -2,6 +2,7 @@ import time
 from .base_manager import BaseManager
 from .task_manager import TaskManager
 from bolna.helpers.logger_config import configure_logger
+from bolna.models import AGENT_WELCOME_MESSAGE
 
 logger = configure_logger(__name__)
 
@@ -24,6 +25,7 @@ class AssistantManager(BaseManager):
         self.output_queue = output_queue
         self.kwargs = kwargs
         self.conversation_history = conversation_history
+        self.kwargs['agent_welcome_message'] = agent_config.get('agent_welcome_message', AGENT_WELCOME_MESSAGE)
 
     async def run(self, local=False, run_id=None):
         """
@@ -34,7 +36,6 @@ class AssistantManager(BaseManager):
 
         input_parameters = None
         for task_id, task in enumerate(self.tasks):
-
             logger.info(f"Running task {task_id} {task} and sending kwargs {self.kwargs}")
             task_manager = TaskManager(self.agent_config.get("agent_name", self.agent_config.get("assistant_name")),
                                        task_id, task, self.websocket,

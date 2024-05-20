@@ -198,7 +198,6 @@ class TaskManager(BaseManager):
 
 
         # for long pauses and rushing
-        
             if conversation_config is not None:
                 self.minimum_wait_duration = self.task_config["tools_config"]["transcriber"]["endpointing"]
                 logger.info(f"minimum wait duration {self.minimum_wait_duration}")
