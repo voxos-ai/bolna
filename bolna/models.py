@@ -3,6 +3,8 @@ from typing import Optional, List, Union, Dict
 from pydantic import BaseModel, Field, validator, ValidationError, Json
 from .providers import *
 
+AGENT_WELCOME_MESSAGE = "This call is being recorded for quality assurance and training. Please speak now."
+
 
 def validate_attribute(value, allowed_values):
     if value not in allowed_values:
@@ -85,17 +87,21 @@ class IOModel(BaseModel):
     def validate_provider(cls, value):
         return validate_attribute(value, ["twilio", "default", "database", "exotel"])
 
+
 # Can be used to route across multiple prompts as well
 class Route(BaseModel):
     route_name: str
     utterances: List[str]
-    response: Union[List[str], str] #If length of responses is less than utterances, a random sentence will be used as a response and if it's equal, respective index will be used to use it as FAQs caching
-    score_threshold: Optional[float] = 0.85 # this is the required threshold for cosine similarity 
+    response: Union[List[
+        str], str]  # If length of responses is less than utterances, a random sentence will be used as a response and if it's equal, respective index will be used to use it as FAQs caching
+    score_threshold: Optional[float] = 0.85  # this is the required threshold for cosine similarity
+
 
 # Routes can be used for FAQs caching, prompt routing, guard rails, agent assist function calling
 class Routes(BaseModel):
     embedding_model: Optional[str] = "Snowflake/snowflake-arctic-embed-l"
     routes: List[Route]
+
 
 class LLM(BaseModel):
     model: Optional[str] = "gpt-3.5-turbo-16k"
@@ -115,6 +121,7 @@ class LLM(BaseModel):
     routes: Optional[Routes] = None
     extraction_details: Optional[str] = None
     summarization_details: Optional[str] = None
+
 
 class MessagingModel(BaseModel):
     provider: str
@@ -150,6 +157,7 @@ class ToolsChainModel(BaseModel):
     execution: str = Field(..., pattern="^(parallel|sequential)$")
     pipelines: List[List[str]]
 
+
 class ConversationConfig(BaseModel):
     optimize_latency: Optional[bool] = True  # This will work on in conversation
     hangup_after_silence: Optional[int] = 10
@@ -163,14 +171,16 @@ class ConversationConfig(BaseModel):
     backchanneling_message_gap: Optional[int] = 5
     backchanneling_start_delay: Optional[int] = 5
 
+
 class Task(BaseModel):
     tools_config: ToolsConfig
     toolchain: ToolsChainModel
     task_type: Optional[str] = "conversation"  # extraction, summarization, notification
     task_config: ConversationConfig = dict()
 
+
 class AgentModel(BaseModel):
     agent_name: str
     agent_type: str = "other"
     tasks: List[Task]
- # Usually of the format task_1: { "system_prompt" : "helpful agent" } #For IVR type it should be a basic graph
+    agent_welcome_message: Optional[str] = AGENT_WELCOME_MESSAGE
