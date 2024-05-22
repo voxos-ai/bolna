@@ -2,6 +2,8 @@ import os
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 import json, requests
+
+from bolna.helpers.utils import convert_to_request_log, format_messages
 from .llm import BaseLLM
 from bolna.helpers.logger_config import configure_logger
 
@@ -39,7 +41,7 @@ async def trigger_api(url, method, param, api_token, **kwargs):
         code = compile(param % kwargs, "<string>", "exec")
         exec(code, globals(), kwargs)
         req = param % kwargs
-        logger.info(f"PArams {param % kwargs} \n {type(req)} \n {param} \n {kwargs} \n\n {req}")
+        logger.info(f"Params {param % kwargs} \n {type(req)} \n {param} \n {kwargs} \n\n {req}")
 
         headers = {'Content-Type': 'application/json'}
         if api_token:
@@ -51,7 +53,7 @@ async def trigger_api(url, method, param, api_token, **kwargs):
             return response.text
         elif method == "post":
             logger.info(f"Sending request {json.loads(req)}, {url}, {headers}")
-            response = requests.post(url, data=json.loads(req), headers=headers)
+            response = requests.post(url, json=json.loads(req), headers=headers)
             logger.info(f"Response from The server {response.text}")
             return response.text
     except Exception as e:
@@ -93,8 +95,9 @@ class OpenAiLLM(BaseLLM):
             else:
                 llm_key = kwargs['llm_key']
             self.async_client = AsyncOpenAI(api_key=llm_key)
+        self.run_id = kwargs.get("run_id", None)
             
-    async def generate_stream(self, messages, synthesize=True, request_json=False):
+    async def generate_stream(self, messages, synthesize=True, request_json=False, meta_info = None):
         if len(messages) == 0:
             raise Exception("No messages provided")
         
@@ -113,15 +116,21 @@ class OpenAiLLM(BaseLLM):
             model_args["function_call"]="auto"
         async for chunk in await self.async_client.chat.completions.create(**model_args):
             if self.trigger_function_call and dict(chunk.choices[0].delta).get('function_call'):
+                yield buffer, False
+                buffer = ''
                 if chunk.choices[0].delta.function_call.name:
                     logger.info(f"Should do a function call {chunk.choices[0].delta.function_call.name}")
                     called_fun = str(chunk.choices[0].delta.function_call.name)
                     i = [i for i in range(len(tools)) if called_fun == tools[i]["name"]][0]
                 if (text_chunk := chunk.choices[0].delta.function_call.arguments):
                     resp += text_chunk
+                if chunk.choices[0].delta.content:
+                    logger.info(f"Response to tell the user {chunk.choices[0].delta.content}")
             elif text_chunk := chunk.choices[0].delta.content:
+                
                 answer += text_chunk
                 buffer += text_chunk
+                logger.info(f"adding text chunk {answer}")
 
                 if len(buffer) >= self.buffer_size and synthesize:
                     buffer_words = buffer.split(" ")
@@ -133,6 +142,7 @@ class OpenAiLLM(BaseLLM):
                     buffer = buffer_words[-1]
 
         if self.trigger_function_call and (all(key in resp for key in tools[i]["parameters"]["properties"].keys())) and (called_fun in self.api_params):
+            logger.info(f"Function call paramaeters {resp}")
             resp  = json.loads(resp)
             func_dict = self.api_params[called_fun]
             logger.info(f"PAyload to send {resp} func_dict {func_dict}")
@@ -144,6 +154,7 @@ class OpenAiLLM(BaseLLM):
             response = await trigger_api(url= url, method=method.lower(), param= param, api_token= api_token, **resp)
             content = f"We did made a function calling for user. We hit the function : {called_fun}, we hit the url {url} and send a {method} request and it returned us the response as given below: {str(response)} \n\n . Kindly understand the above response and convey this response in a conextual to user."
             model_args["messages"].append({"role":"system","content":content})
+            convert_to_request_log(format_messages(model_args['messages']), meta_info, self.model, "llm", direction = "request", is_cached= False, run_id = self.run_id)
             async for chunk in await self.async_client.chat.completions.create(**model_args):
                 if text_chunk := chunk.choices[0].delta.content:
                     answer += text_chunk

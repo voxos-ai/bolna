@@ -1,3 +1,4 @@
+import datetime
 import json
 import asyncio
 import math
@@ -504,3 +505,21 @@ def list_number_of_wav_files_in_directory(directory):
 def get_file_names_in_directory(directory):
     return os.listdir(directory)
 
+
+def convert_to_request_log(message, meta_info, model, component = "transcriber", direction = 'response', is_cached = False, engine=None, run_id = None):
+    log = dict()
+    log['direction'] = direction
+    log['data'] = message
+    log['leg_id'] = meta_info['request_id'] if "request_id" in meta_info else "1234"
+    log['time'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log['component'] = component
+    log['sequence_id'] = meta_info['sequence_id']
+    log['model'] = model
+    log['cached'] = is_cached
+    if component == "transcriber":
+        if 'is_final' in meta_info and meta_info['is_final']:
+            log['is_final'] = True
+    else:
+        log['is_final'] = False #This is logged only for users to know final transcript from the transcriber
+    log['engine'] = engine
+    asyncio.create_task(write_request_logs(log, run_id))

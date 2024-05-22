@@ -16,7 +16,7 @@ from .base_manager import BaseManager
 from bolna.agent_types import *
 from bolna.providers import *
 from bolna.helpers.utils import calculate_audio_duration, create_ws_data_packet, get_file_names_in_directory, get_raw_audio_bytes, is_valid_md5, \
-    get_required_input_types, format_messages, get_prompt_responses, resample, save_audio_file_to_s3, update_prompt_with_context, get_md5_hash, clean_json_string, wav_bytes_to_pcm, write_request_logs, yield_chunks_from_memory
+    get_required_input_types, format_messages, get_prompt_responses, resample, save_audio_file_to_s3, update_prompt_with_context, get_md5_hash, clean_json_string, wav_bytes_to_pcm, convert_to_request_log, yield_chunks_from_memory
 from bolna.helpers.logger_config import configure_logger
 from semantic_router import Route
 from semantic_router.layer import RouteLayer
@@ -610,23 +610,7 @@ class TaskManager(BaseManager):
         logger.info(f"It's a preprocessed flow and hence updating current node")
         self.tools['llm_agent'].update_current_node()
     
-    def __convert_to_request_log(self, message, meta_info, model, component = "transcriber", direction = 'response', is_cached = False, engine=None):
-        log = dict()
-        log['direction'] = direction
-        log['data'] = message
-        log['leg_id'] = meta_info['request_id'] if "request_id" in meta_info else "1234"
-        log['time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log['component'] = component
-        log['sequence_id'] = meta_info['sequence_id']
-        log['model'] = model
-        log['cached'] = is_cached
-        if component == "transcriber":
-            if 'is_final' in meta_info and meta_info['is_final']:
-                log['is_final'] = True
-        else:
-            log['is_final'] = False #This is logged only for users to know final transcript from the transcriber
-        log['engine'] = engine
-        asyncio.create_task(write_request_logs(log, self.run_id))
+    
 
     ##############################################################
     # LLM task
@@ -653,7 +637,7 @@ class TaskManager(BaseManager):
             messages.append({'role': 'user', 'content': message['data']})
             logger.info(f"Starting LLM Agent {messages}")
             #Expose get current classification_response method from the agent class and use it for the response log
-            self.__convert_to_request_log(message = format_messages(messages, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["model"], is_cached= True)
+            convert_to_request_log(message = format_messages(messages, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["model"], is_cached= True, run_id= self.run_id)
             async for next_state in self.tools['llm_agent'].generate(messages, label_flow=self.label_flow):
                 if next_state == "<end_of_conversation>":
                     meta_info["end_of_conversation"] = True
@@ -714,8 +698,8 @@ class TaskManager(BaseManager):
                 logger.info(f"Route {route} has a vector cache")
                 relevant_utterance = self.vector_caches[route].get(message['data'])
                 cache_response = self.route_responses_dict[route][relevant_utterance]
-                self.__convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["model"])
-                self.__convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="response", model=self.task_config["tools_config"]["llm_agent"]["model"], is_cached= True)
+                convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
+                convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="response", model=self.task_config["tools_config"]["llm_agent"]["model"], is_cached= True, run_id= self.run_id)
                 messages = copy.deepcopy(self.history)
                 messages += [{'role': 'user', 'content': message['data']},{'role': 'assistant', 'content': cache_response}]
                 self.interim_history = copy.deepcopy(messages)
@@ -738,9 +722,9 @@ class TaskManager(BaseManager):
             messages = copy.deepcopy(self.history)
             messages.append({'role': 'user', 'content': message['data']})
             ### TODO CHECK IF THIS IS EVEN REQUIRED
-            self.__convert_to_request_log(message=format_messages(messages, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["model"])
+            convert_to_request_log(message=format_messages(messages, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
             
-            async for llm_message in self.tools['llm_agent'].generate(messages, synthesize=True):
+            async for llm_message in self.tools['llm_agent'].generate(messages, synthesize=True, meta_info = meta_info):
                 text_chunk, end_of_llm_stream = llm_message
                 llm_response += " " + text_chunk
                 logger.info(f"Got a response from LLM {llm_response}")
@@ -756,13 +740,13 @@ class TaskManager(BaseManager):
                 messages.append({"role": "assistant", "content": llm_response})
                 self.history = copy.deepcopy(messages)
                 await self._handle_llm_output(next_step, llm_response, should_bypass_synth, meta_info)
-                self.__convert_to_request_log(message = llm_response, meta_info= meta_info, component="llm", direction="response", model=self.task_config["tools_config"]["llm_agent"]["model"])
+                convert_to_request_log(message = llm_response, meta_info= meta_info, component="llm", direction="response", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
             else:    
                 if self.current_request_id in self.llm_rejected_request_ids:
                     logger.info("##### User spoke while LLM was generating response")
                 else:
                     messages.append({"role": "assistant", "content": llm_response})
-                    self.__convert_to_request_log(message=llm_response, meta_info= meta_info, component="llm", direction="response", model=self.task_config["tools_config"]["llm_agent"]["model"])
+                    convert_to_request_log(message=llm_response, meta_info= meta_info, component="llm", direction="response", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
                     self.interim_history = copy.deepcopy(messages)
                     self.llm_response_generated = True
                     if self.callee_silent:
@@ -778,8 +762,8 @@ class TaskManager(BaseManager):
                         {'role': 'system', 'content': self.check_for_completion_prompt},
                         {'role': 'user', 'content': format_messages(self.history, use_system_prompt= True)}]
                 logger.info(f"##### Answer from the LLM {answer}")
-                self.__convert_to_request_log(message=format_messages(prompt, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["model"])
-                self.__convert_to_request_log(message=answer, meta_info= meta_info, component="llm", direction="response", model= self.check_for_completion_llm)
+                convert_to_request_log(message=format_messages(prompt, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
+                convert_to_request_log(message=answer, meta_info= meta_info, component="llm", direction="response", model= self.check_for_completion_llm, run_id= self.run_id)
                 
                 if should_hangup:
                     await self.__process_end_of_conversation()
@@ -859,7 +843,7 @@ class TaskManager(BaseManager):
         return sequence
 
     async def _handle_transcriber_output(self, next_task, transcriber_message, meta_info):
-        self.__convert_to_request_log(message=transcriber_message, meta_info= meta_info, model = "deepgram")
+        convert_to_request_log(message=transcriber_message, meta_info= meta_info, model = "deepgram", run_id= self.run_id)
         if next_task == "llm":
             logger.info(f"Running llm Tasks")
             meta_info["origin"] = "transcriber"
@@ -1059,7 +1043,7 @@ class TaskManager(BaseManager):
                 async for message in self.tools["synthesizer"].generate():
                     meta_info = message["meta_info"]
                     is_first_message = 'is_first_message' in meta_info and meta_info['is_first_message']
-                    self.__convert_to_request_log(message = meta_info['text'], meta_info= meta_info, component="synthesizer", direction="response", model = self.synthesizer_provider, is_cached= 'is_cached' in meta_info and meta_info['is_cached'], engine=self.tools['synthesizer'].get_engine())
+                    convert_to_request_log(message = meta_info['text'], meta_info= meta_info, component="synthesizer", direction="response", model = self.synthesizer_provider, is_cached= 'is_cached' in meta_info and meta_info['is_cached'], engine=self.tools['synthesizer'].get_engine(), run_id= self.run_id)
                     if is_first_message or (not self.conversation_ended and message["meta_info"]["sequence_id"] in self.sequence_ids):
                         logger.info(f"{message['meta_info']['sequence_id'] } is in sequence ids  {self.sequence_ids} and hence removing the sequence ids ")
                         if self.stream:   
@@ -1168,11 +1152,11 @@ class TaskManager(BaseManager):
                 elif self.synthesizer_provider in SUPPORTED_SYNTHESIZER_MODELS.keys():
                     # self.sequence_ids.add(meta_info["sequence_id"])
                     # logger.info(f"After adding into sequence id {self.sequence_ids}")
-                    self.__convert_to_request_log(message = text, meta_info= meta_info, component="synthesizer", direction="request", model = self.synthesizer_provider, engine=self.tools['synthesizer'].get_engine())
+                    convert_to_request_log(message = text, meta_info= meta_info, component="synthesizer", direction="request", model = self.synthesizer_provider, engine=self.tools['synthesizer'].get_engine(), run_id= self.run_id)
                     logger.info('##### sending text to {} for generation: {} '.format(self.synthesizer_provider, text))
                     if 'cached' in message['meta_info'] and meta_info['cached'] == True:
                         logger.info(f"Cached response and hence sending preprocessed text")
-                        self.__convert_to_request_log(message = text, meta_info= meta_info, component="synthesizer", direction="response", model = self.synthesizer_provider, is_cached= True, engine=self.tools['synthesizer'].get_engine())
+                        convert_to_request_log(message = text, meta_info= meta_info, component="synthesizer", direction="response", model = self.synthesizer_provider, is_cached= True, engine=self.tools['synthesizer'].get_engine(), run_id= self.run_id)
                         await self.__send_preprocessed_audio(meta_info, get_md5_hash(text))
                     else:
                         self.synthesizer_characters += len(text)
