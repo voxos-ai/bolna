@@ -55,7 +55,9 @@ class WhisperTranscriber(BaseTranscriber):
         # INPUT/OUPUT queue present in base class
         self.transcriber_output_queue:Queue = output_queue
         self.interruption_signalled:bool = False
-        self.url:str = os.getenv('WHISPER_URL')
+        # self.url:str = os.getenv('WHISPER_URL')
+        # env file stuck to old value
+        self.url:str = "ws://54.196.238.86:9000"
         
         # audio submitted
         self.audio_submission_time:float = None

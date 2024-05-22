@@ -55,7 +55,7 @@ class Transcriber(BaseModel):
     sampling_rate: Optional[int] = 16000
     encoding: Optional[str] = "linear16"
     endpointing: Optional[int] = 400
-    keywords: Optional[str] = None
+    keywords: Optional[List[str]] = None
     modeltype: Optional[str] = "whisper-tiny"
     task:Optional[str] = "transcribe"
 
