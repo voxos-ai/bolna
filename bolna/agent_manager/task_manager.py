@@ -439,6 +439,7 @@ class TaskManager(BaseManager):
         if "system_prompt" in self.prompts:
             # This isn't a graph based agent
             enriched_prompt = self.prompts["system_prompt"]
+            logger.info("There's a system prompt")
             if self.context_data is not None:
                 enriched_prompt = update_prompt_with_context(self.prompts["system_prompt"], self.context_data)
                 self.prompts["system_prompt"] = enriched_prompt

@@ -129,10 +129,10 @@ class APIParams(BaseModel):
     url: str
     method: Optional[str] = "POST"
     api_token: Optional[str] = None
-    param: Optional[str] = None
+    param: Optional[str] = None #Payload for the URL
 
 class ToolModel(BaseModel):
-    tools: str
+    tools: str #Goes in as a prompt
     tools_params: Dict[str, APIParams]
 
 class ToolsConfig(BaseModel):

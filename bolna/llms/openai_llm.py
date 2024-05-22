@@ -39,18 +39,20 @@ async def trigger_api(url, method, param, api_token, **kwargs):
         code = compile(param % kwargs, "<string>", "exec")
         exec(code, globals(), kwargs)
         req = param % kwargs
-        logger.info(f"PArams {param % kwargs}")
+        logger.info(f"PArams {param % kwargs} \n {type(req)} \n {param} \n {kwargs} \n\n {req}")
 
         headers = {'Content-Type': 'application/json'}
         if api_token:
             headers = {'Content-Type': 'application/json', 'Authorization': api_token}
         if method == "get":
-            response = requests.get(url, params=req, headers=headers)
+            logger.info(f"Sending request {req}, {url}, {headers}")
+            response = requests.get(url, params=json.loads(req), headers=headers)
+            logger.info(f"Response from The servers {response.text}")
             return response.text
         elif method == "post":
-            logger.info(f"Sending request {req}, {url}")
-            response = requests.post(url, data=json.dumps(req), headers=headers)
-            logger.info(f"Response from The sercvers {response.text}")
+            logger.info(f"Sending request {json.loads(req)}, {url}, {headers}")
+            response = requests.post(url, data=json.loads(req), headers=headers)
+            logger.info(f"Response from The server {response.text}")
             return response.text
     except Exception as e:
         message = str(f"We send {method} request to {url} & it returned us this error:", e)
@@ -67,6 +69,7 @@ class OpenAiLLM(BaseLLM):
         if self.custom_tools is not None:
             self.trigger_function_call = True
             self.api_params = self.custom_tools['tools_params']
+            logger.info(f"Function dict {self.api_params}")
             self.tools = self.custom_tools['tools']
         else:
             self.trigger_function_call = False
@@ -131,8 +134,9 @@ class OpenAiLLM(BaseLLM):
 
         if self.trigger_function_call and (all(key in resp for key in tools[i]["parameters"]["properties"].keys())) and (called_fun in self.api_params):
             resp  = json.loads(resp)
-            logger.info(f"PAyload to send {resp}")
             func_dict = self.api_params[called_fun]
+            logger.info(f"PAyload to send {resp} func_dict {func_dict}")
+
             url = func_dict['url']
             method = func_dict['method']
             param = func_dict['param']
