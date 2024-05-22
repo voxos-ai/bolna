@@ -56,6 +56,8 @@ class Transcriber(BaseModel):
     encoding: Optional[str] = "linear16"
     endpointing: Optional[int] = 400
     keywords: Optional[str] = None
+    modeltype: Optional[str] = "whisper-tiny"
+    task:Optional[str] = "transcribe"
 
     @validator("model")
     def validate_model(cls, value):
