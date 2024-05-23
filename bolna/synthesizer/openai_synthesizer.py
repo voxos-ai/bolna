@@ -16,7 +16,7 @@ class OPENAISynthesizer(BaseSynthesizer):
         self.format = self.get_format(audio_format.lower())
         self.voice = voice
         self.sample_rate = sampling_rate
-        api_key = kwargs.get("synthesizer_key", os.getenv("OPENAI_API_KEY"))
+        api_key = kwargs.get("synthesizer_key", os.getenv("OPEN_API_KEY"))
         self.async_client = AsyncOpenAI(api_key= api_key)
         self.model = model
         self.first_chunk_generated = False 
