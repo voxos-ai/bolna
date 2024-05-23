@@ -30,6 +30,7 @@ class DefaultOutputHandler:
                     logger.info(f"Sending text response {packet['data']}")
                     data = packet['data']
 
+                logger.info(f"Sending to the frontend {len(data)}")
                 response = {"data": data, "type": packet["meta_info"]['type']}
                 await self.websocket.send_json(response)
 

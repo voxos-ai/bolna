@@ -10,32 +10,6 @@ from bolna.helpers.logger_config import configure_logger
 logger = configure_logger(__name__)
 load_dotenv()
 
-# async def trigger_api(url, method, param, api_token, req="", **kwargs):
-#     response = await trigger_api(url=self.url, method=self.method.lower(), param=self.param, api_token=self.api_token, **resp)
-#     code = compile(param % kwargs, "<string>", "exec")
-#     exec(code, globals(), kwargs)
-#     req=kwargs['req']
-
-#     try:
-#         headers = {'Content-Type': 'application/json'}
-
-#         logger.info(f"Request to API {req} {code} {method} {url}")
-#         if api_token:
-#             headers = {'Content-Type': 'application/json', 'Authorization': f"Bearer {api_token}"}
-#         if method == "get":
-#             response = requests.get(url, params=req, headers=headers)
-#             return response.text
-#         elif method == "post":
-#             logger.info(f"Sending to SERVER")
-#             response = requests.post(url, data=json.dumps(req), headers=headers)
-#             logger.info(f"Response from The sercvers {response.text}")
-#             return response.text
-#     except Exception as e:
-#         message = str(f"We send {method} request to {url} & it returned us this error:", e)
-#         logger.error(message)
-#         return message
-
-
 async def trigger_api(url, method, param, api_token, **kwargs):
     try:
         code = compile(param % kwargs, "<string>", "exec")
@@ -143,6 +117,7 @@ class OpenAiLLM(BaseLLM):
 
         if self.trigger_function_call and (all(key in resp for key in tools[i]["parameters"]["properties"].keys())) and (called_fun in self.api_params):
             logger.info(f"Function call paramaeters {resp}")
+            convert_to_request_log(resp, meta_info, self.model, "llm", direction = "response", is_cached= False, run_id = self.run_id)
             resp  = json.loads(resp)
             func_dict = self.api_params[called_fun]
             logger.info(f"PAyload to send {resp} func_dict {func_dict}")
@@ -154,7 +129,8 @@ class OpenAiLLM(BaseLLM):
             response = await trigger_api(url= url, method=method.lower(), param= param, api_token= api_token, **resp)
             content = f"We did made a function calling for user. We hit the function : {called_fun}, we hit the url {url} and send a {method} request and it returned us the response as given below: {str(response)} \n\n . Kindly understand the above response and convey this response in a conextual to user."
             model_args["messages"].append({"role":"system","content":content})
-            convert_to_request_log(format_messages(model_args['messages']), meta_info, self.model, "llm", direction = "request", is_cached= False, run_id = self.run_id)
+            logger.info(f"Logging function call parameters ")
+            convert_to_request_log(format_messages(model_args['messages'], True), meta_info, self.model, "llm", direction = "request", is_cached= False, run_id = self.run_id)
             async for chunk in await self.async_client.chat.completions.create(**model_args):
                 if text_chunk := chunk.choices[0].delta.content:
                     answer += text_chunk

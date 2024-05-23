@@ -28,7 +28,7 @@ logger = configure_logger(__name__)
 
 class TaskManager(BaseManager):
     def __init__(self, assistant_name, task_id, task, ws, input_parameters=None, context_data=None,
-                 assistant_id=None, run_id=None, connected_through_dashboard=False, cache=None,
+                 assistant_id=None, connected_through_dashboard=False, cache=None,
                  input_queue=None, conversation_history=None, output_queue=None, yield_chunks=True, **kwargs):
         super().__init__()
         # Latency and logging 
@@ -68,7 +68,8 @@ class TaskManager(BaseManager):
 
         # Assistant persistance stuff
         self.assistant_id = assistant_id
-        self.run_id = run_id
+        self.run_id = kwargs.get("run_id", "1234#0")
+        logger.info(f"Run id {self.run_id}")
         self.mark_set = set()
         
         self.conversation_ended = False
@@ -168,6 +169,7 @@ class TaskManager(BaseManager):
         llm = self.__setup_llm(llm_config)
         #Setup tasks
         self.__setup_tasks(llm)
+        
 
 
         #setup request logs
@@ -224,6 +226,7 @@ class TaskManager(BaseManager):
 
                 #Handling accidental interruption
                 self.number_of_words_for_interruption = conversation_config.get("number_of_words_for_interruption", 3)
+                self.first_message_passed = False
                 self.started_transmitting_audio = False
                 self.accidental_interruption_phrases = set(ACCIDENTAL_INTERRUPTION_PHRASES)
                 #self.interruption_backoff_period = 1000 #conversation_config.get("interruption_backoff_period", 300) #this is the amount of time output loop will sleep before sending next audio
@@ -253,8 +256,13 @@ class TaskManager(BaseManager):
                     logger.info(f"Agent welcome message present {self.kwargs['agent_welcome_message']}")
                     self.first_message_task = None
                 
-            
-            
+                # Ambient noise
+                self.ambient_noise = conversation_config.get("ambient_noise", True)
+                self.ambient_noise_task = None
+                if self.ambient_noise:
+                    logger.info(f"Ambient noise is True {self.ambient_noise}")
+                    self.soundtrack = conversation_config.get("ambient_noise_track", "convention_hall.wav")
+
     def __setup_routes(self, routes):
         embedding_model = routes.get("embedding_model", os.getenv("ROUTE_EMBEDDING_MODEL"))
         self.route_encoder = FastEmbedEncoder(name=embedding_model)
@@ -953,7 +961,7 @@ class TaskManager(BaseManager):
                                 await self.__cleanup_downstream_tasks()
                             
                             # If we've started transmitting audio this is probably an interruption, so calculate number of words
-                            if self.nitro and self.started_transmitting_audio:
+                            if self.nitro and self.started_transmitting_audio and self.number_of_words_for_interruption != 0 and self.first_message_passed:
                                 if num_words > self.number_of_words_for_interruption or message['data'].strip() in self.accidental_interruption_phrases:
                                     #Process interruption only if number of words is higher than the threshold 
                                     logger.info(f"###### Number of words {num_words} is higher than the required number of words for interruption, hence, definitely interrupting")
@@ -961,6 +969,8 @@ class TaskManager(BaseManager):
                                 else:
                                     logger.info(f"Not starting a cleanup because {num_words} number of words are lesser {self.number_of_words_for_interruption} and hence continuing,")
                                     continue
+                            elif self.number_of_words_for_interruption == 0:
+                                logger.info(f"Not interrupting")
                                     
                             self.last_response_time = time.time()
                             transcriber_message = message['data']
@@ -1124,6 +1134,7 @@ class TaskManager(BaseManager):
                         logger.info(f"Sending the agent welcome message")
                         message = create_ws_data_packet(audio_chunk, meta_info)
                         await self.tools["output"].handle(message)
+                    self.first_message_passed = True
 
                 elif self.yield_chunks:
                     for chunk in yield_chunks_from_memory(audio_chunk, chunk_size=self.output_chunk_size):
@@ -1338,6 +1349,27 @@ class TaskManager(BaseManager):
         except Exception as e:
             logger.error(f"Error happeneed {e}")
 
+    async def __start_transmitting_ambient_noise(self):
+        try:
+            audio = await get_raw_audio_bytes(f'{os.getenv("AMBIENT_NOISE_PRESETS_DIR")}/{self.soundtrack}', local= True, is_location=True)
+            logger.info(f"Length of audio {len(audio)} {self.sampling_rate}")
+            audio = resample(audio, self.sampling_rate, format = "wav")
+            if self.should_record:
+                meta_info={'io': 'default', 'is_first_message': True, "request_id": str(uuid.uuid4()), "ambient_noise": True, "sequence_id": -1, "type":'audio', 'format': 'wav'}
+            else:
+
+                meta_info={'io': 'twilio', 'is_first_message': True, 'stream_sid': self.stream_sid , "request_id": str(uuid.uuid4()), "cached": True, "type":'audio', "sequence_id": -1, 'format': 'pcm'}
+            while True:
+                logger.info(f"Before yielding ambient noise")
+                for chunk in yield_chunks_from_memory(audio, self.output_chunk_size ):
+                    if not self.started_transmitting_audio:
+                        logger.info(f"Transmitting ambient noise {len(chunk)}")
+                        await self.tools["output"].handle(create_ws_data_packet(chunk, meta_info=meta_info))
+                    logger.info("Sleeping for 800 ms")
+                    await asyncio.sleep(0.8)
+        except Exception as e:
+            logger.error(f"Something went wrong while transmitting noise {e}")
+
     async def run(self):
         try:
             if self.task_id == 0:
@@ -1362,15 +1394,20 @@ class TaskManager(BaseManager):
                     except asyncio.CancelledError as e:
                         logger.error(f'Synth task got cancelled {e}')
                         traceback.print_exc()
+                    
                 if self._is_conversation_task():
-                    logger.info("Starting the first message task")
+                    logger.info(f"Starting the first message task {self.enforce_streaming}")
                     self.output_task = asyncio.create_task(self.__process_output_loop())
-                    if not self.connected_through_dashboard:
+                    if not self.connected_through_dashboard or self.enforce_streaming:
+                        logger.info(f"Setting up other servers")
                         self.first_message_task = asyncio.create_task(self.__first_message())
                         if not self.use_llm_to_determine_hangup :
                             self.hangup_task = asyncio.create_task(self.__check_for_completion())
                         if self.should_backchannel:
                             self.backchanneling_task = asyncio.create_task(self.__check_for_backchanneling())
+                        if self.ambient_noise:
+                            logger.info(f"Transmitting ambient noise")
+                            self.ambient_noise_task = asyncio.create_task(self.__start_transmitting_ambient_noise())
                 try:
                     await asyncio.gather(*tasks)
                 except asyncio.CancelledError as e:
@@ -1416,6 +1453,9 @@ class TaskManager(BaseManager):
             
             if self._is_conversation_task() and self.backchanneling_task is not None:
                 self.backchanneling_task.cancel()
+            
+            if self._is_conversation_task() and self.ambient_noise_task is not None:
+                self.ambient_noise_task.cancel()
             
             if self.task_id == 0:
                 output = {"messages": self.history, "conversation_time": time.time() - self.start_time,
