@@ -308,7 +308,7 @@ class TaskManager(BaseManager):
                     output_kwargs['mark_set'] = self.mark_set
                     logger.info(f"Making sure that the sampling rate for output handler is 8000")
                     self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 8000
-                    self.task_config['tools_config']['synthesizer']['audio_format'] = 'pcm'
+                    #self.task_config['tools_config']['synthesizer']['audio_format'] = 'pcm'
                 else:
                     self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 24000
                     output_kwargs['queue'] = output_queue
@@ -345,7 +345,6 @@ class TaskManager(BaseManager):
             raise "Other input handlers not supported yet"
 
     def __setup_transcriber(self):
-        
         if self.task_config["tools_config"]["transcriber"] is not None:
             logger.info("Setting up transcriber")
             provider = "playground" if self.connected_through_dashboard else self.task_config["tools_config"]["input"][
