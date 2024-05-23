@@ -173,7 +173,7 @@ class TaskManager(BaseManager):
         self.request_logs = []
 
         if task_id == 0:
-            self.output_chunk_size = 16384 if self.sampling_rate == 24000 else 8192 #0.5 second chunk size for calls 
+            self.output_chunk_size = 16384 if self.sampling_rate == 24000 else 8192 #0.5 second chunk size for calls
             # For nitro
             self.nitro = True 
             conversation_config = task.get("task_config", {})
@@ -1064,9 +1064,10 @@ class TaskManager(BaseManager):
 
     async def __listen_synthesizer(self):
         try:
-            if self.stream and self.synthesizer_provider != "polly" and not self.is_an_ivr_call: 
+            if self.stream and self.tools['synthesizer'].supports_websocket() and not self.is_an_ivr_call:
                 logger.info("Opening websocket connection to synthesizer")
                 await self.tools["synthesizer"].open_connection()
+
             while True:
                 logger.info("Listening to synthesizer")
                 async for message in self.tools["synthesizer"].generate():
@@ -1075,46 +1076,24 @@ class TaskManager(BaseManager):
                     self.__convert_to_request_log(message = meta_info['text'], meta_info= meta_info, component="synthesizer", direction="response", model = self.synthesizer_provider, is_cached= 'is_cached' in meta_info and meta_info['is_cached'], engine=self.tools['synthesizer'].get_engine())
                     if is_first_message or (not self.conversation_ended and message["meta_info"]["sequence_id"] in self.sequence_ids):
                         logger.info(f"{message['meta_info']['sequence_id'] } is in sequence ids  {self.sequence_ids} and hence removing the sequence ids ")
-                        if self.stream:   
-                            if self.synthesizer_provider == "polly":
-                                if message['meta_info']['is_first_chunk']:
-                                    first_chunk_generation_timestamp = time.time()
-                                    meta_info["synthesizer_first_chunk_latency"] = first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time']
-                                logger.info(f"Simply Storing in buffered output queue for now")
+                        if self.stream:
+                            if "is_first_chunk" in message['meta_info'] and message['meta_info']['is_first_chunk']:
+                                first_chunk_generation_timestamp = time.time()
+                                meta_info["synthesizer_first_chunk_latency"] = first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time']
+                            logger.info(f"Simply Storing in buffered output queue for now")
 
-                                if self.yield_chunks:
-                                    logger.info(f"Yielding chunks")
-                                    number_of_chunks = (len(message['data'])//self.output_chunk_size)
-                                    i = 0
-                                    for chunk in yield_chunks_from_memory(message['data'], chunk_size=self.output_chunk_size):
-                                        self.__enqueue_chunk(chunk, i, number_of_chunks, meta_info)
-                                        i +=1
-                                else:
-                                    self.buffered_output_queue.put_nowait(message)
-                                
+                            if self.tools["output"].process_in_chunks(self.yield_chunks):
+                                number_of_chunks = (len(message['data'])//self.output_chunk_size)
+                                chunk_idx = 0
+                                for chunk in yield_chunks_from_memory(message['data'], chunk_size=self.output_chunk_size):
+                                    self.__enqueue_chunk(chunk, chunk_idx, number_of_chunks, meta_info)
+                                    chunk_idx += 1
                             else:
-                                if self.task_config["tools_config"]["output"]["provider"] in SUPPORTED_INPUT_TELEPHONY_HANDLERS.keys() and not self.connected_through_dashboard and self.synthesizer_provider == "elevenlabs":
-                                    if meta_info.get('format', '') != 'mulaw':
-                                        message['data'] = wav_bytes_to_pcm(message['data'])
-                                
-                                if "is_first_chunk" in message['meta_info'] and message['meta_info']['is_first_chunk']:
-                                    first_chunk_generation_timestamp = time.time()
-                                    meta_info["synthesizer_first_chunk_latency"] = first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time']
-                                    #self.latency_dict[message['meta_info']["request_id"]]['synthesizer'] = {"first_chunk_generation_latency": first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time'], "first_chunk_generation_timestamp": first_chunk_generation_timestamp}
-                                if self.yield_chunks:
-                                    number_of_chunks = (len(message['data'])/self.output_chunk_size)
-                                    i = 0
-                                    for chunk in yield_chunks_from_memory(message['data'], chunk_size=self.output_chunk_size):
-                                        self.__enqueue_chunk(chunk, i, number_of_chunks, meta_info)
-                                        i+=1
-                                else:
-                                    self.buffered_output_queue.put_nowait(message)
+                                self.buffered_output_queue.put_nowait(message)
                         else:
                             logger.info("Stream is not enabled and hence sending entire audio")
                             first_chunk_generation_timestamp = time.time()
                             self.latency_dict[message['meta_info']["request_id"]]['synthesizer'] = {"first_chunk_generation_latency": first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time'], "first_chunk_generation_timestamp": first_chunk_generation_timestamp}
-                            #self.history = copy.deepcopy(self.interim_history)
-                            logger.info(f"Changing history")
                             await self.tools["output"].handle(message)
                     else:
                         logger.info(f"{message['meta_info']['sequence_id']} is not in sequence ids  {self.sequence_ids} and hence not sending to output")                
@@ -1124,6 +1103,12 @@ class TaskManager(BaseManager):
         except Exception as e:
             traceback.print_exc()
             logger.error(f"Error in synthesizer {e}")
+
+    async def process_audio_data_for_output(self, meta_info, message):
+        if self.task_config["tools_config"]["output"]["format"] == "pcm" and meta_info.get('format', '') != 'mulaw':
+            message['data'] = wav_bytes_to_pcm(message['data'])
+
+        return message['data']
 
     async def __send_preprocessed_audio(self, meta_info, text):
         try:
@@ -1355,8 +1340,8 @@ class TaskManager(BaseManager):
                         logger.info(f"Got stream sid and hence sending the first message {stream_sid}")
                         self.stream_sid = stream_sid
                         logger.info(f"Generating {self.kwargs.get('agent_welcome_message', None)}")
-                        meta_info={'io': 'twilio', 'is_first_message': True, 'stream_sid': stream_sid, "request_id": str(uuid.uuid4()), "cached": True, "sequence_id": -1, 'format': 'pcm'}
-                        await self._synthesize(create_ws_data_packet(self.kwargs.get('agent_welcome_message', None), meta_info= meta_info))
+                        meta_info = {'io': self.tools["output"].get_provider(), 'is_first_message': True, 'stream_sid': stream_sid, "request_id": str(uuid.uuid4()), "cached": True, "sequence_id": -1, 'format': self.task_config["tools_config"]["output"]["format"]}
+                        await self._synthesize(create_ws_data_packet(self.kwargs.get('agent_welcome_message', None), meta_info=meta_info))
                         break
                     else:
                         logger.info(f"Stream id is still None, so not passing it")

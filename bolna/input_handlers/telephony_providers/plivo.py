@@ -13,5 +13,5 @@ class PlivoInputHandler(TelephonyInputHandler):
 
     async def call_start(self, packet):
         start = packet['start']
-        self.call_sid = start['call_sid']
-        self.stream_sid = start['stream_sid']
+        self.call_sid = start['callId']
+        self.stream_sid = start['streamId']

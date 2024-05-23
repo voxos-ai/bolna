@@ -85,7 +85,7 @@ class IOModel(BaseModel):
 
     @validator("provider")
     def validate_provider(cls, value):
-        return validate_attribute(value, ["twilio", "default", "database", "exotel"])
+        return validate_attribute(value, ["twilio", "default", "database", "exotel", "plivo"])
 
 
 # Can be used to route across multiple prompts as well
