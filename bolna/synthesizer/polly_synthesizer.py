@@ -36,6 +36,9 @@ class PollySynthesizer(BaseSynthesizer):
     def get_engine(self):
         return self.engine
 
+    def supports_websocket(self):
+        return False
+
     def get_format(self, audio_format):
         if audio_format == "pcm":
             return "pcm"
