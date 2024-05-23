@@ -5,6 +5,7 @@ from aiobotocore.session import AioSession
 from contextlib import AsyncExitStack
 from bolna.helpers.logger_config import configure_logger
 from bolna.helpers.utils import convert_audio_to_wav, create_ws_data_packet, pcm_to_wav_bytes, resample
+from bolna.memory.cache.inmemory_scalar_cache import InmemoryScalarCache
 from .base_synthesizer import BaseSynthesizer
 
 logger = configure_logger(__name__)
@@ -13,7 +14,7 @@ load_dotenv()
 
 class PollySynthesizer(BaseSynthesizer):
     def __init__(self, voice, language, audio_format="pcm", sampling_rate=8000, stream=False, engine="neural",
-                 buffer_size=400, speaking_rate = "100%", volume = "0dB", cache= None, **kwargs):
+                 buffer_size=400, speaking_rate = "100%", volume = "0dB", caching= True, **kwargs):
         super().__init__(stream, buffer_size)
         self.engine = engine
         self.format = self.get_format(audio_format.lower())
@@ -25,7 +26,9 @@ class PollySynthesizer(BaseSynthesizer):
         self.speaking_rate = speaking_rate
         self.volume = volume
         self.synthesized_characters = 0
-        self.cache = cache
+        self.caching = caching
+        if caching:
+            self.cache = InmemoryScalarCache()
 
     def get_synthesized_characters(self):
         return self.synthesized_characters
@@ -97,14 +100,20 @@ class PollySynthesizer(BaseSynthesizer):
             message = await self.internal_queue.get()
             logger.info(f"Generating TTS response for message: {message}")
             meta_info, text = message.get("meta_info"), message.get("data")
-            if self.cache.get(text):
-                logger.info(f"Cache hit and hence returning quickly {text}")
-                message = self.cache.get(text)
+            if self.caching:
+                logger.info(f"Caching is on")
+                if self.cache.get(text):
+                    logger.info(f"Cache hit and hence returning quickly {text}")
+                    message = self.cache.get(text)
+                else:
+                    logger.info(f"Not a cache hit {list(self.cache.data_dict)}")
+                    self.synthesized_characters += len(text)
+                    message = await self.__generate_http(text)
+                    self.cache.set(text, message)
             else:
-                logger.info(f"Not a cache hit {list(self.cache.data_dict)}")
+                logger.info(f"No caching present")
                 self.synthesized_characters += len(text)
                 message = await self.__generate_http(text)
-                self.cache.set(text, message)
             if self.format == "mp3":
                 message = convert_audio_to_wav(message, source_format="mp3")
             if not self.first_chunk_generated:

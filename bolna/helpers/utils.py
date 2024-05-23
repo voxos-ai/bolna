@@ -189,9 +189,12 @@ async def get_raw_audio_bytes(filename, agent_name = None, audio_format='mp3', a
             file_name = f"{PREPROCESS_DIR}/{agent_name}/{audio_format}/{filename}.{audio_format}"
         else:
             file_name = filename
-        with open(file_name, 'rb') as file:
-            # Read the entire file content into a variable
-            audio_data = file.read()
+        if os.path.isfile(file_name):
+            with open(file_name, 'rb') as file:
+                # Read the entire file content into a variable
+                audio_data = file.read()
+        else:
+            audio_data = None
     else:
         if not is_location:
             object_key = f"{assistant_id}/audio/{filename}.{audio_format}"
@@ -411,13 +414,17 @@ Message type
 async def write_request_logs(message, run_id):
     component_details = [None, None, None, None, None]
     logger.info(f"Message {message}")
+    message_data = message.get('data', '')
+    if message_data is None:
+        message_data = ''
+
     row = [message['time'], message["component"], message["direction"], message["leg_id"], message['sequence_id'], message['model']]
     if message["component"] == "llm":
-        component_details = [message['data'], message.get('input_tokens', 0), message.get('output_tokens', 0), None, message['cached'], None]
+        component_details = [message_data, message.get('input_tokens', 0), message.get('output_tokens', 0), None, message['cached'], None]
     elif message["component"] == "transcriber":
-        component_details = [message['data'], None, None, None, False ,message.get('is_final', False)]
+        component_details = [message_data, None, None, None, False ,message.get('is_final', False)]
     elif message["component"] == "synthesizer":
-        component_details = [message['data'], None, None,len(message['data']), message['cached'], None, message['engine']]
+        component_details = [message_data, None, None, len(message_data), message['cached'], None, message['engine']]
 
     row = row + component_details
 

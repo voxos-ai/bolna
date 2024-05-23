@@ -25,3 +25,9 @@ HIGH_LEVEL_ASSISTANT_ANALYTICS_DATA = {
         },
         "last_updated_at": datetime.now(timezone.utc).isoformat()
     }
+
+ACCIDENTAL_INTERRUPTION_PHRASES = [
+    "stop", "quit", "bye", "wait", "no", "wrong", "incorrect", "hold", "pause", "break",
+    "cease", "halt", "silence", "enough", "excuse", "hold on", "hang on", "cut it", 
+    "that's enough", "shush", "listen", "excuse me", "hold up", "not now", "stop there", "stop speaking"
+]

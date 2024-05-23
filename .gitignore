@@ -162,3 +162,9 @@ scripts/bark_demo_sounds/*.mp3
 **/.DS_Store
 agent_data/**/pcm
 agent_data/**/mp3
+
+
+*/__pycache__/
+*/*/__pycache__/
+logs/
+agent_data/
