@@ -3,6 +3,7 @@ import tiktoken
 from .base_manager import BaseManager
 from .task_manager import TaskManager
 from bolna.helpers.logger_config import configure_logger
+from attr import dataclass
 
 logger = configure_logger(__name__)
 

@@ -213,6 +213,7 @@ class TaskManager(BaseManager):
 
                 #Cut conversation
                 self.hang_conversation_after = conversation_config.get("hangup_after_silence", 10)
+                self.check_if_user_is_still_there = 5
                 logger.info(f"hangup_after_silence {self.hang_conversation_after}")
                 self.last_transmitted_timesatamp = 0
                 self.let_remaining_audio_pass_through = False #Will be used to let remaining audio pass through in case of utterenceEnd event and there's still audio left to be sent
@@ -226,6 +227,7 @@ class TaskManager(BaseManager):
 
                 #Handling accidental interruption
                 self.number_of_words_for_interruption = conversation_config.get("number_of_words_for_interruption", 3)
+                self.asked_if_user_is_still_there = False #Used to make sure that if user's phrase qualifies as acciedental interruption, we don't break the conversation loop
                 self.first_message_passed = False
                 self.started_transmitting_audio = False
                 self.accidental_interruption_phrases = set(ACCIDENTAL_INTERRUPTION_PHRASES)
@@ -257,7 +259,7 @@ class TaskManager(BaseManager):
                     self.first_message_task = None
                 
                 # Ambient noise
-                self.ambient_noise = conversation_config.get("ambient_noise", True)
+                self.ambient_noise = conversation_config.get("ambient_noise", False)
                 self.ambient_noise_task = None
                 if self.ambient_noise:
                     logger.info(f"Ambient noise is True {self.ambient_noise}")
@@ -983,8 +985,8 @@ class TaskManager(BaseManager):
                                 response_started = True
                             elif self.nitro:
                                 self.let_remaining_audio_pass_through = False
-                                logger.info(f"Increase the incremental delay time")
                                 self.required_delay_before_speaking += self.incremental_delay
+                                logger.info(f"Increase the incremental delay time {self.required_delay_before_speaking}")
                                 if self.time_since_first_interim_result == -1:
                                     self.time_since_first_interim_result = time.time() * 1000
                                     logger.info(f"###### Updating Time since first interim result {self.time_since_first_interim_result}")
@@ -1245,7 +1247,8 @@ class TaskManager(BaseManager):
                 
                 if "is_final_chunk_of_entire_response" in message['meta_info'] and message['meta_info']['is_final_chunk_of_entire_response']:
                     self.started_transmitting_audio = False
-                    logger.info("##### End of synthesizer stream and ")                    
+                    logger.info("##### End of synthesizer stream and ")     
+                    self.asked_if_user_is_still_there = False               
 
                 if "is_first_chunk_of_entire_response" in message['meta_info'] and message['meta_info']['is_first_chunk_of_entire_response']:
                     logger.info(f"First chunk stuff")
@@ -1309,6 +1312,18 @@ class TaskManager(BaseManager):
                 logger.info(f"{time_since_last_spoken_AI_word} seconds since last spoken time stamp and hence cutting the phone call and last transmitted timestampt ws {self.last_transmitted_timesatamp} and time since last spoken human word {self.time_since_last_spoken_human_word}")
                 await self.__process_end_of_conversation()
                 break
+            elif time_since_last_spoken_AI_word > 5 and not self.asked_if_user_is_still_there:
+                logger.info(f"Asking if the user is still there")
+                self.asked_if_user_is_still_there = True
+                if self.should_record:
+                    meta_info={'io': 'default', 'is_first_message': True, "request_id": str(uuid.uuid4()), "cached": True, "sequence_id": -1, 'format': 'wav'}
+                    await self._synthesize(create_ws_data_packet("Hey, are you still there?", meta_info= meta_info))
+                else:
+                    meta_info={'io': 'default', 'is_first_message': True, "request_id": str(uuid.uuid4()), "cached": True, "sequence_id": -1, 'format': 'wav'}
+                    await self._synthesize(create_ws_data_packet("Hey, are you still there?", meta_info= meta_info))
+                
+                #Just in case we need to clear messages sent before 
+                await self.tools["output"].handle_interruption()
             else:
                 logger.info(f"Only {time_since_last_spoken_AI_word} seconds since last spoken time stamp and hence not cutting the phone call")
     
