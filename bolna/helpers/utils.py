@@ -414,13 +414,17 @@ Message type
 async def write_request_logs(message, run_id):
     component_details = [None, None, None, None, None]
     logger.info(f"Message {message}")
+    message_data = message.get('data', '')
+    if message_data is None:
+        message_data = ''
+
     row = [message['time'], message["component"], message["direction"], message["leg_id"], message['sequence_id'], message['model']]
     if message["component"] == "llm":
-        component_details = [message['data'], message.get('input_tokens', 0), message.get('output_tokens', 0), None, message['cached'], None]
+        component_details = [message_data, message.get('input_tokens', 0), message.get('output_tokens', 0), None, message['cached'], None]
     elif message["component"] == "transcriber":
-        component_details = [message['data'], None, None, None, False ,message.get('is_final', False)]
+        component_details = [message_data, None, None, None, False ,message.get('is_final', False)]
     elif message["component"] == "synthesizer":
-        component_details = [message['data'], None, None,len(message['data']), message['cached'], None, message['engine']]
+        component_details = [message_data, None, None, len(message_data), message['cached'], None, message['engine']]
 
     row = row + component_details
 

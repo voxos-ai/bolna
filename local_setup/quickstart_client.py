@@ -15,10 +15,7 @@ import queue
 load_dotenv()
 # Argument parsing
 parser = argparse.ArgumentParser(description="Client for WebSocket communication")
-parser.add_argument('--run_mode', type=str, default="tts", choices=["tts", "e2e", "asr"], help="Choose between 'tts', 'asr' and 'e2e'")
-args = parser.parse_args()
 
-connection_type = args.run_mode
 audio_queue = queue.Queue()
 
 # Set up logging
@@ -38,7 +35,8 @@ interruption_message = 0
 
 # WebSocket server address based on connection type
 server_url = "ws://localhost:5001" #os.getenv("BOLNA_WS_SERVER_URL")
-assistant_id = "7b01672e-6453-49c6-997c-0a6546aa9c5a" #os.getenv("ASSISTANT_ID") 
+assistant_id = os.getenv("ASSISTANT_ID") 
+logging.info(f"Assistant ID {os.getenv('ASSISTANT_ID') }")
 uri = f"{server_url}/chat/v1/{assistant_id}"
 
 # Audio queue to store audio frames
@@ -100,7 +98,7 @@ def start_audio_stream():
     stream = sd.OutputStream(
         samplerate=24000,
         channels=1,
-        dtype=np.float32,
+        dtype=np.int16,
         callback=audio_callback,
         blocksize= 8192
     )
@@ -122,51 +120,52 @@ async def play_audio():
                 print(f"Adjusted audio length: {len(audio)}")  
                 audio_data = np.frombuffer(audio, dtype=np.int16)
                 audio_queue.put(audio_data)
-
             else:
                 await asyncio.sleep(0.1)
         except Exception as e:
             print(f"Error in playing audio: {e}")
 
 
-
 async def receiver(ws):
     global chunks, play_audio_task
-    chunk_num = 0
-    prev_chunk_time = None
-
     while True:
-        response = await ws.recv()
-        response = json.loads(response)
-        logging.info(f"{response.keys()}")
-        if response["type"] != "audio":
-            print(response)
+        try:
+            response = await ws.recv()
+            response = json.loads(response)
+            logging.info(f"{response.keys()}")
+            if response["type"] != "audio":
+                print(response)
 
-        if response["type"] == "clear":
-            logging.info(f"Got interrupt message and clearing chunks\n\n\n")
-            if len(chunks) > 0:
-                logging.info("Stopping the current frame")
-                chunks.clear()
-                play_audio_task.cancel()
-                await asyncio.sleep(0)  # Yield control to allow task cancellation to complete
-                play_audio_task = asyncio.create_task(play_audio())
-            continue
-        if response["data"] is None:
-            continue
-        b64_audio = response["data"]
-        chunks.append(b64_audio)
+            if response["type"] == "clear":
+                logging.info(f"Got interrupt message and clearing chunks\n\n\n")
+                if len(chunks) > 0:
+                    logging.info("Stopping the current frame")
+                    chunks.clear()
+                    play_audio_task.cancel()
+                    await asyncio.sleep(0)  # Yield control to allow task cancellation to complete
+                    play_audio_task = asyncio.create_task(play_audio())
+                continue
+            if response["data"] is None:
+                continue
+            b64_audio = response["data"]
+            chunks.append(b64_audio)
+
+        except Exception as e:
+            logging.error(e)
 
 
 stream = start_audio_stream()
 
 async def main():
-    api_key = os.getenv("BOLNA_API_KEY")
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-    }
+    api_key = os.getenv("BOLNA_API_KEY", None)
+    if api_key is not None:
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+        }
+    else:
+        headers = None
     async with websockets.connect(uri, open_timeout=None, extra_headers=headers) as ws:
         global play_audio_task
-        print("NOW IN THE GATHER PART")
         tasks = [microphone(), emitter(ws), receiver(ws)]
         play_audio_task = asyncio.create_task(play_audio())
         await asyncio.gather(*tasks)
