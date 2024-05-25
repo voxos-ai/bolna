@@ -64,10 +64,13 @@ async def make_call(request: Request):
         print(f'app_callback_url: {app_callback_url}')
         print(f'websocket_url: {websocket_url}')
 
+        # adding hangup_url since plivo opens a 2nd websocket once the call is cut.
+        # https://github.com/bolna-ai/bolna/issues/148#issuecomment-2127980509
         call = plivo_client.calls.create(
             from_=plivo_phone_number,
             to_=call_details.get('recipient_phone_number'),
             answer_url=f"{app_callback_url}/plivo_callback?ws_url={websocket_url}&agent_id={agent_id}",
+            hangup_url=f"{app_callback_url}/plivo_hangup_callback",
             answer_method='POST')
 
         # persisting user details
@@ -97,3 +100,9 @@ async def plivo_callback(request: Request, ws_url: str = Query(...), agent_id: s
 
     except Exception as e:
         print(f"Exception occurred in plivo_callback: {e}")
+
+
+@app.post('/plivo_hangup_callback')
+async def plivo_hangup_callback(request: Request):
+    # add any post call hangup processing
+    return PlainTextResponse("", status_code=200)
