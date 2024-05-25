@@ -104,7 +104,6 @@ class OpenAiLLM(BaseLLM):
                 
                 answer += text_chunk
                 buffer += text_chunk
-                logger.info(f"adding text chunk {answer}")
 
                 if len(buffer) >= self.buffer_size and synthesize:
                     buffer_words = buffer.split(" ")

@@ -432,8 +432,9 @@ class TaskManager(BaseManager):
         if self.task_config["task_type"] == "webhook":
             return
         self.is_local = local
+        today = datetime.now().strftime("%A, %B %d, %Y")
         if "prompt" in self.task_config["tools_config"]["llm_agent"]:
-            today = datetime.now().strftime("%A, %B %d, %Y")
+            #This will be tre when we have extraction or maybe never
             self.prompts = {
                 "system_prompt": f'{self.task_config["tools_config"]["llm_agent"]["prompt"]} \n### Date\n Today\'s Date is {today}'
             }
@@ -455,7 +456,7 @@ class TaskManager(BaseManager):
                 self.prompts["system_prompt"] = enriched_prompt
             self.system_prompt = {
                 'role': "system",
-                'content': enriched_prompt
+                'content': f"{enriched_prompt}\n### Date\n Today\'s Date is {today}"
             }
         else:
             self.system_prompt = {
