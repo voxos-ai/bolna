@@ -987,9 +987,11 @@ class TaskManager(BaseManager):
                             if not self.started_transmitting_audio:
                                 logger.info("##### Haven't started transmitting audio and hence cleaning up downstream tasks")
                                 await self.__cleanup_downstream_tasks()
+                            else:
+                                logger.info(f"Started transmitting and hence moving fursther")
                             
                             # If we've started transmitting audio this is probably an interruption, so calculate number of words
-                            if self.nitro and self.started_transmitting_audio and self.number_of_words_for_interruption != 0 and self.first_message_passed:
+                            if self.started_transmitting_audio and self.number_of_words_for_interruption != 0 and self.first_message_passed:
                                 if num_words > self.number_of_words_for_interruption or message['data'].strip() in self.accidental_interruption_phrases:
                                     #Process interruption only if number of words is higher than the threshold 
                                     logger.info(f"###### Number of words {num_words} is higher than the required number of words for interruption, hence, definitely interrupting")
@@ -1063,7 +1065,7 @@ class TaskManager(BaseManager):
             logger.info(f"##### Sending first chunk")
             copied_meta_info["is_first_chunk_of_entire_response"] = True
             self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, copied_meta_info))
-        elif i == number_of_chunks and "end_of_synthesizer_stream" in meta_info and meta_info['end_of_synthesizer_stream']:
+        elif i == number_of_chunks -1 and "end_of_synthesizer_stream" in meta_info and meta_info['end_of_synthesizer_stream']:
             logger.info(f"##### Truly a final chunk")
             copied_meta_info = meta_info.copy()
             copied_meta_info["is_final_chunk_of_entire_response"] = True
@@ -1157,18 +1159,25 @@ class TaskManager(BaseManager):
                     if audio_chunk is None:
                         logger.info(f"File doesn't exist in S3. Hence we're synthesizing it from synthesizer")
                         meta_info['cached'] = False
-                        await self._synthesize(create_ws_data_packet(self.kwargs['agent_welcome_message'], meta_info= meta_info))
+                        await self._synthesize(create_ws_data_packet(text, meta_info= meta_info))
                     else:
                         logger.info(f"Sending the agent welcome message")
-                        message = create_ws_data_packet(audio_chunk, meta_info)
-                        await self.tools["output"].handle(message)
-                    self.first_message_passed = True
-                    
+                        number_of_chunks = (len(audio_chunk)//self.output_chunk_size)
+                        i = 0
+                        meta_info['is_first_chunk'] = True
+                        for chunk in yield_chunks_from_memory(audio_chunk, chunk_size=self.output_chunk_size):
+                            self.__enqueue_chunk(chunk, i, number_of_chunks, meta_info)
+                            i +=1
+
                 elif self.yield_chunks:
+                    logger.info(f"Sending the preprocessed message")
+                    number_of_chunks = (len(audio_chunk)//self.output_chunk_size)
+                    i = 0
+                    meta_info['is_first_chunk'] = True
                     for chunk in yield_chunks_from_memory(audio_chunk, chunk_size=self.output_chunk_size):
-                        logger.debug("Sending chunk to output queue")
-                        message = create_ws_data_packet(chunk, meta_info)
-                        self.buffered_output_queue.put_nowait(message)
+                        self.__enqueue_chunk(chunk, i, number_of_chunks, meta_info)
+                        i +=1
+
                 else:
                     message = create_ws_data_packet(audio_chunk, meta_info)
                     logger.info(f"Yield in chunks is false and hence sending a full")
@@ -1238,7 +1247,7 @@ class TaskManager(BaseManager):
                 #     self.allow_extra_sleep = False
                 #     prev_message = current_message
 
-                if self.nitro and not self.let_remaining_audio_pass_through:
+                if self.nitro and not self.let_remaining_audio_pass_through and self.first_message_passed:
                     time_since_first_interim_result = (time.time() *1000)- self.time_since_first_interim_result if self.time_since_first_interim_result != -1 else -1
                     if  time_since_first_interim_result != -1 and time_since_first_interim_result < self.required_delay_before_speaking:
                         logger.info(f"##### It's been {time_since_first_interim_result} ms since first  interim result and required time to wait for it is {self.required_delay_before_speaking}. Hence sleeping for 100ms. self.time_since_first_interim_result {self.time_since_first_interim_result}")
@@ -1247,6 +1256,7 @@ class TaskManager(BaseManager):
                     else:
                         logger.info(f"First interim result hasn't been gotten yet and hence sleeping ")
                         await asyncio.sleep(0.1)
+                    
 
                     logger.info(f"##### Got to wait {self.required_delay_before_speaking} ms before speaking and alreasy waited {time_since_first_interim_result} since the first interim result")
                 else:
@@ -1274,7 +1284,8 @@ class TaskManager(BaseManager):
                 if "is_final_chunk_of_entire_response" in message['meta_info'] and message['meta_info']['is_final_chunk_of_entire_response']:
                     self.started_transmitting_audio = False
                     logger.info("##### End of synthesizer stream and ")     
-                    self.asked_if_user_is_still_there = False               
+                    self.asked_if_user_is_still_there = False   
+                    self.first_message_passed = True            
 
                 if "is_first_chunk_of_entire_response" in message['meta_info'] and message['meta_info']['is_first_chunk_of_entire_response']:
                     logger.info(f"First chunk stuff")
@@ -1315,9 +1326,7 @@ class TaskManager(BaseManager):
                     if duration > 0:
                         logger.info(f"##### Sleeping for {duration} to maintain quueue on our side {self.sampling_rate}")
                         await asyncio.sleep(duration - 0.030) #30 milliseconds less
-                        
 
-                    
                 self.last_transmitted_timesatamp = time.time()
                 logger.info(f"##### Updating Last transmitted timestamp to {self.last_transmitted_timesatamp}")
                 
@@ -1338,14 +1347,14 @@ class TaskManager(BaseManager):
                 logger.info(f"{time_since_last_spoken_AI_word} seconds since last spoken time stamp and hence cutting the phone call and last transmitted timestampt ws {self.last_transmitted_timesatamp} and time since last spoken human word {self.time_since_last_spoken_human_word}")
                 await self.__process_end_of_conversation()
                 break
-            elif time_since_last_spoken_AI_word > 5 and not self.asked_if_user_is_still_there:
+            elif time_since_last_spoken_AI_word > 5 and not self.asked_if_user_is_still_there and self.time_since_last_spoken_human_word < self.last_transmitted_timesatamp :
                 logger.info(f"Asking if the user is still there")
                 self.asked_if_user_is_still_there = True
                 if self.should_record:
-                    meta_info={'io': 'default', 'is_first_message': True, "request_id": str(uuid.uuid4()), "cached": True, "sequence_id": -1, 'format': 'wav'}
+                    meta_info={'io': 'default', "request_id": str(uuid.uuid4()), "cached": False, "sequence_id": -1, 'format': 'wav'}
                     await self._synthesize(create_ws_data_packet("Hey, are you still there?", meta_info= meta_info))
                 else:
-                    meta_info={'io': 'default', 'is_first_message': True, "request_id": str(uuid.uuid4()), "cached": True, "sequence_id": -1, 'format': 'wav'}
+                    meta_info={'io': 'twilio', "request_id": str(uuid.uuid4()), "cached": False, "sequence_id": -1, 'format': 'pcm'}
                     await self._synthesize(create_ws_data_packet("Hey, are you still there?", meta_info= meta_info))
                 
                 #Just in case we need to clear messages sent before 
