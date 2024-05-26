@@ -7,6 +7,7 @@ AGENT_WELCOME_MESSAGE = "This call is being recorded for quality assurance and t
 
 
 def validate_attribute(value, allowed_values):
+    print(value,allowed_values)
     if value not in allowed_values:
         raise ValidationError(f"Invalid provider. Supported values: {', '.join(allowed_values)}")
     return value
@@ -46,7 +47,10 @@ class FourieConfig(BaseModel):
 
 class DeepgramConfig(BaseModel):
     voice: str
-
+class MelloConfig(BaseModel):
+    voice: str
+    voice_type:str
+    sample_rate:int
 
 class Transcriber(BaseModel):
     model: str
@@ -68,7 +72,7 @@ class Transcriber(BaseModel):
 
 class Synthesizer(BaseModel):
     provider: str
-    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig, DeepgramConfig]
+    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig, DeepgramConfig, MelloConfig]
     stream: bool = False
     buffer_size: Optional[int] = 40  # 40 characters in a buffer
     audio_format: Optional[str] = "pcm"
@@ -76,7 +80,7 @@ class Synthesizer(BaseModel):
 
     @validator("provider")
     def validate_model(cls, value):
-        return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai", "deepgram"])
+        return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai", "deepgram", "mello"])
 
 
 class IOModel(BaseModel):

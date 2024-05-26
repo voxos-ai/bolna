@@ -1,4 +1,4 @@
-from .synthesizer import PollySynthesizer, XTTSSynthesizer, ElevenlabsSynthesizer, OPENAISynthesizer, FourieSynthesizer, DeepgramSynthesizer
+from .synthesizer import PollySynthesizer, XTTSSynthesizer, ElevenlabsSynthesizer, OPENAISynthesizer, FourieSynthesizer, DeepgramSynthesizer, MelloSynthesizer
 from .transcriber import DeepgramTranscriber, WhisperTranscriber
 from .input_handlers import DefaultInputHandler, TwilioInputHandler, ExotelInputHandler
 from .output_handlers import DefaultOutputHandler, TwilioOutputHandler, ExotelOutputHandler
@@ -10,7 +10,8 @@ SUPPORTED_SYNTHESIZER_MODELS = {
     'elevenlabs': ElevenlabsSynthesizer,
     'openai': OPENAISynthesizer,
     'fourie': FourieSynthesizer,
-    'deepgram': DeepgramSynthesizer
+    'deepgram': DeepgramSynthesizer,
+    'mello': MelloSynthesizer
 }
 SUPPORTED_TRANSCRIBER_MODELS = {
     'deepgram': DeepgramTranscriber,

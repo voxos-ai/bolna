@@ -17,6 +17,8 @@ twilio_account_sid = os.getenv('TWILIO_ACCOUNT_SID')
 twilio_auth_token = os.getenv('TWILIO_AUTH_TOKEN')
 twilio_phone_number = os.getenv('TWILIO_PHONE_NUMBER')
 
+
+print(twilio_account_sid,twilio_phone_number)
 # Initialize Twilio client
 twilio_client = Client(twilio_account_sid, twilio_auth_token)
 

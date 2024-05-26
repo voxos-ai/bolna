@@ -171,7 +171,8 @@ class TaskManager(BaseManager):
 
         #setup request logs
         self.request_logs = []
-
+        # made up stuff
+        self.llm_response_generated = False
         if task_id == 0:
             self.output_chunk_size = 16384 if self.sampling_rate == 24000 else 8192 #0.5 second chunk size for calls 
             # For nitro
@@ -195,8 +196,7 @@ class TaskManager(BaseManager):
                 else:
                     self.__setup_routes(self.routes)
                     logger.info(f"Time to setup routes {time.time() - start_time}")
-
-
+        
         # for long pauses and rushing
             if conversation_config is not None:
                 self.minimum_wait_duration = self.task_config["tools_config"]["transcriber"]["endpointing"]
@@ -1093,9 +1093,11 @@ class TaskManager(BaseManager):
                                     self.buffered_output_queue.put_nowait(message)
                                 
                             else:
-                                if self.task_config["tools_config"]["output"]["provider"] in SUPPORTED_INPUT_TELEPHONY_HANDLERS.keys() and not self.connected_through_dashboard and self.synthesizer_provider == "elevenlabs":
+                                if self.task_config["tools_config"]["output"]["provider"] in SUPPORTED_INPUT_TELEPHONY_HANDLERS.keys() and not self.connected_through_dashboard and self.synthesizer_provider in ["elevenlabs", "mello"] :
                                     if meta_info.get('format', '') != 'mulaw':
                                         message['data'] = wav_bytes_to_pcm(message['data'])
+                                
+                            
                                 
                                 if "is_first_chunk" in message['meta_info'] and message['meta_info']['is_first_chunk']:
                                     first_chunk_generation_timestamp = time.time()

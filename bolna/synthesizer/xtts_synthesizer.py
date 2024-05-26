@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from .base_synthesizer import BaseSynthesizer
 from bolna.helpers.logger_config import configure_logger
 from bolna.helpers.utils import create_ws_data_packet
-
+import asyncio
 
 logger = configure_logger(__name__)
 load_dotenv()
