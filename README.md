@@ -48,8 +48,8 @@ A basic local setup includes usage of `Twilio` or `Plivo` for telephony. We have
 The setup consists of four containers:
 
 1. Telephony web server:
-   * Choosing Twilio: for initiating the calls one will need to set up a [Twilio account]([https://www.twilio.com/docs/usage/tutorials/how-to-use-your-free-trial-account](https://www.twilio.com/docs/messaging/guides/how-to-use-your-free-trial-account])
-   * Choosing Plivo: for initiating the calls one will need to set up a [Plivo account]([https://www.plivo.com/])
+   * Choosing Twilio: for initiating the calls one will need to set up a [Twilio account](https://www.twilio.com/docs/usage/tutorials/how-to-use-your-free-trial-account)
+   * Choosing Plivo: for initiating the calls one will need to set up a [Plivo account](https://www.plivo.com/)
 2. Bolna server: for creating and handling agents 
 3. `ngrok`: for tunneling. One will need to add the `authtoken` to `ngrok-config.yml`
 4. `redis`: for persisting agents & prompt data
