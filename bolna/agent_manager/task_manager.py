@@ -1076,6 +1076,7 @@ class TaskManager(BaseManager):
                     if is_first_message or (not self.conversation_ended and message["meta_info"]["sequence_id"] in self.sequence_ids):
                         logger.info(f"{message['meta_info']['sequence_id'] } is in sequence ids  {self.sequence_ids} and hence removing the sequence ids ")
                         if self.stream:
+                            message['data'] = await self.process_audio_data_for_output(meta_info, message)
                             if "is_first_chunk" in message['meta_info'] and message['meta_info']['is_first_chunk']:
                                 first_chunk_generation_timestamp = time.time()
                                 meta_info["synthesizer_first_chunk_latency"] = first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time']
