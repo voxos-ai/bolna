@@ -55,7 +55,9 @@ class Transcriber(BaseModel):
     sampling_rate: Optional[int] = 16000
     encoding: Optional[str] = "linear16"
     endpointing: Optional[int] = 400
-    keywords: Optional[str] = None
+    keywords: Optional[List[str]] = None
+    modeltype: Optional[str] = "whisper-tiny"
+    task:Optional[str] = "transcribe"
 
     @validator("model")
     def validate_model(cls, value):
@@ -135,14 +137,15 @@ class CalendarModel(BaseModel):
     email: str
     time: str
 
+class APIParams(BaseModel):
+    url: str
+    method: Optional[str] = "POST"
+    api_token: Optional[str] = None
+    param: Optional[str] = None #Payload for the URL
 
 class ToolModel(BaseModel):
-    calendar: Optional[CalendarModel] = None
-    whatsapp: Optional[MessagingModel] = None
-    sms: Optional[MessagingModel] = None
-    email: Optional[MessagingModel] = None
-    webhookURL: Optional[str] = None
-
+    tools: str #Goes in as a prompt
+    tools_params: Dict[str, APIParams]
 
 class ToolsConfig(BaseModel):
     llm_agent: Optional[LLM] = None
@@ -151,7 +154,6 @@ class ToolsConfig(BaseModel):
     input: Optional[IOModel] = None
     output: Optional[IOModel] = None
     api_tools: Optional[ToolModel] = None
-
 
 class ToolsChainModel(BaseModel):
     execution: str = Field(..., pattern="^(parallel|sequential)$")

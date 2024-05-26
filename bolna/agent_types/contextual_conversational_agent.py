@@ -30,7 +30,7 @@ class StreamingContextualAgent(BaseAgent):
         logger.info('Agent: {}'.format(answer['answer']))
         return answer
 
-    async def generate(self, history, synthesize=False):
-        async for token in self.llm.generate_stream(history, synthesize=synthesize):
+    async def generate(self, history, synthesize=False, meta_info = None):
+        async for token in self.llm.generate_stream(history, synthesize=synthesize, meta_info = meta_info):
             logger.info('Agent: {}'.format(token))
             yield token
