@@ -33,7 +33,7 @@ https://github.com/bolna-ai/bolna/assets/1313096/2237f64f-1c5b-4723-b7e7-d11466e
 ## Components
 Bolna helps you create AI Voice Agents which can be instructed to do tasks beginning with:
 
-1. Initiating a phone call using telephony providers like `Twilio`, `Exotel`, etc.
+1. Initiating a phone call using telephony providers like `Twilio`, `Plivo`, `Exotel`, etc.
 2. Transcribing the conversations using `Deepgram`, etc.
 3. Using LLMs like `OpenAI`, `Llama`, `Cohere`, `Mistral`,  etc to handle conversations
 4. Synthesizing LLM responses back to telephony using `AWS Polly`, `XTTS`, `ElevenLabs`, `Deepgram` etc.
@@ -43,7 +43,7 @@ Refer to the [docs](https://docs.bolna.dev/providers) for a deepdive into all su
 
 
 ## Local example setup
-A basic local setup includes usage of `Twilio` or `Plivo` for telephony. We have dockerized the setup in `local_setup/`. One will need to populate an environment `.env` file from `.env.sample`.
+A basic local setup includes usage of [Twilio](local_setup/telephony_server/twilio_api_server.py) or [Plivo](local_setup/telephony_server/plivo_api_server.py) for telephony. We have dockerized the setup in `local_setup/`. One will need to populate an environment `.env` file from `.env.sample`.
 
 The setup consists of four containers:
 
