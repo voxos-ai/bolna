@@ -52,7 +52,7 @@ class TelephonyOutputHandler(DefaultOutputHandler):
                     self.mark_set.add(mark_id)
 
                     mark_message = await self.form_mark_message(mark_id)
-                    await self.websocket.send_text(json.dumps(mark_message))
+                    #await self.websocket.send_text(json.dumps(mark_message))
                 else:
                     logger.info("Not sending")
             except Exception as e:
