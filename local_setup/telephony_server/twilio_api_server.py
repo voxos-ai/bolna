@@ -20,10 +20,6 @@ twilio_phone_number = os.getenv('TWILIO_PHONE_NUMBER')
 # Initialize Twilio client
 twilio_client = Client(twilio_account_sid, twilio_auth_token)
 
-# Initialize Redis client
-redis_pool = redis.ConnectionPool.from_url(os.getenv('REDIS_URL'), decode_responses=True)
-redis_client = redis.Redis.from_pool(redis_pool)
-
 
 def populate_ngrok_tunnels():
     response = requests.get("http://ngrok:4040/api/tunnels")  # ngrok interface
@@ -43,10 +39,6 @@ def populate_ngrok_tunnels():
         print(f"Error: Unable to fetch data. Status code: {response.status_code}")
 
 
-async def close_redis_connection():
-    await redis_client.aclose()
-
-
 @app.post('/call')
 async def make_call(request: Request):
     try:
@@ -58,7 +50,6 @@ async def make_call(request: Request):
         
         if not call_details or "recipient_phone_number" not in call_details:
             raise HTTPException(status_code=404, detail="Recipient phone number not provided")
-        user_id = str(uuid.uuid4())
 
         app_callback_url, websocket_url = populate_ngrok_tunnels()
 
@@ -68,15 +59,11 @@ async def make_call(request: Request):
         call = twilio_client.calls.create(
             to=call_details.get('recipient_phone_number'),
             from_=twilio_phone_number,
-            url=f"{app_callback_url}/twilio_callback?ws_url={websocket_url}&agent_id={agent_id}&user_id={user_id}",
+            url=f"{app_callback_url}/twilio_callback?ws_url={websocket_url}&agent_id={agent_id}",
             method="POST",
             record=False
         )
 
-        # persisting user details
-        await redis_client.set(user_id, json.dumps(call_details))
-
-        await close_redis_connection()
         return PlainTextResponse("done", status_code=200)
 
     except Exception as e:
@@ -85,7 +72,7 @@ async def make_call(request: Request):
 
 
 @app.post('/twilio_callback')
-async def twilio_callback(ws_url: str = Query(...), agent_id: str = Query(...), user_id: str = Query(...)):
+async def twilio_callback(ws_url: str = Query(...), agent_id: str = Query(...)):
     try:
         response = VoiceResponse()
 

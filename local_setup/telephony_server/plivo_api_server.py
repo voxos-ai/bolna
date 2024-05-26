@@ -19,10 +19,6 @@ plivo_phone_number = os.getenv('PLIVO_PHONE_NUMBER')
 # Initialize Plivo client
 plivo_client = plivo.RestClient(os.getenv('PLIVO_AUTH_ID'), os.getenv('PLIVO_AUTH_TOKEN'))
 
-# Initialize Redis client
-redis_pool = redis.ConnectionPool.from_url(os.getenv('REDIS_URL'), decode_responses=True)
-redis_client = redis.Redis.from_pool(redis_pool)
-
 
 def populate_ngrok_tunnels():
     response = requests.get("http://ngrok:4040/api/tunnels")  # ngrok interface
@@ -32,7 +28,7 @@ def populate_ngrok_tunnels():
         data = response.json()
 
         for tunnel in data['tunnels']:
-            if tunnel['name'] == 'twilio-app':
+            if tunnel['name'] == 'plivo-app':
                 app_callback_url = tunnel['public_url']
             elif tunnel['name'] == 'bolna-app':
                 websocket_url = tunnel['public_url'].replace('https:', 'wss:')
@@ -40,10 +36,6 @@ def populate_ngrok_tunnels():
         return app_callback_url, websocket_url
     else:
         print(f"Error: Unable to fetch data. Status code: {response.status_code}")
-
-
-async def close_redis_connection():
-    await redis_client.aclose()
 
 
 @app.post('/call')
@@ -57,7 +49,6 @@ async def make_call(request: Request):
 
         if not call_details or "recipient_phone_number" not in call_details:
             raise HTTPException(status_code=404, detail="Recipient phone number not provided")
-        user_id = str(uuid.uuid4())
 
         app_callback_url, websocket_url = populate_ngrok_tunnels()
 
@@ -73,10 +64,6 @@ async def make_call(request: Request):
             hangup_url=f"{app_callback_url}/plivo_hangup_callback",
             answer_method='POST')
 
-        # persisting user details
-        await redis_client.set(user_id, json.dumps(call_details))
-
-        await close_redis_connection()
         return PlainTextResponse("done", status_code=200)
 
     except Exception as e:
