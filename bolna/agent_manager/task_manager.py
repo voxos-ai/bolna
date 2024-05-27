@@ -35,6 +35,14 @@ class TaskManager(BaseManager):
         # Latency and logging 
         self.latency_dict = defaultdict(dict)
         self.kwargs = kwargs
+        #Setup Latency part
+        self.llm_latencies = []
+        self.synthesizer_latencies = []
+        self.transcriber_latencies = []
+        self.average_llm_latency = 0.0
+        self.average_synthesizer_latency = 0.0
+        self.average_transcriber_latency = 0.0
+        # self.start_time_overall_latency = 0.0
         logger.info(f"API TOOLS IN TOOLS CONFIG {task['tools_config'].get('api_tools')}")
         if task['tools_config'].get('api_tools', None) is not None:
             logger.info(f"API TOOLS is present {task['tools_config']['api_tools']}")
@@ -660,6 +668,19 @@ class TaskManager(BaseManager):
         first_buffer_latency = time.time() - meta_info["llm_start_time"]
         #self.latency_dict[meta_info["request_id"]]["llm"] = first_buffer_latency
         meta_info["llm_first_buffer_generation_latency"] = first_buffer_latency
+        if not self.stream:
+            latency_metrics = {
+                "transcriber": {
+                    "latency": meta_info.get('transcriber_latency', 0),
+                    "average_latency": self.average_transcriber_latency,
+                },
+                "llm": {
+                    "first_llm_buffer_latency": meta_info.get('llm_latency', 0),
+                    "average_latency": self.average_llm_latency,
+                },
+                # "overall_first_byte_latency": time.time() - self.start_time_overall_latency,
+            }
+            self.latency_dict[meta_info["request_id"]] = latency_metrics
         if next_step == "synthesizer" and not should_bypass_synth:
             task = asyncio.create_task(self._synthesize(create_ws_data_packet(text_chunk, meta_info)))
             self.synthesizer_tasks.append(asyncio.ensure_future(task))
@@ -762,7 +783,12 @@ class TaskManager(BaseManager):
             convert_to_request_log(message=format_messages(messages, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
             
             async for llm_message in self.tools['llm_agent'].generate(messages, synthesize=True, meta_info = meta_info):
-                text_chunk, end_of_llm_stream = llm_message
+                text_chunk, end_of_llm_stream, latency = llm_message
+                if latency and (len(self.llm_latencies) == 0 or self.llm_latencies[-1] != latency):
+                    meta_info["llm_latency"] = latency
+                    self.llm_latencies.append(latency)
+                    self.average_llm_latency = sum(self.llm_latencies) / len(self.llm_latencies)
+                    logger.info(f"Got llm latencies {self.llm_latencies}")
                 llm_response += " " + text_chunk
                 logger.info(f"Got a response from LLM {llm_response}")
                 if self.stream:
@@ -901,6 +927,9 @@ class TaskManager(BaseManager):
             while True:
                 message = await self.transcriber_output_queue.get()
                 logger.info(f"##### Message from the transcriber class {message}")
+                if message['meta_info'] is not None and message['meta_info'].get('transcriber_latency', False):
+                    self.transcriber_latencies.append(message['meta_info']['transcriber_latency'])
+                    self.average_transcriber_latency = sum(self.transcriber_latencies) / len(self.transcriber_latencies)
                 if message["data"].strip() == "":
                     continue
                 if message['data'] == "transcriber_connection_closed":
@@ -1073,14 +1102,14 @@ class TaskManager(BaseManager):
                 async for message in self.tools["synthesizer"].generate():
                     meta_info = message["meta_info"]
                     is_first_message = 'is_first_message' in meta_info and meta_info['is_first_message']
-                    convert_to_request_log(message = meta_info['text'], meta_info= meta_info, component="synthesizer", direction="response", model = self.synthesizer_provider, is_cached= 'is_cached' in meta_info and meta_info['is_cached'], engine=self.tools['synthesizer'].get_engine(), run_id= self.run_id)
                     if is_first_message or (not self.conversation_ended and message["meta_info"]["sequence_id"] in self.sequence_ids):
                         logger.info(f"{message['meta_info']['sequence_id'] } is in sequence ids  {self.sequence_ids} and hence removing the sequence ids ")
-                        if self.stream:   
+                        first_chunk_generation_timestamp = time.time()
+                        meta_info["synthesizer_latency"] = first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time']
+                        self.synthesizer_latencies.append(meta_info["synthesizer_latency"])
+                        self.average_synthesizer_latency = sum(self.synthesizer_latencies) / len(self.synthesizer_latencies)
+                        if self.stream:
                             if self.synthesizer_provider == "polly":
-                                if message['meta_info']['is_first_chunk']:
-                                    first_chunk_generation_timestamp = time.time()
-                                    meta_info["synthesizer_first_chunk_latency"] = first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time']
                                 logger.info(f"Simply Storing in buffered output queue for now")
 
                                 if self.yield_chunks:
@@ -1098,10 +1127,6 @@ class TaskManager(BaseManager):
                                     if meta_info.get('format', '') != 'mulaw':
                                         message['data'] = wav_bytes_to_pcm(message['data'])
                                 
-                                if "is_first_chunk" in message['meta_info'] and message['meta_info']['is_first_chunk']:
-                                    first_chunk_generation_timestamp = time.time()
-                                    meta_info["synthesizer_first_chunk_latency"] = first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time']
-                                    #self.latency_dict[message['meta_info']["request_id"]]['synthesizer'] = {"first_chunk_generation_latency": first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time'], "first_chunk_generation_timestamp": first_chunk_generation_timestamp}
                                 if self.yield_chunks:
                                     number_of_chunks = (len(message['data'])/self.output_chunk_size)
                                     i = 0
@@ -1112,14 +1137,17 @@ class TaskManager(BaseManager):
                                     self.buffered_output_queue.put_nowait(message)
                         else:
                             logger.info("Stream is not enabled and hence sending entire audio")
-                            first_chunk_generation_timestamp = time.time()
-                            self.latency_dict[message['meta_info']["request_id"]]['synthesizer'] = {"first_chunk_generation_latency": first_chunk_generation_timestamp - message['meta_info']['synthesizer_start_time'], "first_chunk_generation_timestamp": first_chunk_generation_timestamp}
+                            self.latency_dict[meta_info["request_id"]]["synthesizer"] = {
+                                "synthesizer_first_chunk_latency": meta_info.get("synthesizer_latency", 0),
+                                "average_latency": self.average_synthesizer_latency
+                            }
                             #self.history = copy.deepcopy(self.interim_history)
                             logger.info(f"Changing history")
                             await self.tools["output"].handle(message)
                     else:
                         logger.info(f"{message['meta_info']['sequence_id']} is not in sequence ids  {self.sequence_ids} and hence not sending to output")                
                     logger.info(f"Sleeping for 100 ms")
+                    convert_to_request_log(message = meta_info['text'], meta_info= meta_info, component="synthesizer", direction="response", model = self.synthesizer_provider, is_cached= 'is_cached' in meta_info and meta_info['is_cached'], engine=self.tools['synthesizer'].get_engine(), run_id= self.run_id)
                     await asyncio.sleep(0.3) #Sleeping for 100ms after receiving every chunk so other tasks can execute
 
         except Exception as e:
@@ -1284,9 +1312,9 @@ class TaskManager(BaseManager):
                     self.consider_next_transcript_after = time.time() + self.duration_to_prevent_accidental_interruption
                     utterance_end = meta_info.get("utterance_end", None)
                     overall_first_byte_latency = time.time() - message['meta_info']['utterance_end'] if utterance_end is not None else 0
-                    transcriber_latency = message["meta_info"]["transcriber_latency"] if utterance_end is not None else 0
-                    first_llm_buffer_latency = message["meta_info"]["llm_first_buffer_generation_latency"] if utterance_end is not None else 0
-                    synthesizer_first_chunk_latency = message["meta_info"]["synthesizer_first_chunk_latency"] if utterance_end is not None else 0
+                    transcriber_latency = message["meta_info"].get("transcriber_latency", 0) if utterance_end is not None else 0
+                    first_llm_buffer_latency = message["meta_info"].get("llm_latency", 0) if utterance_end is not None else 0
+                    synthesizer_first_chunk_latency = message["meta_info"].get("synthesizer_latency", 0) if utterance_end is not None else 0
 
                     if utterance_end is None:
                         logger.info(f"First chunk is none")
@@ -1294,16 +1322,18 @@ class TaskManager(BaseManager):
                     latency_metrics = {
                         "transcriber": {
                             "utterance_end": utterance_end,
-                            "latency": transcriber_latency
+                            "latency": transcriber_latency,
+                            "average_latency": self.average_transcriber_latency,
                             },
                         "llm": {
-                            "first_llm_buffer_latency" : first_llm_buffer_latency
+                            "first_llm_buffer_latency": first_llm_buffer_latency,
+                            "average_latency": self.average_llm_latency,
                             },
                         "synthesizer": {
-                            "synthesizer_first_chunk_latency": synthesizer_first_chunk_latency
+                            "synthesizer_first_chunk_latency": synthesizer_first_chunk_latency,
+                            "average_latency": self.average_synthesizer_latency
                             },
                         "overall_first_byte_latency": overall_first_byte_latency,
-                        
                         }
 
                     if message['meta_info']["request_id"] not in self.latency_dict:
