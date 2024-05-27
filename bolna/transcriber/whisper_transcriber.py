@@ -48,14 +48,16 @@ class WhisperTranscriber(BaseTranscriber):
         self.model:str = model
         self.sampling_rate:int = sampling_rate
         self.encoding = encoding
+        self.model_type = kwargs.get("modeltype")
+        self.keywords = keywords
+        self.model_task = kwargs.get('task')
 
         # INPUT/OUPUT queue present in base class
         self.transcriber_output_queue:Queue = output_queue
-        
-
-        self.keywords = keywords
         self.interruption_signalled:bool = False
-        self.url:str = os.getenv('WHISPER_URL')
+        # self.url:str = os.getenv('WHISPER_URL')
+        # env file stuck to old value
+        self.url:str = "ws://54.196.238.86:9000"
         
         # audio submitted
         self.audio_submission_time:float = None
@@ -311,8 +313,9 @@ class WhisperTranscriber(BaseTranscriber):
                     {
                         "uid": self.current_request_id,
                         "language": "en",
-                        "task": "translate",
-                        "model": "small",
+                        "task": self.model_task,
+                        "model": self.model_type,
+                        "keywords": self.keywords,
                         "use_vad": True
                     }
                 ))
