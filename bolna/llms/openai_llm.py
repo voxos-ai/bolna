@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from openai import AsyncOpenAI
 import json, requests
 
+from bolna.constants import PRE_FUNCTIONAL_CALL_MESSAGE
 from bolna.helpers.utils import convert_to_request_log, format_messages
 from .llm import BaseLLM
 from bolna.helpers.logger_config import configure_logger
@@ -70,6 +71,7 @@ class OpenAiLLM(BaseLLM):
                 llm_key = kwargs['llm_key']
             self.async_client = AsyncOpenAI(api_key=llm_key)
         self.run_id = kwargs.get("run_id", None)
+        self.gave_out_prefunction_call_message = False
             
     async def generate_stream(self, messages, synthesize=True, request_json=False, meta_info = None):
         if len(messages) == 0:
@@ -88,9 +90,17 @@ class OpenAiLLM(BaseLLM):
             tools = json.loads(self.tools)
             model_args["functions"]=tools
             model_args["function_call"]="auto"
+        textual_response = False
         async for chunk in await self.async_client.chat.completions.create(**model_args):
             if self.trigger_function_call and dict(chunk.choices[0].delta).get('function_call'):
-                yield buffer, False
+                if not self.gave_out_prefunction_call_message and not textual_response:
+                    yield PRE_FUNCTIONAL_CALL_MESSAGE, False
+                    self.gave_out_prefunction_call_message = True
+                if len(buffer) > 0:
+                    yield buffer, False
+                    buffer = ''
+
+                logger.info(f"Response from LLM {resp}")
                 buffer = ''
                 if chunk.choices[0].delta.function_call.name:
                     logger.info(f"Should do a function call {chunk.choices[0].delta.function_call.name}")
@@ -98,12 +108,11 @@ class OpenAiLLM(BaseLLM):
                     i = [i for i in range(len(tools)) if called_fun == tools[i]["name"]][0]
                 if (text_chunk := chunk.choices[0].delta.function_call.arguments):
                     resp += text_chunk
-                if chunk.choices[0].delta.content:
-                    logger.info(f"Response to tell the user {chunk.choices[0].delta.content}")
             elif text_chunk := chunk.choices[0].delta.content:
-                
-                answer += text_chunk
+                textual_response = True
+                answer += text_chunk    
                 buffer += text_chunk
+                logger.info(f"Response to tell the user {chunk.choices[0].delta.content} {answer} {buffer}")
 
                 if len(buffer) >= self.buffer_size and synthesize:
                     buffer_words = buffer.split(" ")
@@ -115,6 +124,7 @@ class OpenAiLLM(BaseLLM):
                     buffer = buffer_words[-1]
 
         if self.trigger_function_call and (all(key in resp for key in tools[i]["parameters"]["properties"].keys())) and (called_fun in self.api_params):
+            self.gave_out_prefunction_call_message = False
             logger.info(f"Function call paramaeters {resp}")
             convert_to_request_log(resp, meta_info, self.model, "llm", direction = "response", is_cached= False, run_id = self.run_id)
             resp  = json.loads(resp)

@@ -31,3 +31,5 @@ ACCIDENTAL_INTERRUPTION_PHRASES = [
     "cease", "halt", "silence", "enough", "excuse", "hold on", "hang on", "cut it", 
     "that's enough", "shush", "listen", "excuse me", "hold up", "not now", "stop there", "stop speaking"
 ]
+
+PRE_FUNCTIONAL_CALL_MESSAGE = "Just give me a moment, I'll do that and will be back with you"

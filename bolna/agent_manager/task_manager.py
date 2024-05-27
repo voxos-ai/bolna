@@ -265,7 +265,7 @@ class TaskManager(BaseManager):
                 self.ambient_noise_task = None
                 if self.ambient_noise:
                     logger.info(f"Ambient noise is True {self.ambient_noise}")
-                    self.soundtrack = conversation_config.get("ambient_noise_track", "convention_hall.wav")
+                    self.soundtrack = f"{conversation_config.get('ambient_noise_track', 'convention_hall')}.wav"
 
     def __setup_routes(self, routes):
         embedding_model = routes.get("embedding_model", os.getenv("ROUTE_EMBEDDING_MODEL"))
@@ -548,6 +548,7 @@ class TaskManager(BaseManager):
         
         #restart output task
         self.output_task = asyncio.create_task(self.__process_output_loop())
+        self.started_transmitting_audio = False #Since we're interrupting we need to stop transmitting as well
         logger.info(f"Cleaning up downstream tasks sequenxce ids {self.sequence_ids}. Time taken to send a clear message {time.time() - start_time}")
 
     def __get_updated_meta_info(self, meta_info = None):
@@ -970,17 +971,6 @@ class TaskManager(BaseManager):
                             if self.callee_speaking is False:
                                 self.callee_speaking_start_time = time.time()
                                 self.callee_speaking = True
-                            # if self.started_transmitting_audio:
-                            #     # Ideally is we are transmitting, we want to wait for x seconds here to make sure if we interrupt or not 
-                            #     # So, we send a clear message for sure but use a variable to make sure that we wait 
-                            #     # then if we haven't received interruption signal, we simply continue
-                            #     # If we have, we interrupt  
-                            #     # Send a clear message
-                            #     await self.tools["output"].handle_interruption()
-                            #     self.backoff_until = (time.time() * 1000) + self.interruption_backoff_period
-                            #     self.allow_extra_sleep = True
-                            #     logger.info(f"Sending interrupt to clear and allowing extra sleep to wait for more messages as we are transmitting audio right now. {self.backoff_until}")
-
                             
                             # This means we are generating response from an interim transcript 
                             # Hence we transmit quickly 
@@ -1347,7 +1337,7 @@ class TaskManager(BaseManager):
                 logger.info(f"{time_since_last_spoken_AI_word} seconds since last spoken time stamp and hence cutting the phone call and last transmitted timestampt ws {self.last_transmitted_timesatamp} and time since last spoken human word {self.time_since_last_spoken_human_word}")
                 await self.__process_end_of_conversation()
                 break
-            elif time_since_last_spoken_AI_word > 5 and not self.asked_if_user_is_still_there and self.time_since_last_spoken_human_word < self.last_transmitted_timesatamp :
+            elif time_since_last_spoken_AI_word > 3 and not self.asked_if_user_is_still_there and self.time_since_last_spoken_human_word < self.last_transmitted_timesatamp :
                 logger.info(f"Asking if the user is still there")
                 self.asked_if_user_is_still_there = True
                 if self.should_record:
