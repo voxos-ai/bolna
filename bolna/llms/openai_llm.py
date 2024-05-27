@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
-import json, requests
+import json, requests, time
 
 from bolna.helpers.utils import convert_to_request_log, format_messages
 from .llm import BaseLLM
@@ -84,13 +84,20 @@ class OpenAiLLM(BaseLLM):
         model_args["messages"] = messages
         model_args["stream"] = True
         model_args["stop"] = ["User:"]
+        latency = False
+        start_time = time.time()
         if self.trigger_function_call:
             tools = json.loads(self.tools)
             model_args["functions"]=tools
             model_args["function_call"]="auto"
         async for chunk in await self.async_client.chat.completions.create(**model_args):
+            if not self.started_streaming:
+                first_chunk_time = time.time()
+                latency = first_chunk_time - start_time
+                logger.info(f"LLM Latency: {latency:.2f} s")
+                self.started_streaming = True
             if self.trigger_function_call and dict(chunk.choices[0].delta).get('function_call'):
-                yield buffer, False
+                yield buffer, False, latency
                 buffer = ''
                 if chunk.choices[0].delta.function_call.name:
                     logger.info(f"Should do a function call {chunk.choices[0].delta.function_call.name}")
@@ -111,7 +118,7 @@ class OpenAiLLM(BaseLLM):
 
                     if not self.started_streaming:
                         self.started_streaming = True
-                    yield text, False
+                    yield text, False, latency
                     buffer = buffer_words[-1]
 
         if self.trigger_function_call and (all(key in resp for key in tools[i]["parameters"]["properties"].keys())) and (called_fun in self.api_params):
@@ -141,13 +148,13 @@ class OpenAiLLM(BaseLLM):
 
                         if not self.started_streaming:
                             self.started_streaming = True
-                        yield text, False
+                        yield text, False, latency
                         buffer = buffer_words[-1]
 
         if synthesize: # This is used only in streaming sense 
-            yield buffer, True
+            yield buffer, True, latency
         else:
-            yield answer, True
+            yield answer, True, latency
         self.started_streaming = False
 
     async def generate(self, messages, request_json=False):
