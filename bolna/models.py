@@ -47,7 +47,7 @@ class FourieConfig(BaseModel):
 
 class DeepgramConfig(BaseModel):
     voice: str
-class MelloConfig(BaseModel):
+class MeloConfig(BaseModel):
     voice:str
     sample_rate:int
     sdp_ratio:float = 0.2
@@ -78,7 +78,7 @@ class Transcriber(BaseModel):
 
 class Synthesizer(BaseModel):
     provider: str
-    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig, MelloConfig, DeepgramConfig]
+    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig, MeloConfig, DeepgramConfig]
     stream: bool = False
     buffer_size: Optional[int] = 40  # 40 characters in a buffer
     audio_format: Optional[str] = "pcm"

@@ -14,14 +14,14 @@ logger = configure_logger(__name__)
 # DEEPGRAM_TTS_URL = "https://{}/v1/speak".format(DEEPGRAM_HOST)
 
 
-class MelloSynthesizer(BaseSynthesizer):
+class MeloSynthesizer(BaseSynthesizer):
     def __init__(self, audio_format="pcm", sampling_rate="8000", stream=False, buffer_size=400,
                  **kwargs):
         super().__init__(stream, buffer_size)
         self.format = "linear16" if audio_format == "pcm" else audio_format
         self.sample_rate = int(sampling_rate)
         self.first_chunk_generated = False
-        self.url = os.getenv('MELLO_TTS')
+        self.url = os.getenv('MELO_TTS')
 
         self.voice = kwargs.get('voice')
         self.sample_rate = kwargs.get('sample_rate')
