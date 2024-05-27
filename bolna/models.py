@@ -48,9 +48,15 @@ class FourieConfig(BaseModel):
 class DeepgramConfig(BaseModel):
     voice: str
 class MelloConfig(BaseModel):
-    voice: str
-    voice_type:str
+    voice:str
     sample_rate:int
+    sdp_ratio:float = 0.2
+    noise_scale:float = 0.6
+    noise_scale_w:float =  0.8
+    speed:float = 1.0
+    @validator('voice')
+    def check_voice(cls, value):
+        return validate_attribute(value, ['EN-US','EN-BR','EN-AU','EN-Default','EN_INDIA'])
 
 class Transcriber(BaseModel):
     model: str
@@ -72,7 +78,7 @@ class Transcriber(BaseModel):
 
 class Synthesizer(BaseModel):
     provider: str
-    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig, DeepgramConfig, MelloConfig]
+    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig, MelloConfig, DeepgramConfig]
     stream: bool = False
     buffer_size: Optional[int] = 40  # 40 characters in a buffer
     audio_format: Optional[str] = "pcm"

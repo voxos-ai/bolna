@@ -6,7 +6,8 @@ from bolna.helpers.utils import create_ws_data_packet
 from .base_synthesizer import BaseSynthesizer
 import json
 import base64
-import requests
+
+load_dotenv()
 logger = configure_logger(__name__)
 # load_dotenv()
 # DEEPGRAM_HOST = os.getenv('DEEPGRAM_HOST', 'api.deepgram.com')
@@ -14,28 +15,41 @@ logger = configure_logger(__name__)
 
 
 class MelloSynthesizer(BaseSynthesizer):
-    def __init__(self, voice, audio_format="pcm", sampling_rate="8000", stream=False, buffer_size=400,
+    def __init__(self, audio_format="pcm", sampling_rate="8000", stream=False, buffer_size=400,
                  **kwargs):
         super().__init__(stream, buffer_size)
         self.format = "linear16" if audio_format == "pcm" else audio_format
-        self.voice = voice
         self.sample_rate = int(sampling_rate)
         self.first_chunk_generated = False
+        self.url = os.getenv('MELLO_TTS')
+
+        self.voice = kwargs.get('voice')
+        self.sample_rate = kwargs.get('sample_rate')
+        self.sdp_ratio = kwargs.get('sdp_ratio')
+        self.noise_scale=kwargs.get('noise_scale')
+        self.noise_scale_w = kwargs.get('noise_scale_w')
+        self.speed = kwargs.get('speed')
+        # self.voice_id
 
     async def __generate_http(self, text):
-        url = "http://54.196.238.86:8000/connection"
+        # url = "http://54.196.238.86:8000/connection"
         payload = {
-            "voice_id": "EN-US",
+            "voice_id": self.voice,
             "text": text,
-            "sr": 8000
+            "sr": self.sample_rate,
+            "sdp_ratio" : self.sdp_ratio,
+            "noise_scale" : self.noise_scale,
+            "noise_scale_w" :  self.noise_scale_w,
+            "speed" : self.speed
         }
+        
         headers = {
             'Content-Type': 'application/json'
         }
 
         async with aiohttp.ClientSession() as session:
             if payload is not None:
-                async with session.post(url, headers=headers, json=payload) as response:
+                async with session.post(self.url, headers=headers, json=payload) as response:
                     if response.status == 200:
                         res_json:dict = json.loads(await response.text())
                         chunk = base64.b64decode(res_json["audio"])
