@@ -678,7 +678,6 @@ class TaskManager(BaseManager):
                     "first_llm_buffer_latency": meta_info.get('llm_latency', 0),
                     "average_latency": self.average_llm_latency,
                 },
-                # "overall_first_byte_latency": time.time() - self.start_time_overall_latency,
             }
             self.latency_dict[meta_info["request_id"]] = latency_metrics
         if next_step == "synthesizer" and not should_bypass_synth:
@@ -686,6 +685,8 @@ class TaskManager(BaseManager):
             self.synthesizer_tasks.append(asyncio.ensure_future(task))
         elif self.tools["output"] is not None:
             logger.info("Synthesizer not the next step and hence simply returning back")
+            overall_time = time.time() - meta_info["llm_start_time"]
+            self.latency_dict[meta_info["request_id"]]['overall_first_byte_latency'] = overall_time
             #self.history = copy.deepcopy(self.interim_history)
             await self.tools["output"].handle(create_ws_data_packet(text_chunk, meta_info))
 
@@ -1141,6 +1142,8 @@ class TaskManager(BaseManager):
                                 "synthesizer_first_chunk_latency": meta_info.get("synthesizer_latency", 0),
                                 "average_latency": self.average_synthesizer_latency
                             }
+                            overall_time = time.time() - meta_info["start_time"]
+                            self.latency_dict[meta_info["request_id"]]['overall_first_byte_latency'] = overall_time
                             #self.history = copy.deepcopy(self.interim_history)
                             logger.info(f"Changing history")
                             await self.tools["output"].handle(message)
