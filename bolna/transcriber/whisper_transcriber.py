@@ -137,15 +137,14 @@ class WhisperTranscriber(BaseTranscriber):
                     break
                 self.num_frames += 1
 
-                # save the audio cursor here
-                self.audio_cursor = self.num_frames * self.audio_frame_duration
-
                 audio_chunk:bytes = ws_data_packet.get('data')
                 # ulaw is encoding method , this is the inverse function
                 audio_chunk = ulaw2lin(audio_chunk, 2)
                 # convert from 8000 to 16000 HZ
                 audio_chunk = ratecv(audio_chunk, 2, 1, 8000, 16000, None)[0]
                 audio_chunk = self.bytes_to_float_array(audio_chunk).tobytes()
+                # save the audio cursor here
+                self.audio_cursor = self.num_frames * self.audio_frame_duration
                 await ws.send(audio_chunk)
         except Exception as e:
             logger.error('Error while sending: ' + str(e))
@@ -309,6 +308,7 @@ class WhisperTranscriber(BaseTranscriber):
         return segments
     def bytes_to_float_array(self,audio_bytes):
         raw_data = np.frombuffer(buffer=audio_bytes, dtype=np.int16)
+        self.audio_frame_duration = len(raw_data)/16000
         return raw_data.astype(np.float32) / 32768.0
 
     # RUNER FUNCTION
