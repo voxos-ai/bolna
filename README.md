@@ -11,8 +11,11 @@
 </h4>
 
 <h4 align="center">
+  <a href="https://discord.gg/yDfcqreByj">
+      <img src="https://img.shields.io/static/v1?label=Chat%20on&message=Discord&color=blue&logo=Discord&style=flat-square" alt="Discord">
+  </a>
   <a href="https://github.com/bolna-ai/bolna/blob/main/LICENSE">
-    <img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="Bolna is released under the AGPL-3.0 license." />
+    <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="Bolna is released under the MIT license." />
   </a>
   <a href="https://github.com/bolna-ai/bolna/blob/main/CONTRIBUTING.md">
     <img src="https://img.shields.io/badge/PRs-Welcome-brightgreen" alt="PRs welcome!" />
