@@ -314,7 +314,7 @@ class WhisperTranscriber(BaseTranscriber):
                         "language": "en",
                         "task": self.model_task,
                         "model": self.model_type,
-                        "keywords": self.keywords,
+                        "keywords": self.keywords.split(","),
                         "use_vad": True
                     }
                 ))
