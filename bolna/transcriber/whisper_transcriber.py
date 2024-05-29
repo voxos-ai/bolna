@@ -56,7 +56,6 @@ class WhisperTranscriber(BaseTranscriber):
         self.transcriber_output_queue:Queue = output_queue
         self.interruption_signalled:bool = False
         self.url:str = os.getenv('WHISPER_URL')
-        # env file stuck to old value
         
         # audio submitted
         self.audio_submission_time:float = None
@@ -64,6 +63,8 @@ class WhisperTranscriber(BaseTranscriber):
         self.connection_start_time:float = None
         self.process_interim_results:bool = True
         self.audio_frame_duration:float = 0.0
+        self.audio_cursor = 0.0
+        self.transcription_cursor = 0.0
 
 
         # FLAGS
@@ -133,12 +134,15 @@ class WhisperTranscriber(BaseTranscriber):
                 if end_of_stream:
                     break
                 self.num_frames += 1
+
                 audio_chunk:bytes = ws_data_packet.get('data')
                 # ulaw is encoding method , this is the inverse function
                 audio_chunk = ulaw2lin(audio_chunk, 2)
                 # convert from 8000 to 16000 HZ
                 audio_chunk = ratecv(audio_chunk, 2, 1, 8000, 16000, None)[0]
                 audio_chunk = self.bytes_to_float_array(audio_chunk).tobytes()
+                # save the audio cursor here
+                self.audio_cursor = self.num_frames * self.audio_frame_duration
                 await ws.send(audio_chunk)
         except Exception as e:
             logger.error('Error while sending: ' + str(e))
@@ -225,9 +229,11 @@ class WhisperTranscriber(BaseTranscriber):
                     logger.info(f"Yielding interim-message current_message = {self.curr_message}")
                     self.meta_info["include_latency"] = False
                     self.meta_info["utterance_end"] = self.__calculate_utterance_end(msg)
-                    self.meta_info["time_received"] = time.time()
-                    self.meta_info["transcriber_latency"] = self.meta_info["time_received"] - self.meta_info[
-                        "utterance_end"]
+                    # Calculate latency
+                    self.__set_transcription_cursor(msg)
+                    latency = self.__calculate_latency()
+                    self.meta_info['transcriber_latency'] = latency
+                    logger.info(f'Transcription latency is : {latency}')
                     yield create_ws_data_packet(self.curr_message, self.meta_info)
                     
                     # If is_final is true simply update the finalized transcript
@@ -271,6 +277,19 @@ class WhisperTranscriber(BaseTranscriber):
             utterance_end = self.connection_start_time + float(self.whole_segment_list[-1].get('end'))
             logger.info(f"Final word ended at {utterance_end}")
         return utterance_end
+
+    def __set_transcription_cursor(self, data):
+        if self.segments_list is not None:
+            self.transcription_cursor = float(self.whole_segment_list[-1].get('end'))
+            logger.info(f"Setting transcription cursor at {self.transcription_cursor}")
+        return self.transcription_cursor
+
+    def __calculate_latency(self):
+        if self.transcription_cursor is not None:
+            logger.info(f'audio cursor is at {self.audio_cursor} & transcription cursor is at {self.transcription_cursor}')
+            return self.audio_cursor - self.transcription_cursor
+        return None
+
     def AddAttributes(self,segments:dict):
         segments_list = [seg for seg in segments['segments']]
         for i,seg in enumerate(segments_list):
@@ -287,6 +306,7 @@ class WhisperTranscriber(BaseTranscriber):
         return segments
     def bytes_to_float_array(self,audio_bytes):
         raw_data = np.frombuffer(buffer=audio_bytes, dtype=np.int16)
+        self.audio_frame_duration = len(raw_data)/16000
         return raw_data.astype(np.float32) / 32768.0
 
     # RUNER FUNCTION
