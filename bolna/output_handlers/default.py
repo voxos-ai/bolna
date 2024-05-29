@@ -7,16 +7,24 @@ load_dotenv()
 
 
 class DefaultOutputHandler:
-    def __init__(self, websocket=None, queue = None):
+    def __init__(self, io_provider='default', websocket=None, queue=None):
         self.websocket = websocket
         self.is_interruption_task_on = False
         self.queue = queue
+        self.io_provider = io_provider
+        self.is_chunking_supported = False
 
     # @TODO Figure out the best way to handle this
     async def handle_interruption(self):
         logger.info("#######   Sending interruption message ####################")
         response = {"data": None, "type": "clear"}
         await self.websocket.send_json(response)
+
+    def process_in_chunks(self, yield_chunks=False):
+        return self.is_chunking_supported and yield_chunks
+
+    def get_provider(self):
+        return self.io_provider
 
     async def handle(self, packet):
         try:
