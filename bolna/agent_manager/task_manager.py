@@ -1207,22 +1207,43 @@ class TaskManager(BaseManager):
             next_task = self._get_next_step(sequence, "transcriber")
             await self._handle_transcriber_output(next_task, "Hello", meta_info)
             self.time_since_first_interim_result = (time.time() * 1000) - 1000
+
+    def __process_latency_data(self, message):
+        utterance_end = message['meta_info'].get("utterance_end", None)
+        overall_first_byte_latency = time.time() - message['meta_info']['utterance_end'] if utterance_end is not None else 0
+        transcriber_latency = message["meta_info"]["transcriber_latency"] if utterance_end is not None else 0
+        first_llm_buffer_latency = message["meta_info"]["llm_first_buffer_generation_latency"] if utterance_end is not None else 0
+        synthesizer_first_chunk_latency = message["meta_info"]["synthesizer_first_chunk_latency"] if utterance_end is not None else 0
+
+        if utterance_end is None:
+            logger.info(f"First chunk is none")
+
+        latency_metrics = {
+            "transcriber": {
+                "utterance_end": utterance_end,
+                "latency": transcriber_latency
+                },
+            "llm": {
+                "first_llm_buffer_latency" : first_llm_buffer_latency
+                },
+            "synthesizer": {
+                "synthesizer_first_chunk_latency": synthesizer_first_chunk_latency
+                },
+            "overall_first_byte_latency": overall_first_byte_latency,
+            
+            }
+
+        if message['meta_info']["request_id"] not in self.latency_dict:
+            self.latency_dict[message['meta_info']["request_id"]] = latency_metrics
+            logger.info("LATENCY METRICS FOR {} are {}".format(message['meta_info']["request_id"], latency_metrics))
             
     #Currently this loop only closes in case of interruption 
     # but it shouldn't be the case. 
     async def __process_output_loop(self):
-        prev_message = None
-        current_message = None
         try:
             while True:
-                # Allow extra sleep allows us to have real time impact in when uer starts speaking
-                # if self.nitro and self.allow_extra_sleep and time.time() *1000 < self.backoff_until:
-                #     logger.info(f"##### sleeping for extra backoff period to see if user will start speaking something new or not after {self.interruption_backoff_period/1000}")
-                #     await asyncio.sleep(self.interruption_backoff_period/1000)
-                #     self.allow_extra_sleep = False
-                #     prev_message = current_message
-
-                if self.nitro and not self.let_remaining_audio_pass_through and self.first_message_passed:
+        
+                if (not self.let_remaining_audio_pass_through) and self.first_message_passed:
                     time_since_first_interim_result = (time.time() *1000)- self.time_since_first_interim_result if self.time_since_first_interim_result != -1 else -1
                     if  time_since_first_interim_result != -1 and time_since_first_interim_result < self.required_delay_before_speaking:
                         logger.info(f"##### It's been {time_since_first_interim_result} ms since first  interim result and required time to wait for it is {self.required_delay_before_speaking}. Hence sleeping for 100ms. self.time_since_first_interim_result {self.time_since_first_interim_result}")
@@ -1236,13 +1257,8 @@ class TaskManager(BaseManager):
                     logger.info(f"##### Got to wait {self.required_delay_before_speaking} ms before speaking and alreasy waited {time_since_first_interim_result} since the first interim result")
                 else:
                     logger.info(f"Started transmitting at {time.time()}")
-                if prev_message is None:
-                    message = await self.buffered_output_queue.get()   
-                    current_message = message 
-                else:
-                    logger.info(f'prev message is not none and hence getting prev message')
-                    message = prev_message
-                    prev_message = None
+
+                message = await self.buffered_output_queue.get()   
                 logger.info("##### Start response is True and hence starting to speak {} Current sequence ids".format(message['meta_info'], self.sequence_ids))
                 if "end_of_conversation" in message['meta_info']:
                     await self.__process_end_of_conversation()
@@ -1265,37 +1281,8 @@ class TaskManager(BaseManager):
                 if "is_first_chunk_of_entire_response" in message['meta_info'] and message['meta_info']['is_first_chunk_of_entire_response']:
                     logger.info(f"First chunk stuff")
                     self.started_transmitting_audio = True
-                    meta_info = message['meta_info']
                     self.consider_next_transcript_after = time.time() + self.duration_to_prevent_accidental_interruption
-                    utterance_end = meta_info.get("utterance_end", None)
-                    overall_first_byte_latency = time.time() - message['meta_info']['utterance_end'] if utterance_end is not None else 0
-                    transcriber_latency = message["meta_info"]["transcriber_latency"] if utterance_end is not None else 0
-                    first_llm_buffer_latency = message["meta_info"]["llm_first_buffer_generation_latency"] if utterance_end is not None else 0
-                    synthesizer_first_chunk_latency = message["meta_info"]["synthesizer_first_chunk_latency"] if utterance_end is not None else 0
-
-                    if utterance_end is None:
-                        logger.info(f"First chunk is none")
-
-                    latency_metrics = {
-                        "transcriber": {
-                            "utterance_end": utterance_end,
-                            "latency": transcriber_latency
-                            },
-                        "llm": {
-                            "first_llm_buffer_latency" : first_llm_buffer_latency
-                            },
-                        "synthesizer": {
-                            "synthesizer_first_chunk_latency": synthesizer_first_chunk_latency
-                            },
-                        "overall_first_byte_latency": overall_first_byte_latency,
-                        
-                        }
-
-                    if message['meta_info']["request_id"] not in self.latency_dict:
-                        self.latency_dict[message['meta_info']["request_id"]] = latency_metrics
-                        logger.info("LATENCY METRICS FOR {} are {}".format(message['meta_info']["request_id"], latency_metrics))
-                    
-                    await asyncio.sleep(duration + 0.1) 
+                    self.__process_latency_data(message) 
                 else:
                     # Sleep until this particular audio frame is spoken only if the duration for the frame is atleast 500ms
                     if duration > 0:

@@ -46,7 +46,7 @@ class LiteLLM(BaseLLM):
             if "api_version" in kwargs:
                 self.model_args["api_version"] = kwargs["api_version"]
 
-    async def generate_stream(self, messages, synthesize=True):
+    async def generate_stream(self, messages, synthesize=True, meta_info = None):
         answer, buffer = "", ""
         model_args = self.model_args.copy()
         model_args["messages"] = messages
@@ -76,7 +76,7 @@ class LiteLLM(BaseLLM):
         self.started_streaming = False
         logger.info(f"Time to generate response {time.time() - start_time} {answer}")
 
-    async def generate(self, messages, stream=False, request_json=False):
+    async def generate(self, messages, stream=False, request_json=False, meta_info = None):
         text = ""
         model_args = self.model_args.copy()
         model_args["model"] = self.model
