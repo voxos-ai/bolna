@@ -41,3 +41,6 @@ class BaseSynthesizer:
 
     def get_engine(self):
         return "default"
+
+    def supports_websocket(self):
+        return True

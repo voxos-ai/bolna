@@ -33,7 +33,7 @@ https://github.com/bolna-ai/bolna/assets/1313096/2237f64f-1c5b-4723-b7e7-d11466e
 ## Components
 Bolna helps you create AI Voice Agents which can be instructed to do tasks beginning with:
 
-1. Initiating a phone call using telephony providers like `Twilio`, `Exotel`, etc.
+1. Initiating a phone call using telephony providers like `Twilio`, `Plivo`, `Exotel`, etc.
 2. Transcribing the conversations using `Deepgram`, etc.
 3. Using LLMs like `OpenAI`, `Llama`, `Cohere`, `Mistral`,  etc to handle conversations
 4. Synthesizing LLM responses back to telephony using `AWS Polly`, `XTTS`, `ElevenLabs`, `Deepgram` etc.
@@ -42,12 +42,14 @@ Bolna helps you create AI Voice Agents which can be instructed to do tasks begin
 Refer to the [docs](https://docs.bolna.dev/providers) for a deepdive into all supported providers.
 
 
-## Local setup
-A basic local setup uses `Twilio` for telephony. We have dockerized the setup in `local_setup/`. One will need to populate an environment `.env` file from `.env.sample`.
+## Local example setup
+A basic local setup includes usage of [Twilio](local_setup/telephony_server/twilio_api_server.py) or [Plivo](local_setup/telephony_server/plivo_api_server.py) for telephony. We have dockerized the setup in `local_setup/`. One will need to populate an environment `.env` file from `.env.sample`.
 
 The setup consists of four containers:
 
-1. Twilio web server: for initiating the calls one will need to set up a [Twilio account]([https://www.twilio.com/docs/usage/tutorials/how-to-use-your-free-trial-account](https://www.twilio.com/docs/messaging/guides/how-to-use-your-free-trial-account))
+1. Telephony web server:
+   * Choosing Twilio: for initiating the calls one will need to set up a [Twilio account](https://www.twilio.com/docs/usage/tutorials/how-to-use-your-free-trial-account)
+   * Choosing Plivo: for initiating the calls one will need to set up a [Plivo account](https://www.plivo.com/)
 2. Bolna server: for creating and handling agents 
 3. `ngrok`: for tunneling. One will need to add the `authtoken` to `ngrok-config.yml`
 4. `redis`: for persisting agents & prompt data
@@ -135,7 +137,7 @@ Once you have the above docker setup and running, you can create agents and init
 ```
 </details>
 
-2. The response of the previous API will return a uuid as the `agent_id`. Use this `agent_id` to initiate a call via the telephony server running on `8001` port at `http://localhost:8001/call`
+2. The response of the previous API will return a uuid as the `agent_id`. Use this `agent_id` to initiate a call via the telephony server running on `8001` port (for Twilio) or `8002` port (for Plivo) at `http://localhost:8001/call`
 
 <details>
 <summary>Call Payload</summary><br>
@@ -194,6 +196,19 @@ https://github.com/bolna-ai/bolna/blob/c8a0d1428793d4df29133119e354bc2f85a7ca76/
 | Elevenlabs | `ELEVENLABS_API_KEY`                             |
 | OpenAI     | `OPENAI_API_KEY`                                 |
 | Deepgram   | `DEEPGRAM_AUTH_TOKEN`                            |
+
+</details>
+&nbsp;<br>
+
+<details>
+
+<summary>Telephony Providers</summary><br>
+These are the current supported Telephony Providers:
+
+| Provider | Environment variable to be added in `.env` file                                                                                                                    |
+|----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Twilio   | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`                                                                                                   |
+| Plivo    | `PLIVO_AUTH_ID`, `PLIVO_AUTH_TOKEN`, `PLIVO_PHONE_NUMBER`<br/><br/> *Currently, sending audio packets in chunks isn't possible for Plivo limiting interruption handling |
 
 </details>
 

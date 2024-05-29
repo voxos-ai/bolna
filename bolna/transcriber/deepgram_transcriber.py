@@ -71,8 +71,8 @@ class DeepgramTranscriber(BaseTranscriber):
 
         self.audio_frame_duration = 0.5  # We're sending 8k samples with a sample rate of 16k
 
-        if self.provider in ('twilio', 'exotel'):
-            self.encoding = 'mulaw' if self.provider == "twilio" else "linear16"
+        if self.provider in ('twilio', 'exotel', 'plivo'):
+            self.encoding = 'mulaw' if self.provider in ("twilio") else "linear16"
             self.sampling_rate = 8000
             self.audio_frame_duration = 0.2  # With twilio we are sending 200ms at a time
 
@@ -251,11 +251,15 @@ class DeepgramTranscriber(BaseTranscriber):
                     self.curr_message = ""
                     self.finalized_transcript = ""
                     continue
+                
+                #TODO look into meta_info copy issue because this comes out to be true sometimes although it's a transcript
+                self.meta_info['speech_final'] = False #Ensuring that speechfinal is always False
 
                 if msg["type"] == "SpeechStarted":
                     if self.curr_message != "" and not self.process_interim_results:
                         logger.info("Current messsage is null and hence inetrrupting")
                         self.meta_info["should_interrupt"] = True
+                        self.meta_info['speech_final'] = False
                     elif self.process_interim_results:
                         self.meta_info["should_interrupt"] = False
                     logger.info(f"YIELDING TRANSCRIBER BEGIN")

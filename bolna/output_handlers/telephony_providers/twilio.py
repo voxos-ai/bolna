@@ -13,8 +13,11 @@ load_dotenv()
 
 class TwilioOutputHandler(TelephonyOutputHandler):
     def __init__(self, websocket=None, mark_set=None, log_dir_name=None):
-        super().__init__(websocket, mark_set, log_dir_name)
-        self.io_provider = 'twilio'
+        io_provider = 'twilio'
+
+        super().__init__(io_provider, websocket, mark_set, log_dir_name)
+        self.is_chunking_supported = True
+
         self.client = Client(os.getenv('TWILIO_ACCOUNT_SID'), os.getenv('TWILIO_AUTH_TOKEN'))
 
     async def handle_interruption(self):
