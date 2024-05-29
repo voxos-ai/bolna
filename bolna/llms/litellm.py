@@ -82,7 +82,7 @@ class LiteLLM(BaseLLM):
         self.started_streaming = False
         logger.info(f"Time to generate response {time.time() - start_time} {answer}")
 
-    async def generate(self, messages, stream=False, request_json=False):
+    async def generate(self, messages, stream=False, request_json=False, meta_info = None):
         text = ""
         model_args = self.model_args.copy()
         model_args["model"] = self.model

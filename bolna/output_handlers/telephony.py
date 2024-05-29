@@ -12,8 +12,8 @@ load_dotenv()
 
 
 class TelephonyOutputHandler(DefaultOutputHandler):
-    def __init__(self, websocket=None, mark_set=None, log_dir_name=None):
-        super().__init__(websocket, log_dir_name)
+    def __init__(self, io_provider, websocket=None, mark_set=None, log_dir_name=None):
+        super().__init__(io_provider, websocket, log_dir_name)
         self.mark_set = mark_set
 
         self.stream_sid = None
@@ -46,14 +46,13 @@ class TelephonyOutputHandler(DefaultOutputHandler):
                     audio_format = meta_info.get("format", "wav")
                     logger.info(f"Sending message {len(audio_chunk)} {audio_format}")
                     media_message = await self.form_media_message(audio_chunk, audio_format)
-                    logger.info(f"Got media message {media_message['streamSid']}")
                     await self.websocket.send_text(json.dumps(media_message))
 
                     mark_id = str(uuid.uuid4())
                     self.mark_set.add(mark_id)
 
                     mark_message = await self.form_mark_message(mark_id)
-                    await self.websocket.send_text(json.dumps(mark_message))
+                    #await self.websocket.send_text(json.dumps(mark_message))
                 else:
                     logger.info("Not sending")
             except Exception as e:
