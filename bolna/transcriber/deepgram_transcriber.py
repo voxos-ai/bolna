@@ -245,11 +245,15 @@ class DeepgramTranscriber(BaseTranscriber):
                     self.curr_message = ""
                     self.finalized_transcript = ""
                     continue
+                
+                #TODO look into meta_info copy issue because this comes out to be true sometimes although it's a transcript
+                self.meta_info['speech_final'] = False #Ensuring that speechfinal is always False
 
                 if msg["type"] == "SpeechStarted":
                     if self.curr_message != "" and not self.process_interim_results:
                         logger.info("Current messsage is null and hence inetrrupting")
                         self.meta_info["should_interrupt"] = True
+                        self.meta_info['speech_final'] = False
                     elif self.process_interim_results:
                         self.meta_info["should_interrupt"] = False
                     logger.info(f"YIELDING TRANSCRIBER BEGIN")
