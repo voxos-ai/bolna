@@ -421,15 +421,15 @@ async def write_request_logs(message, run_id):
 
     row = [message['time'], message["component"], message["direction"], message["leg_id"], message['sequence_id'], message['model']]
     if message["component"] == "llm":
-        component_details = [message_data, message.get('input_tokens', 0), message.get('output_tokens', 0), None, message['cached'], None]
+        component_details = [message_data, message.get('input_tokens', 0), message.get('output_tokens', 0), None, message.get('latency', None), message['cached'], None]
     elif message["component"] == "transcriber":
-        component_details = [message_data, None, None, None, False ,message.get('is_final', False)]
+        component_details = [message_data, None, None, None, message.get('latency', None), False, message.get('is_final', False)]
     elif message["component"] == "synthesizer":
-        component_details = [message_data, None, None, len(message_data), message['cached'], None, message['engine']]
+        component_details = [message_data, None, None, len(message_data), message.get('latency', None), message['cached'], None, message['engine']]
 
     row = row + component_details
 
-    header = "Time,Component,Direction,Leg ID,Sequence ID,Model,Data,Input Tokens,Output Tokens,Characters,Cached,Final Transcript,Engine\n"
+    header = "Time,Component,Direction,Leg ID,Sequence ID,Model,Data,Input Tokens,Output Tokens,Characters,Latency,Cached,Final Transcript,Engine\n"
     log_string = ','.join(['"' + str(item).replace('"', '""') + '"' if item is not None else '' for item in row]) + '\n'
     log_dir = f"./logs/{run_id.split('#')[0]}"
     os.makedirs(log_dir, exist_ok=True)
@@ -520,7 +520,12 @@ def convert_to_request_log(message, meta_info, model, component = "transcriber",
     log['sequence_id'] = meta_info['sequence_id']
     log['model'] = model
     log['cached'] = is_cached
+    if component == "llm":
+        log['latency'] = meta_info.get('llm_latency', None) if direction == "response" else None
+    if component == "synthesizer":
+        log['latency'] = meta_info.get('synthesizer_latency', None) if direction == "response" else None
     if component == "transcriber":
+        log['latency'] = meta_info.get('transcriber_latency', None) if direction == "response" else None
         if 'is_final' in meta_info and meta_info['is_final']:
             log['is_final'] = True
     else:
