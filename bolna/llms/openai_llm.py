@@ -119,8 +119,6 @@ class OpenAiLLM(BaseLLM):
                 textual_response = True
                 answer += text_chunk    
                 buffer += text_chunk
-                logger.info(f"Response to tell the user {chunk.choices[0].delta.content} {answer} {buffer}")
-
                 if len(buffer) >= self.buffer_size and synthesize:
                     buffer_words = buffer.split(" ")
                     text = ' '.join(buffer_words[:-1])
