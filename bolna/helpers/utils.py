@@ -378,8 +378,8 @@ def merge_wav_bytes(wav_files_bytes):
     combined.export(buffer, format="wav")
     return buffer.getvalue()
 
-def calculate_audio_duration(size_bytes, sampling_rate, bit_depth = 16, channels = 1):
-    bytes_per_sample = (bit_depth / 8) * channels
+def calculate_audio_duration(size_bytes, sampling_rate, bit_depth = 16, channels = 1, format = "wav"):
+    bytes_per_sample = (bit_depth / 8) * channels if format != "mulaw" else 1
     total_samples = size_bytes / bytes_per_sample
     duration_seconds = total_samples / sampling_rate
     return duration_seconds
