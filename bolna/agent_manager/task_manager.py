@@ -1394,6 +1394,7 @@ class TaskManager(BaseManager):
                 audio = await get_raw_audio_bytes(f"{self.backchanneling_audios}/{filename}", local= True, is_location=True)
                 if not self.connected_through_dashboard and self.task_config['tools_config']['output'] != "default":
                     audio = resample(audio, target_sample_rate= 8000, format="wav")
+                    audio = wav_bytes_to_pcm(audio)
                 await self.tools["output"].handle(create_ws_data_packet(audio, self.__get_updated_meta_info())) 
             else:
                 logger.info(f"Callee isn't speaking and hence not sending or {time.time() - self.callee_speaking_start_time} is not greater than {self.backchanneling_start_delay}") 
