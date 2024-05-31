@@ -1145,6 +1145,7 @@ class TaskManager(BaseManager):
         return message['data']
 
     async def __send_preprocessed_audio(self, meta_info, text):
+        
         try:
             #TODO: Either load IVR audio into memory before call or user s3 iter_cunks
             # This will help with interruption in IVR
@@ -1154,7 +1155,9 @@ class TaskManager(BaseManager):
                                                                     "format"], local=self.is_local,
                                                                 assistant_id=self.assistant_id)
                 logger.info("Sending preprocessed audio")
+                meta_info["format"] = self.task_config["tools_config"]["output"]["format"]
                 await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
+                e
             else:
                 audio_chunk = await get_raw_audio_bytes(text, self.assistant_name,
                                                                 'pcm', local=self.is_local,
@@ -1162,7 +1165,7 @@ class TaskManager(BaseManager):
                 if not self.buffered_output_queue.empty():
                     logger.info(f"Output queue was not empty and hence emptying it")
                     self.buffered_output_queue = asyncio.Queue()
-
+                meta_info["format"] = "pcm"
                 if 'message_category' in meta_info and meta_info['message_category'] == "agent_welcome_message":
                     if audio_chunk is None:
                         logger.info(f"File doesn't exist in S3. Hence we're synthesizing it from synthesizer")
@@ -1425,8 +1428,10 @@ class TaskManager(BaseManager):
     async def __start_transmitting_ambient_noise(self):
         try:
             audio = await get_raw_audio_bytes(f'{os.getenv("AMBIENT_NOISE_PRESETS_DIR")}/{self.soundtrack}', local= True, is_location=True)
-            logger.info(f"Length of audio {len(audio)} {self.sampling_rate}")
             audio = resample(audio, self.sampling_rate, format = "wav")
+            if self.task_config["tools_config"]["output"]["provider"] in SUPPORTED_OUTPUT_TELEPHONY_HANDLERS.keys():
+                audio = wav_bytes_to_pcm(audio)
+            logger.info(f"Length of audio {len(audio)} {self.sampling_rate}")
             if self.should_record:
                 meta_info={'io': 'default', 'message_category': 'ambient_noise', "request_id": str(uuid.uuid4()), "sequence_id": -1, "type":'audio', 'format': 'wav'}
             else:
@@ -1434,12 +1439,12 @@ class TaskManager(BaseManager):
                 meta_info={'io': 'twilio', 'message_category': 'ambient_noise', 'stream_sid': self.stream_sid , "request_id": str(uuid.uuid4()), "cached": True, "type":'audio', "sequence_id": -1, 'format': 'pcm'}
             while True:
                 logger.info(f"Before yielding ambient noise")
-                for chunk in yield_chunks_from_memory(audio, self.output_chunk_size ):
+                for chunk in yield_chunks_from_memory(audio, self.output_chunk_size*2 ):
                     if not self.started_transmitting_audio:
                         logger.info(f"Transmitting ambient noise {len(chunk)}")
                         await self.tools["output"].handle(create_ws_data_packet(chunk, meta_info=meta_info))
                     logger.info("Sleeping for 800 ms")
-                    await asyncio.sleep(0.8)
+                    await asyncio.sleep(0.5)
         except Exception as e:
             logger.error(f"Something went wrong while transmitting noise {e}")
 
@@ -1518,7 +1523,7 @@ class TaskManager(BaseManager):
             if "synthesizer" in self.tools and self.synthesizer_task is not None:   
                 self.synthesizer_task.cancel()
 
-            if self._is_conversation_task() and self.use_llm_to_determine_hangup is False and not self.connected_through_dashboard:
+            if self._is_conversation_task() and self.use_llm_to_determine_hangup is False and (not self.connected_through_dashboard or self.enforce_streaming):
                 self.hangup_task.cancel()
             
             if self._is_conversation_task():
