@@ -43,6 +43,22 @@ class FourieConfig(BaseModel):
     gender: str
     voice: str
 
+class MeloConfig(BaseModel):
+    voice:str
+    sample_rate:int
+    sdp_ratio:float = 0.2
+    noise_scale:float = 0.6
+    noise_scale_w:float =  0.8
+    speed:float = 1.0
+    @validator('voice')
+    def check_voice(cls, value):
+        return validate_attribute(value, ['EN-US','EN-BR','EN-AU','EN-Default','EN_INDIA'])
+
+class StyleConfig(BaseModel):
+    voice:str
+    sample_rate:int
+    embedding_scale:int
+    diffusion_steps:int
 
 class DeepgramConfig(BaseModel):
     voice: str
@@ -70,7 +86,7 @@ class Transcriber(BaseModel):
 
 class Synthesizer(BaseModel):
     provider: str
-    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig, DeepgramConfig]
+    provider_config: Union[StyleConfig, MeloConfig, PollyConfig, XTTSConfig, ElevenLabsConfig,  OpenAIConfig,  FourieConfig,  DeepgramConfig] = Field(union_mode='left_to_right')
     stream: bool = False
     buffer_size: Optional[int] = 40  # 40 characters in a buffer
     audio_format: Optional[str] = "pcm"
@@ -78,7 +94,7 @@ class Synthesizer(BaseModel):
 
     @validator("provider")
     def validate_model(cls, value):
-        return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai", "deepgram"])
+        return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai", "deepgram", 'melo', 'style'])
 
 
 class IOModel(BaseModel):

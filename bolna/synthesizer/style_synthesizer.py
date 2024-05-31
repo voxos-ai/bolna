@@ -4,41 +4,56 @@ from dotenv import load_dotenv
 from bolna.helpers.logger_config import configure_logger
 from bolna.helpers.utils import create_ws_data_packet
 from .base_synthesizer import BaseSynthesizer
+import json
+import base64
 
-logger = configure_logger(__name__)
+
 load_dotenv()
-URL = os.getenv('BOLNA_TTS')
+logger = configure_logger(__name__)
 
 
 
-class BolnaSynthesizer(BaseSynthesizer):
-    def __init__(self, voice, audio_format="pcm", sampling_rate="8000", stream=False, buffer_size=400,
+class StyleSynthesizer(BaseSynthesizer):
+    def __init__(self, audio_format="pcm", sampling_rate="8000", stream=False, buffer_size=400,
                  **kwargs):
         super().__init__(stream, buffer_size)
         self.format = "linear16" if audio_format == "pcm" else audio_format
-        self.voice = voice
-        self.sample_rate = str(sampling_rate)
+        self.sample_rate = int(sampling_rate)
         self.first_chunk_generated = False
-        self.api_key = kwargs.get("transcriber_key", os.getenv('DEEPGRAM_AUTH_TOKEN'))
+        self.url = os.getenv('BOLNA_TTS')
+
+        self.voice = kwargs.get('voice')
+        self.sample_rate = kwargs.get('sample_rate')
+        self.embedding_scale = kwargs.get('embedding_scale')
+        self.diffusion_steps=kwargs.get('diffusion_steps')
+
+        self.counter = 0
+       
 
     async def __generate_http(self, text):
-        headers = {
-            "Authorization": "Token {}".format(self.api_key),
-            "Content-Type": "application/json"
-        }
-        url = DEEPGRAM_TTS_URL + "?encoding={}&container=none&sample_rate={}&model={}".format(
-            self.format, self.sample_rate, self.voice
-        )
-
         payload = {
-            "text": text
+        "model": "StyleTTS",
+        "config": {
+            "text": text,
+            "sr": self.sample_rate,
+            "diffusion_steps": self.diffusion_steps,
+            "embedding_scale" : self.diffusion_steps
+            }
+        }
+       
+        headers = {
+            'Content-Type': 'application/json'
         }
 
         async with aiohttp.ClientSession() as session:
             if payload is not None:
-                async with session.post(url, headers=headers, json=payload) as response:
+                async with session.post(self.url, headers=headers, json=payload) as response:
                     if response.status == 200:
-                        chunk = await response.read()
+                        res_json:dict = json.loads(await response.text())
+                        chunk = base64.b64decode(res_json["audio"])
+                        with open(f"../venv/audio/{self.counter}.wav",'wb') as file:
+                            file.write(chunk)
+                            self.counter+=1
                         yield chunk
             else:
                 logger.info("Payload was null")
