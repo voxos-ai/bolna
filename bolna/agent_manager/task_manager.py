@@ -229,6 +229,7 @@ class TaskManager(BaseManager):
                 self.last_transmitted_timesatamp = 0
                 self.let_remaining_audio_pass_through = False #Will be used to let remaining audio pass through in case of utterenceEnd event and there's still audio left to be sent
                 self.use_llm_to_determine_hangup = conversation_config.get("hangup_after_LLMCall", False)
+                self.hangup_task = None
                 self.check_for_completion_prompt = conversation_config.get("call_cancellation_prompt", None)
                 if self.check_for_completion_prompt is not None:
                     completion_json_format = {"answer": "A simple Yes or No based on if you should cut the phone or not"}
@@ -239,7 +240,7 @@ class TaskManager(BaseManager):
                 #Handling accidental interruption
                 self.number_of_words_for_interruption = conversation_config.get("number_of_words_for_interruption", 3)
                 self.asked_if_user_is_still_there = False #Used to make sure that if user's phrase qualifies as acciedental interruption, we don't break the conversation loop
-                self.first_message_passed = False
+                self.first_message_passed = True if self.task_config["tools_config"]["output"]["provider"] == 'default' else False
                 self.started_transmitting_audio = False
                 self.accidental_interruption_phrases = set(ACCIDENTAL_INTERRUPTION_PHRASES)
                 #self.interruption_backoff_period = 1000 #conversation_config.get("interruption_backoff_period", 300) #this is the amount of time output loop will sleep before sending next audio
@@ -1524,7 +1525,7 @@ class TaskManager(BaseManager):
             if "synthesizer" in self.tools and self.synthesizer_task is not None:   
                 self.synthesizer_task.cancel()
 
-            if self._is_conversation_task() and self.use_llm_to_determine_hangup is False and (not self.connected_through_dashboard or self.enforce_streaming):
+            if self._is_conversation_task() and self.use_llm_to_determine_hangup is False and self.hangup_task is not None:
                 self.hangup_task.cancel()
             
             if self._is_conversation_task():

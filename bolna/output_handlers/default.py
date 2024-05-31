@@ -12,7 +12,7 @@ class DefaultOutputHandler:
         self.is_interruption_task_on = False
         self.queue = queue
         self.io_provider = io_provider
-        self.is_chunking_supported = False
+        self.is_chunking_supported = True
 
     # @TODO Figure out the best way to handle this
     async def handle_interruption(self):
