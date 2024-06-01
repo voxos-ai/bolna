@@ -29,7 +29,8 @@ SUPPORTED_LLM_PROVIDERS = {
     'vllm': OpenAiLLM,
     'anyscale': LiteLLM,
     'custom': OpenAiLLM,
-    'ola': OpenAiLLM
+    'ola': OpenAiLLM,
+    'groq': LiteLLM
 }
 SUPPORTED_INPUT_HANDLERS = {
     'default': DefaultInputHandler,
