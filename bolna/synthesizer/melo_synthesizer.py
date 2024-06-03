@@ -9,9 +9,7 @@ import base64
 
 load_dotenv()
 logger = configure_logger(__name__)
-# load_dotenv()
-# DEEPGRAM_HOST = os.getenv('DEEPGRAM_HOST', 'api.deepgram.com')
-# DEEPGRAM_TTS_URL = "https://{}/v1/speak".format(DEEPGRAM_HOST)
+
 
 
 class MeloSynthesizer(BaseSynthesizer):
@@ -32,7 +30,6 @@ class MeloSynthesizer(BaseSynthesizer):
         # self.voice_id
 
     async def __generate_http(self, text):
-        # url = "http://54.196.238.86:8000/connection"
         payload = {
             "voice_id": self.voice,
             "text": text,
