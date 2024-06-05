@@ -29,7 +29,7 @@ logger = configure_logger(__name__)
 
 class TaskManager(BaseManager):
     def __init__(self, assistant_name, task_id, task, ws, input_parameters=None, context_data=None,
-                 assistant_id=None, turn_based_conversation=False, cache=None,
+                 assistant_id=None, connected_through_dashboard=False, cache=None,
                  input_queue=None, conversation_history=None, output_queue=None, yield_chunks=True, **kwargs):
         super().__init__()
         # Latency and logging 
@@ -55,7 +55,7 @@ class TaskManager(BaseManager):
         self.websocket = ws
         self.task_config = task
         self.context_data = context_data
-        self.turn_based_conversation = turn_based_conversation
+        self.connected_through_dashboard = connected_through_dashboard
         self.enforce_streaming = kwargs.get("enforce_streaming", False)
         self.callee_silent = True
         self.yield_chunks = yield_chunks
@@ -104,8 +104,8 @@ class TaskManager(BaseManager):
             self.default_io = self.task_config["tools_config"]["output"]["provider"] == 'default'
             logger.info(f"Connected via websocket")
             self.should_record = self.task_config["tools_config"]["output"]["provider"] == 'default' and self.enforce_streaming #In this case, this is a websocket connection and we should record 
-            self.__setup_input_handlers(turn_based_conversation, input_queue, self.should_record)
-        self.__setup_output_handlers(turn_based_conversation, output_queue)
+            self.__setup_input_handlers(connected_through_dashboard, input_queue, self.should_record)
+        self.__setup_output_handlers(connected_through_dashboard, output_queue)
 
         # Agent stuff
         # Need to maintain current conversation history and overall persona/history kinda thing. 
@@ -129,7 +129,7 @@ class TaskManager(BaseManager):
         self.buffers = []
         self.should_respond = False
         self.last_response_time = time.time()
-        self.is_an_ivr_call = self._is_conversation_task() and self._is_preprocessed_flow() and not self.turn_based_conversation
+        self.is_an_ivr_call = self._is_conversation_task() and self._is_preprocessed_flow() and not self.connected_through_dashboard
         self.consider_next_transcript_after = time.time()
         self.duration_to_prevent_accidental_interruption = 3 if self.is_an_ivr_call else 0
         self.callee_speaking = False
@@ -150,8 +150,8 @@ class TaskManager(BaseManager):
         self.extracted_data = None
         self.summarized_data = None
         logger.info(f"TASK CONFIG {self.task_config['tools_config'] }")
-        self.stream = (self.task_config["tools_config"]['synthesizer'] is not None and self.task_config["tools_config"]["synthesizer"]["stream"]) and (self.enforce_streaming or not self.turn_based_conversation)
-        #self.stream = not turn_based_conversation #Currently we are allowing only realtime conversation based usecases. Hence it'll always be true unless connected through dashboard
+        self.stream = (self.task_config["tools_config"]['synthesizer'] is not None and self.task_config["tools_config"]["synthesizer"]["stream"]) and (self.enforce_streaming or not self.connected_through_dashboard)
+        #self.stream = not connected_through_dashboard #Currently we are allowing only realtime conversation based usecases. Hence it'll always be true unless connected through dashboard
         self.is_local = False
         llm_config = None
         if self.task_config["tools_config"]["llm_agent"] is not None:
@@ -253,7 +253,7 @@ class TaskManager(BaseManager):
                 self.backchanneling_task = None
                 self.backchanneling_start_delay = conversation_config.get("backchanneling_start_delay", 5)
                 self.backchanneling_message_gap = conversation_config.get("backchanneling_message_gap", 2) #Amount of duration co routine will sleep
-                if self.should_backchannel and not turn_based_conversation and task_id == 0:
+                if self.should_backchannel and not connected_through_dashboard and task_id == 0:
                     logger.info(f"Should backchannel")
                     self.backchanneling_audios = f'{kwargs.get("backchanneling_audio_location", os.getenv("BACKCHANNELING_PRESETS_DIR"))}/{self.synthesizer_voice.lower()}'
                     #self.num_files = list_number_of_wav_files_in_directory(self.backchanneling_audios)
@@ -321,13 +321,13 @@ class TaskManager(BaseManager):
         self.route_layer = RouteLayer(encoder=self.route_encoder, routes=routes_list)
         logger.info("Routes are set")
 
-    def __setup_output_handlers(self, turn_based_conversation, output_queue):
+    def __setup_output_handlers(self, connected_through_dashboard, output_queue):
         output_kwargs = {"websocket": self.websocket}  
         
         if self.task_config["tools_config"]["output"] is None:
             logger.info("Not setting up any output handler as it is none")
         elif self.task_config["tools_config"]["output"]["provider"] in SUPPORTED_OUTPUT_HANDLERS.keys():
-            if turn_based_conversation:
+            if connected_through_dashboard:
                 logger.info("Connected through dashboard and hence using default output handler")
                 output_handler_class = SUPPORTED_OUTPUT_HANDLERS.get("default")
                 output_kwargs['queue'] = output_queue
@@ -349,18 +349,18 @@ class TaskManager(BaseManager):
         else:
             raise "Other input handlers not supported yet"
 
-    def __setup_input_handlers(self, turn_based_conversation, input_queue, should_record):
+    def __setup_input_handlers(self, connected_through_dashboard, input_queue, should_record):
         if self.task_config["tools_config"]["input"]["provider"] in SUPPORTED_INPUT_HANDLERS.keys():
-            logger.info(f"Connected through dashboard {turn_based_conversation}")
+            logger.info(f"Connected through dashboard {connected_through_dashboard}")
             input_kwargs = {"queues": self.queues,
                             "websocket": self.websocket,
                             "input_types": get_required_input_types(self.task_config),
                             "mark_set": self.mark_set,
-                            "turn_based_conversation": self.turn_based_conversation}
+                            "connected_through_dashboard": self.connected_through_dashboard}
             if should_record:
                 input_kwargs['conversation_recording'] = self.conversation_recording
 
-            if turn_based_conversation:
+            if connected_through_dashboard:
                 logger.info("Connected through dashboard and hence using default input handler")
                 # If connected through dashboard get basic dashboard class
                 input_handler_class = SUPPORTED_INPUT_HANDLERS.get("default")
@@ -378,12 +378,12 @@ class TaskManager(BaseManager):
     def __setup_transcriber(self):
         if self.task_config["tools_config"]["transcriber"] is not None:
             logger.info("Setting up transcriber")
-            provider = "playground" if self.turn_based_conversation else self.task_config["tools_config"]["input"][
+            provider = "playground" if self.connected_through_dashboard else self.task_config["tools_config"]["input"][
                 "provider"]
             self.task_config["tools_config"]["transcriber"]["input_queue"] = self.audio_queue
             self.task_config['tools_config']["transcriber"]["output_queue"] = self.transcriber_output_queue
             if self.task_config["tools_config"]["transcriber"]["model"] in SUPPORTED_TRANSCRIBER_MODELS.keys():
-                if self.turn_based_conversation:
+                if self.connected_through_dashboard:
                     self.task_config["tools_config"]["transcriber"]["stream"] = True if self.enforce_streaming else False
                     logger.info(f'self.task_config["tools_config"]["transcriber"]["stream"] {self.task_config["tools_config"]["transcriber"]["stream"]} self.enforce_streaming {self.enforce_streaming}')
                 transcriber_class = SUPPORTED_TRANSCRIBER_MODELS.get(
@@ -404,7 +404,7 @@ class TaskManager(BaseManager):
             synthesizer_class = SUPPORTED_SYNTHESIZER_MODELS.get(self.synthesizer_provider)
             provider_config = self.task_config["tools_config"]["synthesizer"].pop("provider_config")
             self.synthesizer_voice = provider_config["voice"]
-            if self.turn_based_conversation:
+            if self.connected_through_dashboard:
                 self.task_config["tools_config"]["synthesizer"]["audio_format"] = "mp3" # Hard code mp3 if we're connected through dashboard
                 self.task_config["tools_config"]["synthesizer"]["stream"] = True if self.enforce_streaming else False #Hardcode stream to be False as we don't want to get blocked by a __listen_synthesizer co-routine
         
@@ -653,7 +653,7 @@ class TaskManager(BaseManager):
         self.ended_by_assistant = True
         await self.tools["input"].stop_handler()
         logger.info("Stopped input handler")
-        if "transcriber" in self.tools and not self.turn_based_conversation:
+        if "transcriber" in self.tools and not self.connected_through_dashboard:
             logger.info("Stopping transcriber")
             await self.tools["transcriber"].toggle_connection()
             await asyncio.sleep(5)  # Making sure whatever message was passed is over
@@ -837,7 +837,7 @@ class TaskManager(BaseManager):
                     #self.__update_transcripts()
 
             # TODO : Write a better check for completion prompt 
-            if self.use_llm_to_determine_hangup and not self.turn_based_conversation:
+            if self.use_llm_to_determine_hangup and not self.connected_through_dashboard:
                 answer = await self.tools["llm_agent"].check_for_completion(self.history, self.check_for_completion_prompt)
                 should_hangup = answer['answer'].lower() == "yes"
                 prompt = [
@@ -856,7 +856,7 @@ class TaskManager(BaseManager):
     
     async def _listen_llm_input_queue(self):
         logger.info(
-            f"Starting listening to LLM queue as either Connected to dashboard = {self.turn_based_conversation} or  it's a textual chat agent {self.textual_chat_agent}")
+            f"Starting listening to LLM queue as either Connected to dashboard = {self.connected_through_dashboard} or  it's a textual chat agent {self.textual_chat_agent}")
         while True:
             try:
                 ws_data_packet = await self.queues["llm"].get()
@@ -1170,7 +1170,7 @@ class TaskManager(BaseManager):
         try:
             #TODO: Either load IVR audio into memory before call or user s3 iter_cunks
             # This will help with interruption in IVR
-            if self.turn_based_conversation or self.task_config['tools_config']['output'] == "default":
+            if self.connected_through_dashboard or self.task_config['tools_config']['output'] == "default":
                 audio_chunk = await get_raw_audio_bytes(text, self.assistant_name,
                                                                 self.task_config["tools_config"]["output"][
                                                                     "format"], local=self.is_local,
@@ -1415,7 +1415,7 @@ class TaskManager(BaseManager):
                 filename = random.choice(self.filenames)
                 logger.info(f"Should send a random backchanneling words and sending them {filename}")
                 audio = await get_raw_audio_bytes(f"{self.backchanneling_audios}/{filename}", local= True, is_location=True)
-                if not self.turn_based_conversation and self.task_config['tools_config']['output'] != "default":
+                if not self.connected_through_dashboard and self.task_config['tools_config']['output'] != "default":
                     audio = resample(audio, target_sample_rate= 8000, format="wav")
                     audio = wav_bytes_to_pcm(audio)
                 await self.tools["output"].handle(create_ws_data_packet(audio, self.__get_updated_meta_info())) 
@@ -1478,13 +1478,13 @@ class TaskManager(BaseManager):
                 # Create transcriber and synthesizer tasks
                 logger.info("starting task_id {}".format(self.task_id))                
                 tasks = [asyncio.create_task(self.tools['input'].handle())]
-                if not self.turn_based_conversation:
+                if not self.connected_through_dashboard:
                     self.background_check_task = asyncio.create_task(self.__handle_initial_silence(duration = 15))
                 if "transcriber" in self.tools:
                     tasks.append(asyncio.create_task(self._listen_transcriber()))
                     self.transcriber_task = asyncio.create_task(self.tools["transcriber"].run())
 
-                if self.turn_based_conversation and self._is_conversation_task():
+                if self.connected_through_dashboard and self._is_conversation_task():
                     logger.info(
                         "Since it's connected through dashboard, I'll run listen_llm_tas too in case user wants to simply text")
                     self.llm_queue_task = asyncio.create_task(self._listen_llm_input_queue())
@@ -1500,7 +1500,7 @@ class TaskManager(BaseManager):
                 if self._is_conversation_task():
                     logger.info(f"Starting the first message task {self.enforce_streaming}")
                     self.output_task = asyncio.create_task(self.__process_output_loop())
-                    if not self.turn_based_conversation or self.enforce_streaming:
+                    if not self.connected_through_dashboard or self.enforce_streaming:
                         logger.info(f"Setting up other servers")
                         self.first_message_task = asyncio.create_task(self.__first_message())
                         if not self.use_llm_to_determine_hangup :
