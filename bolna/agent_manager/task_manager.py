@@ -283,6 +283,8 @@ class TaskManager(BaseManager):
             self.filler_classifier = kwargs.get("classifier", None)
             if self.filler_classifier is None:
                 logger.info("Not using fillers to decrease latency")
+            else:
+                self.filler_preset_directory = f"{os.getenv('FILLERS_PRESETS_DIR')/{self.synthesizer_voice.lower()}}"
 
     def __setup_routes(self, routes):
         embedding_model = routes.get("embedding_model", os.getenv("ROUTE_EMBEDDING_MODEL"))
@@ -1178,7 +1180,13 @@ class TaskManager(BaseManager):
                 logger.info("Sending preprocessed audio")
                 meta_info["format"] = self.task_config["tools_config"]["output"]["format"]
                 await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
-                e
+            
+            elif 'message_category' in meta_info and meta_info['message_category'] == 'filler':
+                audio = await get_raw_audio_bytes(f'{self.filler_preset_directory}/{self.soundtrack}', local= True, is_location=True)
+                logger.info(f"Sending filler")
+                copied_meta_info = copy.deepcopy(meta_info)
+                copied_meta_info["is_first_chunk_of_entire_response"] = True
+                self.buffered_output_queue.put_nowait(create_ws_data_packet(audio, copied_meta_info))
             else:
                 start_time = time.perf_counter()
                 audio_chunk = await get_raw_audio_bytes(text, self.assistant_name,
