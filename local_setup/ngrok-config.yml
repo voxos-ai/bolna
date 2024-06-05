@@ -6,7 +6,7 @@ tunnels:
     addr: twilio-app:8001
     proto: http
   plivo-app:
-    addr: twilio-app:8002
+    addr: plivo-app:8002
     proto: http
   bolna-app:
     addr: bolna-app:5001
