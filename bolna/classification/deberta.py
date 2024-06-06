@@ -1,7 +1,6 @@
 
 
 from dotenv import load_dotenv
-from pathlib import Path
 from transformers import AutoTokenizer, pipeline
 from optimum.onnxruntime import ORTModelForSequenceClassification
 
@@ -10,6 +9,8 @@ from bolna.helpers.logger_config import configure_logger
 
 
 logger = configure_logger(__name__)
+
+
 load_dotenv()
     
 
