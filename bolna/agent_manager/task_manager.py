@@ -1182,7 +1182,9 @@ class TaskManager(BaseManager):
                 await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
             
             elif 'message_category' in meta_info and meta_info['message_category'] == 'filler':
-                audio = await get_raw_audio_bytes(f'{self.filler_preset_directory}/{self.soundtrack}', local= True, is_location=True)
+                audio = await get_raw_audio_bytes(f'{self.filler_preset_directory}/{get_md5_hash(text)}.wav', local= True, is_location=True)
+                if not self.turn_based_conversation and self.task_config['tools_config']['output'] != "default":
+                    audio = wav_bytes_to_pcm(audio)
                 logger.info(f"Sending filler")
                 copied_meta_info = copy.deepcopy(meta_info)
                 copied_meta_info["is_first_chunk_of_entire_response"] = True

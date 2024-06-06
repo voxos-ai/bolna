@@ -27,5 +27,6 @@ class DeBERTaClassifier(BaseClassifier):
         
     def classify(self, text):
         output = self.classifier(text, self.classification_labels, multi_label=self.multi_label)
+        logger.info(f"Most eligible response {output['sequence']['labels'][0]}")
         return output['sequence']['labels'][0] if output['sequence']['labels'][0] > self.threshold else None
 
