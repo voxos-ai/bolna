@@ -26,7 +26,7 @@ SUPPORTED_LLM_PROVIDERS = {
     'fireworks': LiteLLM,
     'azure-openai': LiteLLM,
     'perplexity': LiteLLM,
-    'vllm': OpenAiLLM,
+    'vllm': LiteLLM,
     'anyscale': LiteLLM,
     'custom': OpenAiLLM,
     'ola': OpenAiLLM,
