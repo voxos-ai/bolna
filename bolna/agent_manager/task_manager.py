@@ -284,7 +284,7 @@ class TaskManager(BaseManager):
             if self.filler_classifier is None:
                 logger.info("Not using fillers to decrease latency")
             else:
-                self.filler_preset_directory = f"{os.getenv('FILLERS_PRESETS_DIR')/{self.synthesizer_voice.lower()}}"
+                self.filler_preset_directory = f"{os.getenv('FILLERS_PRESETS_DIR')}/{self.synthesizer_voice.lower()}"
 
     def __setup_routes(self, routes):
         embedding_model = routes.get("embedding_model", os.getenv("ROUTE_EMBEDDING_MODEL"))
@@ -743,15 +743,16 @@ class TaskManager(BaseManager):
                     self.synthesizer_tasks.append(asyncio.create_task(
                         self._synthesize(create_ws_data_packet(text_chunk, meta_info, is_md5_hash=False))))
 
-    async def __filler_classification_task(self, message, next_task):
+    async def __filler_classification_task(self, message):
+        sequence, meta_info = self._extract_sequence_and_meta(message)
+        next_step = self._get_next_step(sequence, "llm")
         filler = self.filler_classifier.classify(message['data'])
-        meta_info = message.get("meta_info")
         meta_info['origin'] = "llm"
         meta_info['cached'] = "true"
         meta_info['local'] = "true"
         self.current_filler = filler
         should_bypass_synth = 'bypass_synth' in meta_info and meta_info['bypass_synth'] == True
-        await self._handle_llm_output(next_task, filler, should_bypass_synth, meta_info)
+        await self._handle_llm_output(next_step, filler, should_bypass_synth, meta_info)
 
     async def _process_conversation_task(self, message, sequence, meta_info):
         next_step = None
@@ -935,7 +936,7 @@ class TaskManager(BaseManager):
             transcriber_package = create_ws_data_packet(transcriber_message, meta_info)
             self.llm_task = asyncio.create_task(
                 self._run_llm_task(transcriber_package))
-            self.filler_task = asyncio.create_task(self.__filler_classification_task(transcriber_package, next_task))
+            self.filler_task = asyncio.create_task(self.__filler_classification_task(transcriber_package))
             
         elif next_task == "synthesizer":
             self.synthesizer_tasks.append(asyncio.create_task(
