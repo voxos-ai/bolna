@@ -10,7 +10,7 @@ logger = configure_logger(__name__)
 
 class AssistantManager(BaseManager):
     def __init__(self, agent_config, ws=None, assistant_id=None, context_data=None, conversation_history=None,
-                 connected_through_dashboard=None, cache=None, input_queue=None, output_queue=None, **kwargs):
+                 turn_based_conversation=None, cache=None, input_queue=None, output_queue=None, **kwargs):
         super().__init__()
         self.tools = {}
         self.websocket = ws
@@ -20,7 +20,7 @@ class AssistantManager(BaseManager):
         self.task_states = [False] * len(self.tasks)
         self.assistant_id = assistant_id
         self.run_id = f"{self.assistant_id}#{str(int(time.time() * 1000))}"
-        self.connected_through_dashboard = connected_through_dashboard
+        self.turn_based_conversation = turn_based_conversation
         self.cache = cache
         self.input_queue = input_queue
         self.output_queue = output_queue
@@ -42,7 +42,7 @@ class AssistantManager(BaseManager):
                                        task_id, task, self.websocket,
                                        context_data=self.context_data, input_parameters=input_parameters,
                                        assistant_id=self.assistant_id, run_id=self.run_id,
-                                       connected_through_dashboard=self.connected_through_dashboard,
+                                       turn_based_conversation=self.turn_based_conversation,
                                        cache=self.cache, input_queue=self.input_queue, output_queue=self.output_queue,
                                        conversation_history=self.conversation_history, **self.kwargs)
             await task_manager.load_prompt(self.agent_config.get("agent_name", self.agent_config.get("assistant_name")),

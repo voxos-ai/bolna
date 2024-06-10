@@ -120,7 +120,7 @@ def raw_to_mulaw(raw_bytes):
     return mulaw_encoded
 
 
-async def get_s3_file(bucket_name, file_key):
+async def get_s3_file(bucket_name = BUCKET_NAME, file_key = ""):
     session = AioSession()
 
     async with AsyncExitStack() as exit_stack:
@@ -379,7 +379,7 @@ def merge_wav_bytes(wav_files_bytes):
     return buffer.getvalue()
 
 def calculate_audio_duration(size_bytes, sampling_rate, bit_depth = 16, channels = 1, format = "wav"):
-    bytes_per_sample = (bit_depth / 8) * channels if format != "mulaw" else 1
+    bytes_per_sample = (bit_depth / 8) * channels if format != 'mulaw' else 1
     total_samples = size_bytes / bytes_per_sample
     duration_seconds = total_samples / sampling_rate
     return duration_seconds

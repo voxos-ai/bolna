@@ -10,13 +10,13 @@ load_dotenv()
 
 
 class DefaultInputHandler:
-    def __init__(self, queues=None, websocket=None, input_types=None, mark_set = None, queue = None, connected_through_dashboard=False, conversation_recording = None):
+    def __init__(self, queues=None, websocket=None, input_types=None, mark_set = None, queue = None, turn_based_conversation=False, conversation_recording = None):
         self.queues = queues
         self.websocket = websocket
         self.input_types = input_types
         self.websocket_listen_task = None
         self.running = True
-        self.connected_through_dashboard = connected_through_dashboard
+        self.turn_based_conversation = turn_based_conversation
         self.queue = queue
         self.conversation_recording = conversation_recording
     async def stop_handler(self):
@@ -53,7 +53,7 @@ class DefaultInputHandler:
                 'sequence': self.input_types['audio']
             })
 
-        if self.connected_through_dashboard:
+        if self.turn_based_conversation:
             ws_data_packet["meta_info"]["bypass_synth"] = True
         self.queues['llm'].put_nowait(ws_data_packet)
 
@@ -81,7 +81,7 @@ class DefaultInputHandler:
             return
 
     async def process_message(self, message):
-        if message['type'] not in self.input_types.keys() and not self.connected_through_dashboard:
+        if message['type'] not in self.input_types.keys() and not self.turn_based_conversation:
             logger.info(f"straight away returning")
             return {"message": "invalid input type"}
 
