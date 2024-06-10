@@ -33,3 +33,11 @@ ACCIDENTAL_INTERRUPTION_PHRASES = [
 ]
 
 PRE_FUNCTIONAL_CALL_MESSAGE = "Just give me a moment, I'll do that and will be back with you"
+
+FILLER_PHRASES = [
+    "No worries.", "It's fine.", "I'm here.", "No rush.", "Take your time.",
+    "Great!", "Awesome!", "Fantastic!", "Wonderful!", "Perfect!", "Excellent!",
+    "I get it.", "Noted.", "Alright.", "I understand.", "Understood.", "Got it.",
+    "Sure.", "Okay.", "Right.", "Absolutely.", "Sure thing.",
+    "I see.", "Gotcha.", "Makes sense."
+]
