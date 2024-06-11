@@ -55,6 +55,16 @@ class MeloConfig(BaseModel):
     noise_scale_w:float =  0.8
     speed:float = 1.0
 
+class StylettsConfig(BaseModel):
+    voice:str
+    rate:int=8000
+    voice_id:str='default'
+    alpha:float=0.3
+    beta:float=0.7
+    diffusion_steps:int=5
+    embedding_scale:float=1
+
+
 class Transcriber(BaseModel):
     model: str
     language: Optional[str] = None
@@ -77,7 +87,7 @@ class Transcriber(BaseModel):
 
 class Synthesizer(BaseModel):
     provider: str
-    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig, MeloConfig, DeepgramConfig]
+    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig, StylettsConfig,  MeloConfig, DeepgramConfig] = Field(union_mode='left_to_right')
     stream: bool = False
     buffer_size: Optional[int] = 40  # 40 characters in a buffer
     audio_format: Optional[str] = "pcm"
@@ -85,7 +95,7 @@ class Synthesizer(BaseModel):
 
     @validator("provider")
     def validate_model(cls, value):
-        return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai", "deepgram", "meloTTS"])
+        return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai", "deepgram", "meloTTS", "styletts"])
 
 
 class IOModel(BaseModel):
