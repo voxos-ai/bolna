@@ -488,7 +488,7 @@ class TaskManager(BaseManager):
                 self.prompts["system_prompt"] = enriched_prompt
             self.system_prompt = {
                 'role': "system",
-                'content': f"{enriched_prompt}\n### Date\n Today\'s Date is {today}"
+                'content': f"{enriched_prompt}\n### Note:\nPlease, do not start your response with fillers like Got it, Noted etc. \n### Date\n Today\'s Date is {today}"
             }
         else:
             self.system_prompt = {

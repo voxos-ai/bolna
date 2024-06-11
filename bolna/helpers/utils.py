@@ -169,18 +169,24 @@ async def store_file(bucket_name=None, file_key=None, file_data=None, content_ty
     if local:
         dir_name = PREPROCESS_DIR if preprocess_dir is None else preprocess_dir
         directory_path = os.path.join(dir_name, os.path.dirname(file_key))
-        logger.info(file_data)
         os.makedirs(directory_path, exist_ok=True)
-        if content_type == "json":
+        try:
             logger.info(f"Writing to {dir_name}/{file_key} ")
-            with open(f"{dir_name}/{file_key}", 'w') as f:
-                data = json.dumps(file_data)
-                f.write(data)
-        elif content_type in ["mp3", "wav", "pcm", "csv"]:
-            with open(f"{dir_name}/{file_key}", 'w') as f:
-                data = file_data
-                f.write(data)
-
+            if content_type == "json":
+                
+                with open(f"{dir_name}/{file_key}", 'w') as f:
+                    data = json.dumps(file_data)
+                    f.write(data)
+            elif content_type in ['csv']:
+                with open(f"{dir_name}/{file_key}", 'w') as f:
+                    data = file_data
+                    f.write(data)
+            elif content_type in ["mp3", "wav", "pcm"]:
+                with open(f"{dir_name}/{file_key}", 'wb') as f:
+                    data = file_data
+                    f.write(data)
+        except Exception as e:
+            logger.error(f"Could not save local file {e}")
 
 async def get_raw_audio_bytes(filename, agent_name = None, audio_format='mp3', assistant_id=None, local = False, is_location = False):
     # we are already storing pcm formatted audio in the filler config. No need to encode/decode them further

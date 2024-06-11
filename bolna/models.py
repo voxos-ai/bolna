@@ -187,11 +187,7 @@ class Task(BaseModel):
     toolchain: ToolsChainModel
     task_type: Optional[str] = "conversation"  # extraction, summarization, notification
     task_config: ConversationConfig = dict()
-
-    @validator('voice')
-    def check_voice(cls, value):
-        return validate_attribute(value, ['Jason','Oscar','Travis','Joseph','Ram'])
-
+    
 class AgentModel(BaseModel):
     agent_name: str
     agent_type: str = "other"
