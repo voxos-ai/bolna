@@ -12,7 +12,6 @@ SUPPORTED_SYNTHESIZER_MODELS = {
     'fourie': FourieSynthesizer,
     'deepgram': DeepgramSynthesizer,
     'meloTTS': MeloSynthesizer,
-    'deepgram': DeepgramSynthesizer,
     'styletts': StylettsSynthesizer
 }
 SUPPORTED_TRANSCRIBER_MODELS = {
