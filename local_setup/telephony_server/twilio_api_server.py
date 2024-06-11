@@ -22,7 +22,7 @@ twilio_client = Client(twilio_account_sid, twilio_auth_token)
 
 
 def populate_ngrok_tunnels():
-    response = requests.get("http://localhost:4040/api/tunnels")  # ngrok interface
+    response = requests.get("http://ngrok:4040/api/tunnels")  # ngrok interface
     app_callback_url, websocket_url = None, None
 
     if response.status_code == 200:
@@ -61,7 +61,7 @@ async def make_call(request: Request):
             from_=twilio_phone_number,
             url=f"{app_callback_url}/twilio_callback?ws_url={websocket_url}&agent_id={agent_id}",
             method="POST",
-            record=False
+            record=True
         )
 
         return PlainTextResponse("done", status_code=200)
