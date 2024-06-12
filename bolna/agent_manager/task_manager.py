@@ -670,15 +670,15 @@ class TaskManager(BaseManager):
     ##############################################################
     # LLM task
     ##############################################################
-    async def _handle_llm_output(self, next_step, text_chunk, should_bypass_synth, meta_info):
+    async def _handle_llm_output(self, next_step, text_chunk, should_bypass_synth, meta_info, is_filler = False):
 
         logger.info("received text from LLM for output processing: {} which belongs to sequence id {}".format(text_chunk, meta_info['sequence_id']))
         if "request_id" not in meta_info:
             meta_info["request_id"] = str(uuid.uuid4())
-        first_buffer_latency = time.time() - meta_info["llm_start_time"]
-        #self.latency_dict[meta_info["request_id"]]["llm"] = first_buffer_latency
-        meta_info["llm_first_buffer_generation_latency"] = first_buffer_latency
-        if not self.stream:
+        
+        if not self.stream and not is_filler:
+            first_buffer_latency = time.time() - meta_info["llm_start_time"]
+            meta_info["llm_first_buffer_generation_latency"] = first_buffer_latency
             latency_metrics = {
                 "transcriber": {
                     "latency": meta_info.get('transcriber_latency', 0),
@@ -690,6 +690,13 @@ class TaskManager(BaseManager):
                 },
             }
             self.latency_dict[meta_info["request_id"]] = latency_metrics
+        elif is_filler:
+            logger.info(f"It's a filler message and hence adding required metadata")
+            meta_info['origin'] = "classifier"
+            meta_info['cached'] = True
+            meta_info['local'] = True
+            meta_info['message_category'] = 'filler'
+
         if next_step == "synthesizer" and not should_bypass_synth:
             task = asyncio.create_task(self._synthesize(create_ws_data_packet(text_chunk, meta_info)))
             self.synthesizer_tasks.append(asyncio.ensure_future(task))
@@ -744,15 +751,16 @@ class TaskManager(BaseManager):
                         self._synthesize(create_ws_data_packet(text_chunk, meta_info, is_md5_hash=False))))
 
     async def __filler_classification_task(self, message):
+        logger.info(f"doing the classification task")
         sequence, meta_info = self._extract_sequence_and_meta(message)
         next_step = self._get_next_step(sequence, "llm")
+        start_time = time.perf_counter()
         filler = self.filler_classifier.classify(message['data'])
-        meta_info['origin'] = "llm"
-        meta_info['cached'] = "true"
-        meta_info['local'] = "true"
+        logger.info(f"doing the classification task in {time.perf_counter() - start_time}")
+        new_meta_info = copy.deepcopy(meta_info)
         self.current_filler = filler
         should_bypass_synth = 'bypass_synth' in meta_info and meta_info['bypass_synth'] == True
-        await self._handle_llm_output(next_step, filler, should_bypass_synth, meta_info)
+        await self._handle_llm_output(next_step, filler, should_bypass_synth, new_meta_info, is_filler = True)
 
     async def _process_conversation_task(self, message, sequence, meta_info):
         next_step = None
@@ -1169,10 +1177,12 @@ class TaskManager(BaseManager):
         return message['data']
 
     async def __send_preprocessed_audio(self, meta_info, text):
-        
+        meta_info = copy.deepcopy(meta_info)
+        yield_in_chunks = self.yield_chunks
         try:
             #TODO: Either load IVR audio into memory before call or user s3 iter_cunks
             # This will help with interruption in IVR
+            audio_chunk = None
             if self.turn_based_conversation or self.task_config['tools_config']['output'] == "default":
                 audio_chunk = await get_raw_audio_bytes(text, self.assistant_name,
                                                                 self.task_config["tools_config"]["output"][
@@ -1181,54 +1191,48 @@ class TaskManager(BaseManager):
                 logger.info("Sending preprocessed audio")
                 meta_info["format"] = self.task_config["tools_config"]["output"]["format"]
                 await self.tools["output"].handle(create_ws_data_packet(audio_chunk, meta_info))
-            
-            elif 'message_category' in meta_info and meta_info['message_category'] == 'filler':
-                audio = await get_raw_audio_bytes(f'{self.filler_preset_directory}/{get_md5_hash(text)}.wav', local= True, is_location=True)
-                if not self.turn_based_conversation and self.task_config['tools_config']['output'] != "default":
-                    audio = wav_bytes_to_pcm(audio)
-                logger.info(f"Sending filler")
-                copied_meta_info = copy.deepcopy(meta_info)
-                copied_meta_info["is_first_chunk_of_entire_response"] = True
-                self.buffered_output_queue.put_nowait(create_ws_data_packet(audio, copied_meta_info))
             else:
-                start_time = time.perf_counter()
-                audio_chunk = await get_raw_audio_bytes(text, self.assistant_name,
+                if meta_info.get('message_category', None ) == 'filler':
+                    logger.info(f"Getting {text} filler from local fs")
+                    audio = await get_raw_audio_bytes(f'{self.filler_preset_directory}/{text}.wav', local= True, is_location=True)
+                    yield_in_chunks = False
+                    if not self.turn_based_conversation and self.task_config['tools_config']['output'] != "default":
+                        logger.info(f"Got to convert it to pcm")
+                        audio_chunk = wav_bytes_to_pcm(resample(audio, format = "wav", target_sample_rate = 8000 ))
+                        meta_info["format"] = "pcm"
+                else:
+                    start_time = time.perf_counter()
+                    audio_chunk = await get_raw_audio_bytes(text, self.assistant_name,
                                                                 'pcm', local=self.is_local,
                                                                 assistant_id=self.assistant_id)
-                logger.info(f"Time to get response from S3 {time.perf_counter() - start_time }")
-                if not self.buffered_output_queue.empty():
-                    logger.info(f"Output queue was not empty and hence emptying it")
-                    self.buffered_output_queue = asyncio.Queue()
-                meta_info["format"] = "pcm"
-                if 'message_category' in meta_info and meta_info['message_category'] == "agent_welcome_message":
-                    if audio_chunk is None:
-                        logger.info(f"File doesn't exist in S3. Hence we're synthesizing it from synthesizer")
-                        meta_info['cached'] = False
-                        await self._synthesize(create_ws_data_packet(meta_info['text'], meta_info= meta_info))
-                    else:
-                        logger.info(f"Sending the agent welcome message")
-                        number_of_chunks = math.ceil(len(audio_chunk)/self.output_chunk_size)
-                        i = 0
-                        logger.info(f"Audio chunk size {len(audio_chunk)}, chunk size {self.output_chunk_size}")
-                        meta_info['is_first_chunk'] = True
-                        for chunk in yield_chunks_from_memory(audio_chunk, chunk_size=self.output_chunk_size):
-                            self.__enqueue_chunk(chunk, i, number_of_chunks, meta_info)
-                            i +=1
-
-                elif self.yield_chunks:
-                    logger.info(f"Sending the preprocessed message")
-                    number_of_chunks = math.ceil(len(audio_chunk)/self.output_chunk_size)
+                    logger.info(f"Time to get response from S3 {time.perf_counter() - start_time }")
+                    if not self.buffered_output_queue.empty():
+                        logger.info(f"Output queue was not empty and hence emptying it")
+                        self.buffered_output_queue = asyncio.Queue()
+                    meta_info["format"] = "pcm"
+                    if 'message_category' in meta_info and meta_info['message_category'] == "agent_welcome_message":
+                        if audio_chunk is None:
+                            logger.info(f"File doesn't exist in S3. Hence we're synthesizing it from synthesizer")
+                            meta_info['cached'] = False
+                            await self._synthesize(create_ws_data_packet(meta_info['text'], meta_info= meta_info))
+                        else:
+                            logger.info(f"Sending the agent welcome message")
+                            meta_info['is_first_chunk'] = True
+                if yield_in_chunks:
                     i = 0
-                    meta_info['is_first_chunk'] = True
+                    number_of_chunks = math.ceil(len(audio_chunk)/self.output_chunk_size)
                     logger.info(f"Audio chunk size {len(audio_chunk)}, chunk size {self.output_chunk_size}")
                     for chunk in yield_chunks_from_memory(audio_chunk, chunk_size=self.output_chunk_size):
                         self.__enqueue_chunk(chunk, i, number_of_chunks, meta_info)
                         i +=1
-
                 else:
+                    meta_info['chunk_id'] = 1
+                    meta_info["is_first_chunk_of_entire_response"] = True
+                    meta_info["is_final_chunk_of_entire_response"] = True
                     message = create_ws_data_packet(audio_chunk, meta_info)
                     logger.info(f"Yield in chunks is false and hence sending a full")
                     self.buffered_output_queue.put_nowait(message)
+
         except Exception as e:
             traceback.print_exc()
             logger.error(f"Something went wrong {e}")
