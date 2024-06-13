@@ -164,8 +164,24 @@ class ToolModel(BaseModel):
     tools: str #Goes in as a prompt
     tools_params: Dict[str, APIParams]
 
+class Node(BaseModel):
+    type: str
+    llm: LLM
+    exit_criteria: str
+    exit_response: Optional[str] = None
+    exit_prompt: Optional[str] = None
+
+class Edge(BaseModel):
+    start_node: Node
+    end_node: Node
+    condition: Optional[tuple] = None #extracted value from previous step and it's value
+
+class LLM_AGENT_GRAPH(BaseModel):
+    nodes: List[Node]
+    edges: List[Edge]
+
 class ToolsConfig(BaseModel):
-    llm_agent: Optional[LLM] = None
+    llm_agent: Optional[Union[LLM, LLM_AGENT_GRAPH]] = None
     synthesizer: Optional[Synthesizer] = None
     transcriber: Optional[Transcriber] = None
     input: Optional[IOModel] = None

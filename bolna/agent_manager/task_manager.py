@@ -188,6 +188,8 @@ class TaskManager(BaseManager):
 
         if task_id == 0:
             self.hangup_task = None
+            self.backchanneling_task = None
+
             self.output_chunk_size = 16384 if self.sampling_rate == 24000 else 4096 #0.5 second chunk size for calls
             # For nitro
             self.nitro = True 
@@ -250,7 +252,6 @@ class TaskManager(BaseManager):
 
                 #Backchanneling
                 self.should_backchannel = conversation_config.get("backchanneling", False)
-                self.backchanneling_task = None
                 self.backchanneling_start_delay = conversation_config.get("backchanneling_start_delay", 5)
                 self.backchanneling_message_gap = conversation_config.get("backchanneling_message_gap", 2) #Amount of duration co routine will sleep
                 if self.should_backchannel and not turn_based_conversation and task_id == 0:
@@ -409,7 +410,6 @@ class TaskManager(BaseManager):
             if self.turn_based_conversation:
                 self.task_config["tools_config"]["synthesizer"]["audio_format"] = "mp3" # Hard code mp3 if we're connected through dashboard
                 self.task_config["tools_config"]["synthesizer"]["stream"] = True if self.enforce_streaming else False #Hardcode stream to be False as we don't want to get blocked by a __listen_synthesizer co-routine
-        
             self.tools["synthesizer"] = synthesizer_class(**self.task_config["tools_config"]["synthesizer"], **provider_config, **self.kwargs, caching = caching)
             if self.task_config["tools_config"]["llm_agent"] is not None:
                 llm_config["buffer_size"] = self.task_config["tools_config"]["synthesizer"].get('buffer_size')
