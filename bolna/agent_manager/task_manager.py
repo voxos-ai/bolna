@@ -182,10 +182,9 @@ class TaskManager(BaseManager):
         #Setup tasks
         self.__setup_tasks(llm)
         
-
-
         #setup request logs
         self.request_logs = []
+        self.hangup_task = None
 
         if task_id == 0:
             self.output_chunk_size = 16384 if self.sampling_rate == 24000 else 4096 #0.5 second chunk size for calls
@@ -229,7 +228,6 @@ class TaskManager(BaseManager):
                 self.last_transmitted_timesatamp = 0
                 self.let_remaining_audio_pass_through = False #Will be used to let remaining audio pass through in case of utterenceEnd event and there's still audio left to be sent
                 self.use_llm_to_determine_hangup = conversation_config.get("hangup_after_LLMCall", False)
-                self.hangup_task = None
                 self.check_for_completion_prompt = conversation_config.get("call_cancellation_prompt", None)
                 if self.check_for_completion_prompt is not None:
                     completion_json_format = {"answer": "A simple Yes or No based on if you should cut the phone or not"}

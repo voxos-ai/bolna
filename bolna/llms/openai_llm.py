@@ -56,13 +56,18 @@ class OpenAiLLM(BaseLLM):
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.model_args = { "max_tokens": self.max_tokens, "temperature": self.temperature, "model": self.model}
-        if model == "Krutrim-spectre-v2":
+        provider = kwargs.get("provider", "openai")
+        if  provider == "ola":
             logger.info(f"Connecting to Ola's krutrim model")
             base_url = kwargs.get("base_url", os.getenv("OLA_KRUTRIM_BASE_URL"))
             api_key=kwargs.get('llm_key', None)
             if api_key is not None and len(api_key) > 0:
                 api_key = api_key
             self.async_client = AsyncOpenAI( base_url=base_url, api_key= api_key)
+        elif kwargs.get("provider", "openai") == "custom":
+            base_url = kwargs.get("base_url")
+            api_key=kwargs.get('llm_key', None)
+            self.async_client = AsyncOpenAI(base_url=base_url, api_key= api_key)
         else:
             llm_key = kwargs.get('llm_key', os.getenv('OPENAI_API_KEY'))
             if llm_key != "sk-":
@@ -86,6 +91,8 @@ class OpenAiLLM(BaseLLM):
         model_args["messages"] = messages
         model_args["stream"] = True
         model_args["stop"] = ["User:"]
+        model_args["user"] = self.run_id
+        
         latency = False
         start_time = time.time()
         if self.trigger_function_call:
