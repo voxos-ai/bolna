@@ -25,7 +25,7 @@ class StylettsSynthesizer(BaseSynthesizer):
         STYLE_TTS2_VOCE_MAPPING = {
             "Jess": 'default'
         }
-        self.voice_id = 'default'
+        self.voice_id = STYLE_TTS2_VOCE_MAPPING.get(self.voice,'default')
         self.rate = kwargs.get('rate')
         self.alpha = kwargs.get('alpha')
         self.beta = kwargs.get('beta')
