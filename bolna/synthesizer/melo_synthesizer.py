@@ -22,13 +22,22 @@ class MeloSynthesizer(BaseSynthesizer):
         self.first_chunk_generated = False
         self.url = os.getenv('MELO_TTS')
 
-        self.voice = kwargs.get('voice')
+        MELOTTS_VOICE_MAP = {
+            "Alex": "EN-US",
+            "Ariel": "EN-BR",
+            "Taylor": "EN-AU",
+            "Casey": "EN-Default",
+            "Aadi": "EN-India"
+        }
+
+
+        self.voice_name = kwargs.get('voice', "Casey")
+        self.voice = MELOTTS_VOICE_MAP.get(self.voice_name)
         self.sample_rate = kwargs.get('sample_rate')
         self.sdp_ratio = kwargs.get('sdp_ratio')
         self.noise_scale=kwargs.get('noise_scale')
         self.noise_scale_w = kwargs.get('noise_scale_w')
         self.speed = kwargs.get('speed')
-        # self.voice_id
 
     async def __generate_http(self, text):
         payload = {

@@ -14,15 +14,18 @@ load_dotenv()
 
 
 class StylettsSynthesizer(BaseSynthesizer):
-    def __init__(self, voice, audio_format="pcm", sampling_rate="8000", stream=False, buffer_size=400,
+    def __init__(self, audio_format="pcm", sampling_rate="8000", stream=False, buffer_size=400,
                  **kwargs):
         super().__init__(stream, buffer_size)
         self.format = "linear16" if audio_format == "pcm" else audio_format
-        self.voice = voice
+        self.voice = kwargs.get('voice', "Jess")
         self.sample_rate = int(sampling_rate)
         self.first_chunk_generated = False
 
-        self.voice_id = kwargs.get('voice_id')
+        STYLE_TTS2_VOCE_MAPPING = {
+            "Jess": 'default'
+        }
+        self.voice_id = 'default'
         self.rate = kwargs.get('rate')
         self.alpha = kwargs.get('alpha')
         self.beta = kwargs.get('beta')

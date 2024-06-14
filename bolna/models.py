@@ -48,7 +48,7 @@ class DeepgramConfig(BaseModel):
     voice: str
 
 class MeloConfig(BaseModel):
-    voice:str
+    voice:str = 'Casey'
     sample_rate:int
     sdp_ratio:float = 0.2
     noise_scale:float = 0.6
@@ -58,7 +58,7 @@ class MeloConfig(BaseModel):
 class StylettsConfig(BaseModel):
     voice:str
     rate:int=8000
-    voice_id:str='default'
+    voice_id:str='Jess'
     alpha:float=0.3
     beta:float=0.7
     diffusion_steps:int=5
