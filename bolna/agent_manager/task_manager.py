@@ -1244,7 +1244,7 @@ class TaskManager(BaseManager):
     async def __handle_initial_silence(self, duration = 5):
         while True:
             logger.info(f"Checking for initial silence {duration}")
-            logger.info(f"Woke up from my slumber {self.callee_silent}, {self.history}, {self.interim_history}")
+            #logger.info(f"Woke up from my slumber {self.callee_silent}, {self.history}, {self.interim_history}")
             if self.first_message_passed and self.callee_silent and len(self.history) == 1 and len(self.interim_history) == 1 and time.time() - self.first_message_passing_time > duration:
                 logger.info(f"Calee was silent and hence speaking Hello on callee's behalf")
                 await self.__send_first_message("Hello")
