@@ -42,7 +42,6 @@ class TaskManager(BaseManager):
         self.average_llm_latency = 0.0
         self.average_synthesizer_latency = 0.0
         self.average_transcriber_latency = 0.0
-        # self.start_time_overall_latency = 0.0
         logger.info(f"API TOOLS IN TOOLS CONFIG {task['tools_config'].get('api_tools')}")
         if task['tools_config'].get('api_tools', None) is not None:
             logger.info(f"API TOOLS is present {task['tools_config']['api_tools']}")
@@ -57,6 +56,7 @@ class TaskManager(BaseManager):
         self.context_data = context_data
         self.turn_based_conversation = turn_based_conversation
         self.enforce_streaming = kwargs.get("enforce_streaming", False)
+        self.room_url = kwargs.get("room_url", None)
         self.callee_silent = True
         self.yield_chunks = yield_chunks
         # Set up communication queues between processes
@@ -331,20 +331,22 @@ class TaskManager(BaseManager):
         
         if self.task_config["tools_config"]["output"] is None:
             logger.info("Not setting up any output handler as it is none")
-        elif self.task_config["tools_config"]["output"]["provider"] in SUPPORTED_OUTPUT_HANDLERS.keys():
+        elif self.task_config["tools_config"]["output"]["provider"] in SUPPORTED_OUTPUT_HANDLERS.keys():    
+            #Explicitly use default for turn based conversation as we expect to use HTTP endpoints
             if turn_based_conversation:
                 logger.info("Connected through dashboard and hence using default output handler")
-                output_handler_class = SUPPORTED_OUTPUT_HANDLERS.get("default")
-                output_kwargs['queue'] = output_queue
-                self.sampling_rate = 24000
+                output_handler_class = SUPPORTED_OUTPUT_HANDLERS.get("default")            
             else:
                 output_handler_class = SUPPORTED_OUTPUT_HANDLERS.get(self.task_config["tools_config"]["output"]["provider"])
-            
+
+                if self.task_config["tools_config"]["output"]["provider"] == "daily":
+                    output_kwargs['room_url'] = self.room_url
+
                 if self.task_config["tools_config"]["output"]["provider"] in SUPPORTED_OUTPUT_TELEPHONY_HANDLERS.keys():
                     output_kwargs['mark_set'] = self.mark_set
                     logger.info(f"Making sure that the sampling rate for output handler is 8000")
                     self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 8000
-                    #self.task_config['tools_config']['synthesizer']['audio_format'] = 'pcm'
+                    self.task_config['tools_config']['synthesizer']['audio_format'] = 'pcm'
                 else:
                     self.task_config['tools_config']['synthesizer']['provider_config']['sampling_rate'] = 24000
                     output_kwargs['queue'] = output_queue
@@ -361,21 +363,25 @@ class TaskManager(BaseManager):
                             "websocket": self.websocket,
                             "input_types": get_required_input_types(self.task_config),
                             "mark_set": self.mark_set,
-                            "turn_based_conversation": self.turn_based_conversation}
+                            "connected_through_dashboard": self.turn_based_conversation}
+            
+            if self.task_config["tools_config"]["input"]["provider"] == "daily":
+                input_kwargs['room_url'] = self.room_url
+
             if should_record:
                 input_kwargs['conversation_recording'] = self.conversation_recording
 
-            if turn_based_conversation:
+            if self.turn_based_conversation:
                 logger.info("Connected through dashboard and hence using default input handler")
-                # If connected through dashboard get basic dashboard class
                 input_handler_class = SUPPORTED_INPUT_HANDLERS.get("default")
                 input_kwargs['queue'] = input_queue
             else:
                 input_handler_class = SUPPORTED_INPUT_HANDLERS.get(
                     self.task_config["tools_config"]["input"]["provider"])
-
+                
                 if self.task_config['tools_config']['input']['provider'] == 'default':
                     input_kwargs['queue'] = input_queue
+                    
             self.tools["input"] = input_handler_class(**input_kwargs)
         else:
             raise "Other input handlers not supported yet"
@@ -1359,7 +1365,7 @@ class TaskManager(BaseManager):
                     
                     logger.info(f"Started transmitting at {time.time()}")
 
-                message = await self.buffered_output_queue.get()   
+                message = await self.buffered_output_queue.get()
                 chunk_id = message['meta_info']['chunk_id']
 
                 logger.info("##### Start response is True for {} and hence starting to speak {} Current sequence ids {}".format(chunk_id, message['meta_info'], self.sequence_ids))
@@ -1609,7 +1615,10 @@ class TaskManager(BaseManager):
                     output = {"summary" : self.summarized_data, "task_type": "summarization"}
                 elif self.task_config["task_type"] == "webhook":
                     output = {"status": self.webhook_response, "task_type": "webhook"}
-            return output
+
+            if self._is_conversation_task() and self.task_config['tools_config']['output']['provider'] == "daily":
+                logger.info("#### calling release function")
+                await self.tools['output'].release_call()
 
     def handle_cancellation(self, message):
         try:
