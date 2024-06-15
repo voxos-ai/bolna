@@ -158,7 +158,8 @@ class TaskManager(BaseManager):
         if self.task_config["tools_config"]["llm_agent"] is not None:
             llm_config = {
                 "model": self.task_config["tools_config"]["llm_agent"]["model"],
-                "max_tokens": self.task_config["tools_config"]["llm_agent"]["max_tokens"]
+                "max_tokens": self.task_config["tools_config"]["llm_agent"]["max_tokens"],
+                "provider": self.task_config["tools_config"]["llm_agent"]["provider"]
             }
         
         # Output stuff
@@ -187,6 +188,8 @@ class TaskManager(BaseManager):
         self.hangup_task = None
 
         if task_id == 0:
+            self.background_check_task = None
+
             self.output_chunk_size = 16384 if self.sampling_rate == 24000 else 4096 #0.5 second chunk size for calls
             # For nitro
             self.nitro = True 
@@ -1526,6 +1529,9 @@ class TaskManager(BaseManager):
             if self._is_conversation_task() and self.use_llm_to_determine_hangup is False and self.hangup_task is not None:
                 self.hangup_task.cancel()
             
+            if self._is_conversation_task() and self.background_check_task is not None:
+                self.background_check_task.cancel()
+
             if self._is_conversation_task():
                 self.output_task.cancel()
             
