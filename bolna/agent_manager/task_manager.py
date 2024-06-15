@@ -280,11 +280,12 @@ class TaskManager(BaseManager):
                     self.soundtrack = f"{conversation_config.get('ambient_noise_track', 'convention_hall')}.wav"
             
             # Classifier for filler
-            self.filler_classifier = kwargs.get("classifier", None)
-            if self.filler_classifier is None:
-                logger.info("Not using fillers to decrease latency")
-            else:
-                self.filler_preset_directory = f"{os.getenv('FILLERS_PRESETS_DIR')}/{self.synthesizer_voice.lower()}"
+            if conversation_config.get("use_fillers", False):
+                self.filler_classifier = kwargs.get("classifier", None)
+                if self.filler_classifier is None:
+                    logger.info("Not using fillers to decrease latency")
+                else:
+                    self.filler_preset_directory = f"{os.getenv('FILLERS_PRESETS_DIR')}/{self.synthesizer_voice.lower()}"
 
     def __setup_routes(self, routes):
         embedding_model = routes.get("embedding_model", os.getenv("ROUTE_EMBEDDING_MODEL"))
@@ -488,7 +489,7 @@ class TaskManager(BaseManager):
                 self.prompts["system_prompt"] = enriched_prompt
             self.system_prompt = {
                 'role': "system",
-                'content': f"{enriched_prompt}\n### Note:\nPlease, do not start your response with fillers like Got it, Noted etc. \n### Date\n Today\'s Date is {today}"
+                'content': f"{enriched_prompt}\n### Note:\nPlease, do not start your response with fillers like Got it, Noted etc. or even fillers during greetings and goodbyes like Hello, bye tc. \n### Date\n Today\'s Date is {today}"
             }
         else:
             self.system_prompt = {
@@ -945,7 +946,8 @@ class TaskManager(BaseManager):
             transcriber_package = create_ws_data_packet(transcriber_message, meta_info)
             self.llm_task = asyncio.create_task(
                 self._run_llm_task(transcriber_package))
-            self.filler_task = asyncio.create_task(self.__filler_classification_task(transcriber_package))
+            if self.use_fillers:
+                self.filler_task = asyncio.create_task(self.__filler_classification_task(transcriber_package))
             
         elif next_task == "synthesizer":
             self.synthesizer_tasks.append(asyncio.create_task(
