@@ -1255,6 +1255,7 @@ class TaskManager(BaseManager):
             elif len(self.history) > 1:
                 break
             await asyncio.sleep(3)
+        self.background_check_task = None
 
     def __process_latency_data(self, message):
         utterance_end = message['meta_info'].get("utterance_end", None)
