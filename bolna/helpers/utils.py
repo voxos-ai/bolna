@@ -120,7 +120,7 @@ def raw_to_mulaw(raw_bytes):
     return mulaw_encoded
 
 
-async def get_s3_file(bucket_name, file_key):
+async def get_s3_file(bucket_name = BUCKET_NAME, file_key = ""):
     session = AioSession()
 
     async with AsyncExitStack() as exit_stack:
@@ -169,18 +169,24 @@ async def store_file(bucket_name=None, file_key=None, file_data=None, content_ty
     if local:
         dir_name = PREPROCESS_DIR if preprocess_dir is None else preprocess_dir
         directory_path = os.path.join(dir_name, os.path.dirname(file_key))
-        logger.info(file_data)
         os.makedirs(directory_path, exist_ok=True)
-        if content_type == "json":
+        try:
             logger.info(f"Writing to {dir_name}/{file_key} ")
-            with open(f"{dir_name}/{file_key}", 'w') as f:
-                data = json.dumps(file_data)
-                f.write(data)
-        elif content_type in ["mp3", "wav", "pcm", "csv"]:
-            with open(f"{dir_name}/{file_key}", 'w') as f:
-                data = file_data
-                f.write(data)
-
+            if content_type == "json":
+                
+                with open(f"{dir_name}/{file_key}", 'w') as f:
+                    data = json.dumps(file_data)
+                    f.write(data)
+            elif content_type in ['csv']:
+                with open(f"{dir_name}/{file_key}", 'w') as f:
+                    data = file_data
+                    f.write(data)
+            elif content_type in ["mp3", "wav", "pcm"]:
+                with open(f"{dir_name}/{file_key}", 'wb') as f:
+                    data = file_data
+                    f.write(data)
+        except Exception as e:
+            logger.error(f"Could not save local file {e}")
 
 async def get_raw_audio_bytes(filename, agent_name = None, audio_format='mp3', assistant_id=None, local = False, is_location = False):
     # we are already storing pcm formatted audio in the filler config. No need to encode/decode them further
@@ -379,7 +385,7 @@ def merge_wav_bytes(wav_files_bytes):
     return buffer.getvalue()
 
 def calculate_audio_duration(size_bytes, sampling_rate, bit_depth = 16, channels = 1, format = "wav"):
-    bytes_per_sample = (bit_depth / 8) * channels if format != "mulaw" else 1
+    bytes_per_sample = (bit_depth / 8) * channels if format != 'mulaw' else 1
     total_samples = size_bytes / bytes_per_sample
     duration_seconds = total_samples / sampling_rate
     return duration_seconds
