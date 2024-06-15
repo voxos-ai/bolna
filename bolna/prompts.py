@@ -1,3 +1,6 @@
+from datetime import datetime
+
+
 EXTRACTION_PROMPT = """
 Given this transcript from the communication between user and an agent, your task is to extract following information:
 ###JSON Structure
@@ -52,3 +55,8 @@ Keep your persona summary less than 150 words, do NOT exceed this word limit.
 Only output the persona, do NOT include anything else in your output.
 If there were any proper nouns, or number or date or time involved explicitly maintain it.
 """
+
+FILLER_PROMPT = "Please, do not start your response with fillers like Got it, Noted.\nAbstain from using any greetings like hey, hello at the start of your conversation"
+
+today = datetime.now().strftime("%A, %B %d, %Y")
+DATE_PROMPT = f"### Date\n Today\'s Date is {today}"

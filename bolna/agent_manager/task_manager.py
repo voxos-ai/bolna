@@ -280,7 +280,8 @@ class TaskManager(BaseManager):
                     self.soundtrack = f"{conversation_config.get('ambient_noise_track', 'convention_hall')}.wav"
             
             # Classifier for filler
-            if conversation_config.get("use_fillers", False):
+            self.use_fillers = conversation_config.get("use_fillers", False)
+            if self.use_fillers:
                 self.filler_classifier = kwargs.get("classifier", None)
                 if self.filler_classifier is None:
                     logger.info("Not using fillers to decrease latency")
@@ -464,7 +465,7 @@ class TaskManager(BaseManager):
         if self.task_config["task_type"] == "webhook":
             return
         self.is_local = local
-        today = datetime.now().strftime("%A, %B %d, %Y")
+        
         if "prompt" in self.task_config["tools_config"]["llm_agent"]:
             #This will be tre when we have extraction or maybe never
             self.prompts = {
@@ -487,9 +488,15 @@ class TaskManager(BaseManager):
             if self.context_data is not None:
                 enriched_prompt = update_prompt_with_context(self.prompts["system_prompt"], self.context_data)
                 self.prompts["system_prompt"] = enriched_prompt
+
+            notes = "### Note:\n"
+            
+            if self.use_fillers:
+                notes += f"1.{FILLER_PROMPT}\n"
+            
             self.system_prompt = {
                 'role': "system",
-                'content': f"{enriched_prompt}\n### Note:\nPlease, do not start your response with fillers like Got it, Noted etc. or even fillers during greetings and goodbyes like Hello, bye tc. \n### Date\n Today\'s Date is {today}"
+                'content': f"{enriched_prompt}\n{notes}\n{DATE_PROMPT}"
             }
         else:
             self.system_prompt = {
