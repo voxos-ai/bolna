@@ -498,7 +498,7 @@ class TaskManager(BaseManager):
 
             notes = "### Note:\n"
             
-            if self.use_fillers:
+            if self._is_conversation_task() and self.use_fillers:
                 notes += f"1.{FILLER_PROMPT}\n"
             
             self.system_prompt = {
