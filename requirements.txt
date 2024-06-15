@@ -3,7 +3,7 @@ aiofiles==23.2.1
 aiohttp==3.9.1
 fastapi==0.108.0
 fastembed==0.2.7
-litellm==1.15.7
+litellm>=1.15
 numpy==1.26.1
 openai==1.10.0
 pydantic==2.5.3
@@ -19,4 +19,9 @@ websockets==10.4
 onnxruntime>=1.16.3
 scipy==1.11.4
 uvloop==0.19.0
-semantic-router==0.0.37
+tokenizers
+huggingface-hub
+semantic-router
+sentence_transformers
+optimum[onnxruntime]
+fastapi_utilities

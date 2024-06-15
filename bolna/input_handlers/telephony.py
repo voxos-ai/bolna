@@ -12,8 +12,8 @@ load_dotenv()
 
 
 class TelephonyInputHandler(DefaultInputHandler):
-    def __init__(self, queues, websocket=None, input_types=None, mark_set=None, connected_through_dashboard=False):
-        super().__init__(queues, websocket, input_types, connected_through_dashboard)
+    def __init__(self, queues, websocket=None, input_types=None, mark_set=None, turn_based_conversation=False):
+        super().__init__(queues, websocket, input_types, turn_based_conversation)
         self.stream_sid = None
         self.call_sid = None
         self.buffer = []
