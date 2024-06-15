@@ -41,3 +41,17 @@ FILLER_PHRASES = [
     "Sure.", "Okay.", "Right.", "Absolutely.", "Sure thing.",
     "I see.", "Gotcha.", "Makes sense."
 ]
+
+FILLER_DICT = {
+  "Unsure": ["No worries.", "It's fine.", "I'm here.", "No rush.", "Take your time."],
+  "Positive": ["Great!", "Awesome!", "Fantastic!", "Wonderful!", "Perfect!", "Excellent!"],
+  "Negative": ["I get it.", "Noted.", "Alright.", "I understand.", "Understood.", "Got it."],
+  "Neutral": ["Sure.", "Okay.", "Right.", "Absolutely.", "Sure thing."],
+  "Explaining": ["I see.", "Gotcha.", "Makes sense."],
+  "Greeting": ["Hello!", "Hi there!", "Hi!", "Hey!"],
+  "Farewell": ["Goodbye!", "Thank you!", "Take care!", "Bye!"],
+  "Thanking": ["Thank you!", "Thanks!", "Much appreciated!", "Thanks a lot!"],
+  "Apology": ["I'm sorry.", "My apologies.", "I apologize.", "Sorry."],
+  "Clarification": ["Please clarify.", "Can you explain?", "More details?", "Can you elaborate?"],
+  "Confirmation": ["Got it.", "Okay.", "Understood.", "Confirmed."]
+}

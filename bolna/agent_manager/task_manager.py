@@ -10,7 +10,7 @@ import uuid
 import copy
 from datetime import datetime
 
-from bolna.constants import ACCIDENTAL_INTERRUPTION_PHRASES
+from bolna.constants import ACCIDENTAL_INTERRUPTION_PHRASES, FILLER_DICT
 from bolna.memory.cache.vector_cache import VectorCache
 from .base_manager import BaseManager
 from bolna.agent_types import *
@@ -755,11 +755,12 @@ class TaskManager(BaseManager):
         sequence, meta_info = self._extract_sequence_and_meta(message)
         next_step = self._get_next_step(sequence, "llm")
         start_time = time.perf_counter()
-        filler = self.filler_classifier.classify(message['data'])
+        filler_class = self.filler_classifier.classify(message['data'])
         logger.info(f"doing the classification task in {time.perf_counter() - start_time}")
         new_meta_info = copy.deepcopy(meta_info)
-        self.current_filler = filler
+        self.current_filler = filler_class
         should_bypass_synth = 'bypass_synth' in meta_info and meta_info['bypass_synth'] == True
+        filler = random.choice((FILLER_DICT[filler_class]))
         await self._handle_llm_output(next_step, filler, should_bypass_synth, new_meta_info, is_filler = True)
 
     async def _process_conversation_task(self, message, sequence, meta_info):
