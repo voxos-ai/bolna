@@ -12,7 +12,7 @@ load_dotenv()
 
 class DailyInputHandler:
     def __init__(self, queues=None, websocket=None, input_types=None, mark_set=None, queue=None,
-                 connected_through_dashboard=False, conversation_recording=None, room_url=None):
+                conversation_recording=None, room_url=None):
         self.queues = queues
         self.websocket = websocket
         self.input_types = input_types
@@ -20,7 +20,6 @@ class DailyInputHandler:
         self.stream_sid = None
         self.room_url = room_url
         self.running = True
-        self.connected_through_dashboard = connected_through_dashboard
         self.queue = queue
         self.conversation_recording = conversation_recording
 
@@ -54,20 +53,6 @@ class DailyInputHandler:
 
         self.queues['transcriber'].put_nowait(ws_data_packet)
 
-    def __process_text(self, text):
-        logger.info(f"Sequences {self.input_types}")
-        ws_data_packet = create_ws_data_packet(
-            data=text,
-            meta_info={
-                'io': 'daily',
-                'type': 'text',
-                'sequence': self.input_types['audio']
-            })
-
-        if self.connected_through_dashboard:
-            ws_data_packet["meta_info"]["bypass_synth"] = True
-        self.queues['llm'].put_nowait(ws_data_packet)
-
     async def _listen(self):
         try:
             while self.running:
@@ -92,16 +77,16 @@ class DailyInputHandler:
             return
 
     async def process_message(self, message):
-        if message['type'] not in self.input_types.keys() and not self.connected_through_dashboard:
+        if message['type'] not in self.input_types.keys():
             logger.info(f"straight away returning")
             return {"message": "invalid input type"}
 
         if message['type'] == 'audio':
             self.__process_audio(message['data'])
 
-        elif message["type"] == "text":
-            logger.info(f"Received text: {message['data']}")
-            self.__process_text(message['data'])
+        # elif message["type"] == "text":
+        #     logger.info(f"Received text: {message['data']}")
+        #     self.__process_text(message['data'])
         else:
             return {"message": "Other modalities not implemented yet"}
 

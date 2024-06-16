@@ -362,8 +362,7 @@ class TaskManager(BaseManager):
             input_kwargs = {"queues": self.queues,
                             "websocket": self.websocket,
                             "input_types": get_required_input_types(self.task_config),
-                            "mark_set": self.mark_set,
-                            "connected_through_dashboard": self.turn_based_conversation}
+                            "mark_set": self.mark_set}
             
             if self.task_config["tools_config"]["input"]["provider"] == "daily":
                 input_kwargs['room_url'] = self.room_url
