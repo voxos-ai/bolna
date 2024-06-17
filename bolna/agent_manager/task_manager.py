@@ -1506,7 +1506,7 @@ class TaskManager(BaseManager):
 
     async def run(self):
         try:
-            if self.task_id == 0:
+            if self._is_conversation_task():
                 # Create transcriber and synthesizer tasks
                 logger.info("starting task_id {}".format(self.task_id))                
                 tasks = [asyncio.create_task(self.tools['input'].handle())]
@@ -1529,19 +1529,18 @@ class TaskManager(BaseManager):
                         logger.error(f'Synth task got cancelled {e}')
                         traceback.print_exc()
                     
-                if self._is_conversation_task():
-                    logger.info(f"Starting the first message task {self.enforce_streaming}")
-                    self.output_task = asyncio.create_task(self.__process_output_loop())
-                    if not self.turn_based_conversation or self.enforce_streaming:
-                        logger.info(f"Setting up other servers")
-                        self.first_message_task = asyncio.create_task(self.__first_message())
-                        if not self.use_llm_to_determine_hangup :
-                            self.hangup_task = asyncio.create_task(self.__check_for_completion())
-                        if self.should_backchannel:
-                            self.backchanneling_task = asyncio.create_task(self.__check_for_backchanneling())
-                        if self.ambient_noise:
-                            logger.info(f"Transmitting ambient noise")
-                            self.ambient_noise_task = asyncio.create_task(self.__start_transmitting_ambient_noise())
+                logger.info(f"Starting the first message task {self.enforce_streaming}")
+                self.output_task = asyncio.create_task(self.__process_output_loop())
+                if not self.turn_based_conversation or self.enforce_streaming:
+                    logger.info(f"Setting up other servers")
+                    self.first_message_task = asyncio.create_task(self.__first_message())
+                    if not self.use_llm_to_determine_hangup :
+                        self.hangup_task = asyncio.create_task(self.__check_for_completion())
+                    if self.should_backchannel:
+                        self.backchanneling_task = asyncio.create_task(self.__check_for_backchanneling())
+                    if self.ambient_noise:
+                        logger.info(f"Transmitting ambient noise")
+                        self.ambient_noise_task = asyncio.create_task(self.__start_transmitting_ambient_noise())
                 try:
                     await asyncio.gather(*tasks)
                 except asyncio.CancelledError as e:
