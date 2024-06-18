@@ -80,7 +80,7 @@ class TaskManager(BaseManager):
         self.run_id = kwargs.get("run_id", "1234#0")
         logger.info(f"Run id {self.run_id}")
         self.mark_set = set()
-        
+        self.sampling_rate = 24000
         self.conversation_ended = False
 
         # Prompts
@@ -187,7 +187,7 @@ class TaskManager(BaseManager):
         #setup request logs
         self.request_logs = []
         self.hangup_task = None
-
+        
         if task_id == 0:
             self.background_check_task = None
             self.hangup_task = None

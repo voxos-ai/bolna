@@ -50,8 +50,8 @@ FILLER_DICT = {
   "Explaining": ["I see.", "Gotcha.", "Makes sense."],
   "Greeting": ["Hello!", "Hi there!", "Hi!", "Hey!"],
   "Farewell": ["Goodbye!", "Thank you!", "Take care!", "Bye!"],
-  "Thanking": ["Thank you!", "Thanks!", "Much appreciated!", "Thanks a lot!"],
+  "Thanking": ["Welcome!", "No worries!"],
   "Apology": ["I'm sorry.", "My apologies.", "I apologize.", "Sorry."],
   "Clarification": ["Please clarify.", "Can you explain?", "More details?", "Can you elaborate?"],
-  "Confirmation": ["Got it.", "Okay.", "Understood.", "Confirmed."]
+  "Confirmation": ["Got it.", "Okay.", "Understood."]
 }
