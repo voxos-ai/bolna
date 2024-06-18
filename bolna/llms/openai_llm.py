@@ -91,7 +91,7 @@ class OpenAiLLM(BaseLLM):
         model_args["messages"] = messages
         model_args["stream"] = True
         model_args["stop"] = ["User:"]
-        model_args["user"] = self.run_id
+        model_args["user"] = f"{self.run_id}#{meta_info['turn_id']}"
         
         latency = False
         start_time = time.time()
