@@ -174,6 +174,7 @@ class ConversationConfig(BaseModel):
     backchanneling_start_delay: Optional[int] = 5
     ambient_noise: Optional[bool] = False 
     ambient_noise_track: Optional[str] = "convention_hall"
+    call_terminate: Optional[int] = 90
 
 class Task(BaseModel):
     tools_config: ToolsConfig
