@@ -4,3 +4,5 @@ from .elevenlabs_synthesizer import ElevenlabsSynthesizer
 from .openai_synthesizer import OPENAISynthesizer
 from .fourie_synthesizer import FourieSynthesizer
 from .deepgram_synthesizer import DeepgramSynthesizer
+from .melo_synthesizer import MeloSynthesizer
+from .styletts_synthesizer import StylettsSynthesizer
