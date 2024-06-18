@@ -135,6 +135,8 @@ class TaskManager(BaseManager):
         self.callee_speaking = False
         self.callee_speaking_start_time = -1
         self.llm_response_generated = False
+        self.turn_id = 0
+
         # Call conversations
         self.call_sid = None
         self.stream_sid = None
@@ -591,6 +593,7 @@ class TaskManager(BaseManager):
         meta_info_copy = meta_info.copy()
         self.curr_sequence_id +=1
         meta_info_copy["sequence_id"] = self.curr_sequence_id
+        meta_info_copy['turn_id'] = self.turn_id
         self.sequence_ids.add(meta_info_copy["sequence_id"])
         return meta_info_copy
     
@@ -1386,6 +1389,7 @@ class TaskManager(BaseManager):
                     logger.info("##### End of synthesizer stream and ")     
                     self.asked_if_user_is_still_there = False   
                     num_chunks = 0
+                    self.turn_id +=1
                     if not self.first_message_passed:
                         self.first_message_passed = True
                         logger.info(f"Making first message passed as True")
