@@ -80,7 +80,7 @@ class TaskManager(BaseManager):
         self.run_id = kwargs.get("run_id", "1234#0")
         logger.info(f"Run id {self.run_id}")
         self.mark_set = set()
-        
+        self.sampling_rate = 24000
         self.conversation_ended = False
 
         # Prompts
@@ -187,7 +187,7 @@ class TaskManager(BaseManager):
         #setup request logs
         self.request_logs = []
         self.hangup_task = None
-
+        
         if task_id == 0:
             self.background_check_task = None
             self.hangup_task = None
@@ -1057,7 +1057,8 @@ class TaskManager(BaseManager):
                             if self.started_transmitting_audio and self.number_of_words_for_interruption != 0 and self.first_message_passed:
                                 if num_words > self.number_of_words_for_interruption or message['data'].strip() in self.accidental_interruption_phrases:
                                     #Process interruption only if number of words is higher than the threshold 
-                                    logger.info(f"###### Number of words {num_words} is higher than the required number of words for interruption, hence, definitely interrupting")
+                                    logger.info(f"###### Number of words {num_words} is higher than the required number of words for interruption, hence, definitely interrupting. Interruption and hence changing the turn id")
+                                    self.turn_id +=1
                                     await self.__cleanup_downstream_tasks()
                                 else:
                                     logger.info(f"Not starting a cleanup because {num_words} number of words are lesser {self.number_of_words_for_interruption} and hence continuing,")
