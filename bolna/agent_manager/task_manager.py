@@ -54,6 +54,7 @@ class TaskManager(BaseManager):
         self.websocket = ws
         self.task_config = task
         self.context_data = context_data
+        logger.info(f"turn_based_conversation {turn_based_conversation}")
         self.turn_based_conversation = turn_based_conversation
         self.enforce_streaming = kwargs.get("enforce_streaming", False)
         self.room_url = kwargs.get("room_url", None)
@@ -374,6 +375,7 @@ class TaskManager(BaseManager):
 
             if self.turn_based_conversation:
                 logger.info("Connected through dashboard and hence using default input handler")
+                input_kwargs['turn_based_conversation'] = True
                 input_handler_class = SUPPORTED_INPUT_HANDLERS.get("default")
                 input_kwargs['queue'] = input_queue
             else:
