@@ -47,22 +47,24 @@ class FourieConfig(BaseModel):
 class DeepgramConfig(BaseModel):
     voice: str
 
+
 class MeloConfig(BaseModel):
     voice:str = 'Casey'
-    sample_rate:int
-    sdp_ratio:float = 0.2
-    noise_scale:float = 0.6
-    noise_scale_w:float =  0.8
-    speed:float = 1.0
+    sample_rate: int
+    sdp_ratio: float = 0.2
+    noise_scale: float = 0.6
+    noise_scale_w: float = 0.8
+    speed: float = 1.0
+
 
 class StylettsConfig(BaseModel):
-    voice:str
-    rate:int=8000
-    voice_id:str='Jess'
-    alpha:float=0.3
-    beta:float=0.7
-    diffusion_steps:int=5
-    embedding_scale:float=1
+    voice: str
+    rate: int = 8000
+    voice_id: str = 'Jess'
+    alpha: float = 0.3
+    beta: float = 0.7
+    diffusion_steps: int = 5
+    embedding_scale: float = 1
 
 
 class Transcriber(BaseModel):
@@ -191,7 +193,9 @@ class ConversationConfig(BaseModel):
     backchanneling_start_delay: Optional[int] = 5
     ambient_noise: Optional[bool] = False 
     ambient_noise_track: Optional[str] = "convention_hall"
+    call_terminate: Optional[int] = 90
     use_fillers: Optional[bool] = False
+
 
 class Task(BaseModel):
     tools_config: ToolsConfig
