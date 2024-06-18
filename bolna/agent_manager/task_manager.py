@@ -1578,13 +1578,14 @@ class TaskManager(BaseManager):
             if "synthesizer" in self.tools and self.synthesizer_task is not None:   
                 self.synthesizer_task.cancel()
 
-            output = {"messages": self.history, "conversation_time": time.time() - self.start_time,
+            
+            if self._is_conversation_task():
+                output = {"messages": self.history, "conversation_time": time.time() - self.start_time,
                     "label_flow": self.label_flow, "call_sid": self.call_sid, "stream_sid": self.stream_sid,
                     "transcriber_duration": self.transcriber_duration,
                     "synthesizer_characters": self.tools['synthesizer'].get_synthesized_characters(), "ended_by_assistant": self.ended_by_assistant,
                     "latency_dict": self.latency_dict}
 
-            if self._is_conversation_task():
                 self.output_task.cancel()
 
                 if self.hangup_task is not None:
@@ -1604,7 +1605,7 @@ class TaskManager(BaseManager):
                     output['recording_url'] = await save_audio_file_to_s3(self.conversation_recording, self.sampling_rate, self.assistant_id, self.run_id)
 
                 if self.task_config['tools_config']['output']['provider'] == "daily":
-                    logger.info("#### calling release function")
+                    logger.info("calling release function")
                     await self.tools['output'].release_call()
             else:
                 output = self.input_parameters
