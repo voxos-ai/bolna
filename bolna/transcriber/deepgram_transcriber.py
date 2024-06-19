@@ -20,15 +20,15 @@ load_dotenv()
 
 
 class DeepgramTranscriber(BaseTranscriber):
-    def __init__(self, provider, input_queue=None, model='nova-2', stream=True, language="en", endpointing="400",
+    def __init__(self, telephony_provider, input_queue=None, model='nova-2', stream=True, language="en", endpointing="400",
                  sampling_rate="16000", encoding="linear16", output_queue=None, keywords=None,
                  process_interim_results="true", **kwargs):
         logger.info(f"Initializing transcriber {kwargs}")
         super().__init__(input_queue)
         self.endpointing = endpointing
-        self.language = language
+        self.language = language if model == "nova-2" else "en"
         self.stream = stream
-        self.provider = provider
+        self.provider = telephony_provider
         self.heartbeat_task = None
         self.sender_task = None
         self.model = model

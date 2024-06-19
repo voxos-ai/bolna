@@ -399,7 +399,7 @@ class TaskManager(BaseManager):
                 self.task_config['tools_config']["transcriber"]["output_queue"] = self.transcriber_output_queue
                 
                 # Checking models for backwards compatibility
-                if self.task_config["tools_config"]["transcriber"]["model"] in SUPPORTED_TRANSCRIBER_MODELS.keys() or self.task_config["tools_config"]["transcriber"]["provider"] in SUPPORTED_TRANSCRIBER_MODELS.keys():
+                if self.task_config["tools_config"]["transcriber"]["model"] in SUPPORTED_TRANSCRIBER_MODELS.keys() or self.task_config["tools_config"]["transcriber"]["provider"] in SUPPORTED_TRANSCRIBER_PROVIDERS.keys():
                     if self.turn_based_conversation:
                         self.task_config["tools_config"]["transcriber"]["stream"] = True if self.enforce_streaming else False
                         logger.info(f'self.task_config["tools_config"]["transcriber"]["stream"] {self.task_config["tools_config"]["transcriber"]["stream"]} self.enforce_streaming {self.enforce_streaming}')
@@ -409,7 +409,7 @@ class TaskManager(BaseManager):
                     else:
                         transcriber_class = SUPPORTED_TRANSCRIBER_MODELS.get(
                             self.task_config["tools_config"]["transcriber"]["model"])                    
-                    self.tools["transcriber"] = transcriber_class(**self.task_config["tools_config"]["transcriber"], **self.kwargs)
+                    self.tools["transcriber"] = transcriber_class(provider, **self.task_config["tools_config"]["transcriber"], **self.kwargs)
         except Exception as e:
             logger.error(f"Something went wrong with starting transcriber {e}")
 
