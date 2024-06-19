@@ -82,7 +82,7 @@ class DefaultInputHandler:
             return
 
     async def process_message(self, message):
-        if message['type'] not in self.input_types.keys():
+        if message['type'] not in self.input_types.keys() and not self.turn_based_conversation:
             logger.info(f"straight away returning")
             return {"message": "invalid input type"}
 
