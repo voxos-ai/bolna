@@ -408,8 +408,8 @@ class TaskManager(BaseManager):
                             self.task_config["tools_config"]["transcriber"]["provider"])
                     else:
                         transcriber_class = SUPPORTED_TRANSCRIBER_MODELS.get(
-                            self.task_config["tools_config"]["transcriber"]["model"])                    
-                    self.tools["transcriber"] = transcriber_class(provider, **self.task_config["tools_config"]["transcriber"], **self.kwargs)
+                            self.task_config["tools_config"]["transcriber"]["model"])
+                    self.tools["transcriber"] = transcriber_class( provider, **self.task_config["tools_config"]["transcriber"], **self.kwargs)
         except Exception as e:
             logger.error(f"Something went wrong with starting transcriber {e}")
 
