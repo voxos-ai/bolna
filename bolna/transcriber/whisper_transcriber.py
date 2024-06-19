@@ -28,7 +28,7 @@ logger = configure_logger(__name__)
 
 
 class WhisperTranscriber(BaseTranscriber):
-    def __init__(self, provider, input_queue=None, model='whisper', stream=True, language="en", endpointing="400",
+    def __init__(self, telephony_provider, input_queue=None, model='whisper', stream=True, language="en", endpointing="400",
                  sampling_rate="16000", encoding="PCM", output_queue=None, keywords=None,
                  process_interim_results="true", *args,**kwargs):
         logger.info(f"Initializing transcriber")
@@ -37,7 +37,7 @@ class WhisperTranscriber(BaseTranscriber):
         self.endpointing = endpointing
         self.language:str = language
         self.stream:bool = True
-        self.provider = provider
+        self.provider = telephony_provider
 
         #   TASKS
         self.heartbeat_task = None
