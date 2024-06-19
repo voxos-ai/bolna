@@ -265,7 +265,7 @@ class TaskManager(BaseManager):
                         self.filenames = get_file_names_in_directory(self.backchanneling_audios)
                         logger.info(f"Backchanneling audio location {self.backchanneling_audios}")
                     except Exception as e:
-                        logger.info(f"Something went wrong an putting should backchannel to false")
+                        logger.error(f"Something went wrong an putting should backchannel to false")
                         self.should_backchannel = False
                 else:
                     logger.info(f"Not setting up backchanneling")
@@ -390,19 +390,28 @@ class TaskManager(BaseManager):
             raise "Other input handlers not supported yet"
 
     def __setup_transcriber(self):
-        if self.task_config["tools_config"]["transcriber"] is not None:
-            logger.info("Setting up transcriber")
-            provider = "playground" if self.turn_based_conversation else self.task_config["tools_config"]["input"][
-                "provider"]
-            self.task_config["tools_config"]["transcriber"]["input_queue"] = self.audio_queue
-            self.task_config['tools_config']["transcriber"]["output_queue"] = self.transcriber_output_queue
-            if self.task_config["tools_config"]["transcriber"]["model"] in SUPPORTED_TRANSCRIBER_MODELS.keys():
-                if self.turn_based_conversation:
-                    self.task_config["tools_config"]["transcriber"]["stream"] = True if self.enforce_streaming else False
-                    logger.info(f'self.task_config["tools_config"]["transcriber"]["stream"] {self.task_config["tools_config"]["transcriber"]["stream"]} self.enforce_streaming {self.enforce_streaming}')
-                transcriber_class = SUPPORTED_TRANSCRIBER_MODELS.get(
-                    self.task_config["tools_config"]["transcriber"]["model"])
-                self.tools["transcriber"] = transcriber_class(provider, **self.task_config["tools_config"]["transcriber"], **self.kwargs)
+        try:
+            if self.task_config["tools_config"]["transcriber"] is not None:
+                logger.info("Setting up transcriber")
+                provider = "playground" if self.turn_based_conversation else self.task_config["tools_config"]["input"][
+                    "provider"]
+                self.task_config["tools_config"]["transcriber"]["input_queue"] = self.audio_queue
+                self.task_config['tools_config']["transcriber"]["output_queue"] = self.transcriber_output_queue
+                
+                # Checking models for backwards compatibility
+                if self.task_config["tools_config"]["transcriber"]["model"] in SUPPORTED_TRANSCRIBER_MODELS.keys() or self.task_config["tools_config"]["transcriber"]["provider"] in SUPPORTED_TRANSCRIBER_PROVIDERS.keys():
+                    if self.turn_based_conversation:
+                        self.task_config["tools_config"]["transcriber"]["stream"] = True if self.enforce_streaming else False
+                        logger.info(f'self.task_config["tools_config"]["transcriber"]["stream"] {self.task_config["tools_config"]["transcriber"]["stream"]} self.enforce_streaming {self.enforce_streaming}')
+                    if 'provider' in self.task_config["tools_config"]["transcriber"]:
+                        transcriber_class = SUPPORTED_TRANSCRIBER_PROVIDERS.get(
+                            self.task_config["tools_config"]["transcriber"]["provider"])
+                    else:
+                        transcriber_class = SUPPORTED_TRANSCRIBER_MODELS.get(
+                            self.task_config["tools_config"]["transcriber"]["model"])
+                    self.tools["transcriber"] = transcriber_class( provider, **self.task_config["tools_config"]["transcriber"], **self.kwargs)
+        except Exception as e:
+            logger.error(f"Something went wrong with starting transcriber {e}")
 
     def __setup_synthesizer(self, llm_config):
         logger.info(f"Synthesizer config: {self.task_config['tools_config']['synthesizer']}")
