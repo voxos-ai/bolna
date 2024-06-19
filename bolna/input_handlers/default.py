@@ -19,6 +19,7 @@ class DefaultInputHandler:
         self.turn_based_conversation = turn_based_conversation
         self.queue = queue
         self.conversation_recording = conversation_recording
+        
     async def stop_handler(self):
         self.running = False
         try:
@@ -81,7 +82,7 @@ class DefaultInputHandler:
             return
 
     async def process_message(self, message):
-        if message['type'] not in self.input_types.keys() and not self.turn_based_conversation:
+        if message['type'] not in self.input_types.keys():
             logger.info(f"straight away returning")
             return {"message": "invalid input type"}
 
