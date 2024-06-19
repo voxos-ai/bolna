@@ -20,7 +20,7 @@ load_dotenv()
 
 
 class DeepgramTranscriber(BaseTranscriber):
-    def __init__(self, provider, input_queue=None, model='deepgram', stream=True, language="en", endpointing="400",
+    def __init__(self, provider, input_queue=None, model='nova-2', stream=True, language="en", endpointing="400",
                  sampling_rate="16000", encoding="linear16", output_queue=None, keywords=None,
                  process_interim_results="true", **kwargs):
         logger.info(f"Initializing transcriber {kwargs}")
@@ -31,7 +31,7 @@ class DeepgramTranscriber(BaseTranscriber):
         self.provider = provider
         self.heartbeat_task = None
         self.sender_task = None
-        self.model = 'deepgram'
+        self.model = model
         self.sampling_rate = 16000
         self.encoding = encoding
         self.api_key = kwargs.get("transcriber_key", os.getenv('DEEPGRAM_AUTH_TOKEN'))
@@ -43,8 +43,10 @@ class DeepgramTranscriber(BaseTranscriber):
         self.transcription_cursor = 0.0
         logger.info(f"self.stream: {self.stream}")
         self.interruption_signalled = False
+        if 'nova-2' not in self.model:
+            self.model = "nova-2"
         if not self.stream:
-            self.api_url = f"https://{self.deepgram_host}/v1/listen?model=nova-2&filler_words=true&language={self.language}"
+            self.api_url = f"https://{self.deepgram_host}/v1/listen?model={self.model}&filler_words=true&language={self.language}"
             self.session = aiohttp.ClientSession()
             if self.keywords is not None:
                 keyword_string = "&keywords=" + "&keywords=".join(self.keywords.split(","))
@@ -61,8 +63,9 @@ class DeepgramTranscriber(BaseTranscriber):
         self.finalized_transcript = ""
 
     def get_deepgram_ws_url(self):
+        logger.info(f"GETTING DEEPGRAM WS")
         dg_params = {
-            'model': 'nova-2',
+            'model': self.model,
             'filler_words': 'true',
             'diarize': 'true',
             'language': self.language,

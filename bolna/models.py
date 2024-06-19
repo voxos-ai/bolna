@@ -66,17 +66,17 @@ class StylettsConfig(BaseModel):
 
 
 class Transcriber(BaseModel):
-    model: str
+    model: Optional[str] = "nova-2"
     language: Optional[str] = None
     stream: bool = False
     sampling_rate: Optional[int] = 16000
     encoding: Optional[str] = "linear16"
     endpointing: Optional[int] = 400
     keywords: Optional[str] = None
-    modeltype: Optional[str] = "whisper-tiny"
     task:Optional[str] = "transcribe"
+    provider: Optional[str] = "deepgram"
 
-    @validator("model")
+    @validator("provider")
     def validate_model(cls, value):
         return validate_attribute(value, list(SUPPORTED_TRANSCRIBER_MODELS.keys()))
 
