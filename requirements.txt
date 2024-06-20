@@ -25,3 +25,4 @@ semantic-router
 sentence_transformers
 optimum[onnxruntime]
 fastapi_utilities
+daily-python
