@@ -654,6 +654,7 @@ class TaskManager(BaseManager):
             logger.info(f"DOING THE POST REQUEST TO WEBHOOK {self.input_parameters['extraction_details']}")
             self.webhook_response = await self.tools["webhook_agent"].execute(self.input_parameters['extraction_details'])
             logger.info(f"Response from the server {self.webhook_response}")
+        
         else:
             message = format_messages(self.input_parameters["messages"])  # Remove the initial system prompt
             self.history.append({
@@ -670,6 +671,7 @@ class TaskManager(BaseManager):
                 self.summarized_data = json_data["summary"]
                 logger.info(f"self.summarize {self.summarized_data}")
             else:
+                logger.info(f"Extraction task output {json_data}")
                 json_data = clean_json_string(json_data)
                 logger.info(f"After replacing {json_data}")
                 if type(json_data) is not dict:
