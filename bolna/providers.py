@@ -11,7 +11,7 @@ SUPPORTED_SYNTHESIZER_MODELS = {
     'openai': OPENAISynthesizer,
     'fourie': FourieSynthesizer,
     'deepgram': DeepgramSynthesizer,
-    'meloTTS': MeloSynthesizer,
+    'melotts': MeloSynthesizer,
     'styletts': StylettsSynthesizer
 }
 

@@ -97,7 +97,7 @@ class Synthesizer(BaseModel):
 
     @validator("provider")
     def validate_model(cls, value):
-        return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai", "deepgram", "meloTTS", "styletts"])
+        return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai", "deepgram", "melotts", "styletts"])
 
 
 class IOModel(BaseModel):
