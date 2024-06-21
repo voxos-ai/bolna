@@ -98,7 +98,7 @@ Once you have the above docker setup and running, you can create agents and init
                     },
                     "llm_agent": {
                         "agent_flow_type": "streaming",
-                        "family": "openai",
+                        "provider": "openai",
                         "request_json": true,
                         "model": "gpt-3.5-turbo-16k",
                         "use_fallback": true
