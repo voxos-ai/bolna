@@ -12,8 +12,6 @@ import base64
 load_dotenv()
 logger = configure_logger(__name__)
 
-
-
 class MeloSynthesizer(BaseSynthesizer):
     def __init__(self, audio_format="pcm", sampling_rate="8000", stream=False, buffer_size=400, caching = True,
                  **kwargs):
