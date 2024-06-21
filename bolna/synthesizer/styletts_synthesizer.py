@@ -54,6 +54,8 @@ class StylettsSynthesizer(BaseSynthesizer):
             'embedding_scale': self.embedding_scale
         }
 
+        logger.info(f"payload {payload}")
+
         async with aiohttp.ClientSession() as session:
             async with session.post(self.STYLE_TTS_HOST, headers=headers, json=payload) as response:
                 if response.status == 200:
