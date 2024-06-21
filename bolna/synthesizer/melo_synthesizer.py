@@ -26,7 +26,7 @@ class MeloSynthesizer(BaseSynthesizer):
             "Ariel": "EN-BR",
             "Taylor": "EN-AU",
             "Casey": "EN-Default",
-            "Aadi": "EN-India"
+            "Aadi": "EN_INDIA"
         }
 
 
