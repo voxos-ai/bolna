@@ -98,7 +98,7 @@ class StylettsSynthesizer(BaseSynthesizer):
                     logger.info(f"Not a cache hit {list(self.cache.data_dict)}")
                     self.synthesized_characters += len(text)
                     audio = await self.__generate_http(text)
-                    self.cache.set(text, message)
+                    self.cache.set(text, audio)
             else:
                 logger.info(f"No caching present")
                 self.synthesized_characters += len(text)
