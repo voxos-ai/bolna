@@ -16,9 +16,10 @@ class DeepgramSynthesizer(BaseSynthesizer):
     def __init__(self, voice, audio_format="pcm", sampling_rate="8000", stream=False, buffer_size=400, caching = True, 
                  model = "aura-zeus-en", **kwargs):
         super().__init__(stream, buffer_size)
-        self.format = "linear16" if audio_format == "pcm" else audio_format
+        self.format = "linear16" if audio_format in ["pcm", 'wav'] else audio_format
         self.voice = voice
         self.sample_rate = str(sampling_rate)
+        self.model = model
         self.first_chunk_generated = False
         self.api_key = kwargs.get("transcriber_key", os.getenv('DEEPGRAM_AUTH_TOKEN'))
         
@@ -38,7 +39,7 @@ class DeepgramSynthesizer(BaseSynthesizer):
             "Content-Type": "application/json"
         }
         url = DEEPGRAM_TTS_URL + "?encoding={}&container=none&sample_rate={}&model={}".format(
-            self.format, self.sample_rate, self.id
+            self.format, self.sample_rate, self.model
         )
 
         payload = {
@@ -50,7 +51,7 @@ class DeepgramSynthesizer(BaseSynthesizer):
                 async with session.post(url, headers=headers, json=payload) as response:
                     if response.status == 200:
                         chunk = await response.read()
-                        yield chunk
+                        return chunk
             else:
                 logger.info("Payload was null")
 
@@ -58,7 +59,17 @@ class DeepgramSynthesizer(BaseSynthesizer):
         return False
 
     async def open_connection(self):
-        pass
+        pass    
+
+    async def synthesize(self, text):
+        # This is used for one off synthesis mainly for use cases like voice lab and IVR
+        try:
+            audio = await self.__generate_http(text)
+            if self.format == "mp3":
+                audio = convert_audio_to_wav(audio, source_format="mp3")
+            return audio
+        except Exception as e:
+            logger.error(f"Could not synthesize {e}")
 
     async def generate(self):
         while True:
