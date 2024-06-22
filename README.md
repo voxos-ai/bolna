@@ -98,7 +98,7 @@ Once you have the above docker setup and running, you can create agents and init
                     },
                     "llm_agent": {
                         "agent_flow_type": "streaming",
-                        "family": "openai",
+                        "provider": "openai",
                         "request_json": true,
                         "model": "gpt-3.5-turbo-16k",
                         "use_fallback": true
@@ -174,7 +174,7 @@ These are the current supported ASRs Providers:
 Bolna uses LiteLLM package to support multiple LLM integrations.
 
 These are the current supported LLM Provider Family:
-https://github.com/bolna-ai/bolna/blob/c8a0d1428793d4df29133119e354bc2f85a7ca76/bolna/providers.py#L19-L28
+https://github.com/bolna-ai/bolna/blob/477e08d6800dbf02931abeeea883d78451b7d7e2/bolna/providers.py#L29-L44
 
 For LiteLLM based LLMs, add either of the following to the `.env` file depending on your use-case:<br><br>
 `LITELLM_MODEL_API_KEY`: API Key of the LLM<br>
