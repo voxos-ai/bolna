@@ -46,6 +46,7 @@ class FourieConfig(BaseModel):
 
 class DeepgramConfig(BaseModel):
     voice: str
+    model: str
 
 
 class MeloConfig(BaseModel):

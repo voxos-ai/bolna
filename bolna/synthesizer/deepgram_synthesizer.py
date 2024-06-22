@@ -2,7 +2,8 @@ import aiohttp
 import os
 from dotenv import load_dotenv
 from bolna.helpers.logger_config import configure_logger
-from bolna.helpers.utils import create_ws_data_packet
+from bolna.helpers.utils import convert_audio_to_wav, create_ws_data_packet
+from bolna.memory.cache.inmemory_scalar_cache import InmemoryScalarCache
 from .base_synthesizer import BaseSynthesizer
 
 logger = configure_logger(__name__)
@@ -12,14 +13,25 @@ DEEPGRAM_TTS_URL = "https://{}/v1/speak".format(DEEPGRAM_HOST)
 
 
 class DeepgramSynthesizer(BaseSynthesizer):
-    def __init__(self, voice, audio_format="pcm", sampling_rate="8000", stream=False, buffer_size=400,
-                 **kwargs):
+    def __init__(self, voice, audio_format="pcm", sampling_rate="8000", stream=False, buffer_size=400, caching = True, 
+                 model = "aura-zeus-en", **kwargs):
         super().__init__(stream, buffer_size)
-        self.format = "linear16" if audio_format == "pcm" else audio_format
+        self.format = "linear16" if audio_format in ["pcm", 'wav'] else audio_format
         self.voice = voice
         self.sample_rate = str(sampling_rate)
+        self.model = model
         self.first_chunk_generated = False
         self.api_key = kwargs.get("transcriber_key", os.getenv('DEEPGRAM_AUTH_TOKEN'))
+        
+        self.synthesized_characters = 0
+        self.caching = caching
+        if caching:
+            self.cache = InmemoryScalarCache()
+
+
+    def get_synthesized_characters(self):
+        return self.synthesized_characters
+    
 
     async def __generate_http(self, text):
         headers = {
@@ -27,7 +39,7 @@ class DeepgramSynthesizer(BaseSynthesizer):
             "Content-Type": "application/json"
         }
         url = DEEPGRAM_TTS_URL + "?encoding={}&container=none&sample_rate={}&model={}".format(
-            self.format, self.sample_rate, self.voice
+            self.format, self.sample_rate, self.model
         )
 
         payload = {
@@ -39,32 +51,60 @@ class DeepgramSynthesizer(BaseSynthesizer):
                 async with session.post(url, headers=headers, json=payload) as response:
                     if response.status == 200:
                         chunk = await response.read()
-                        yield chunk
+                        return chunk
             else:
                 logger.info("Payload was null")
 
+    def supports_websocket(self):
+        return False
+
     async def open_connection(self):
-        pass
+        pass    
+
+    async def synthesize(self, text):
+        # This is used for one off synthesis mainly for use cases like voice lab and IVR
+        try:
+            audio = await self.__generate_http(text)
+            if self.format == "mp3":
+                audio = convert_audio_to_wav(audio, source_format="mp3")
+            return audio
+        except Exception as e:
+            logger.error(f"Could not synthesize {e}")
 
     async def generate(self):
         while True:
+            logger.info("Generating TTS response")
             message = await self.internal_queue.get()
             logger.info(f"Generating TTS response for message: {message}")
-
             meta_info, text = message.get("meta_info"), message.get("data")
-            async for message in self.__generate_http(text):
-                if not self.first_chunk_generated:
-                    meta_info["is_first_chunk"] = True
-                    self.first_chunk_generated = True
+            if self.caching:
+                logger.info(f"Caching is on")
+                if self.cache.get(text):
+                    logger.info(f"Cache hit and hence returning quickly {text}")
+                    message = self.cache.get(text)
                 else:
-                    meta_info["is_first_chunk"] = False
-                if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
-                    meta_info["end_of_synthesizer_stream"] = True
-                    self.first_chunk_generated = False
+                    logger.info(f"Not a cache hit {list(self.cache.data_dict)}")
+                    self.synthesized_characters += len(text)
+                    message = await self.__generate_http(text)
+                    self.cache.set(text, message)
+            else:
+                logger.info(f"No caching present")
+                self.synthesized_characters += len(text)
+                message = await self.__generate_http(text)
 
-                meta_info['text'] = text
-                meta_info['format'] = self.format
-                yield create_ws_data_packet(message, meta_info)
+            if self.format == "mp3":
+                message = convert_audio_to_wav(message, source_format="mp3")
+            if not self.first_chunk_generated:
+                meta_info["is_first_chunk"] = True
+                self.first_chunk_generated = True
+            else:
+                meta_info["is_first_chunk"] = False
+            if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
+                meta_info["end_of_synthesizer_stream"] = True
+                self.first_chunk_generated = False
+            meta_info['text'] = text
+            meta_info['format'] = 'wav'
+            yield create_ws_data_packet(message, meta_info)
 
     async def push(self, message):
         logger.info("Pushed message to internal queue")
