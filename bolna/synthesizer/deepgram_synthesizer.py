@@ -32,6 +32,8 @@ class DeepgramSynthesizer(BaseSynthesizer):
     def get_synthesized_characters(self):
         return self.synthesized_characters
     
+    def get_engine(self):
+        return self.model
 
     async def __generate_http(self, text):
         headers = {
@@ -41,6 +43,8 @@ class DeepgramSynthesizer(BaseSynthesizer):
         url = DEEPGRAM_TTS_URL + "?encoding={}&container=none&sample_rate={}&model={}".format(
             self.format, self.sample_rate, self.model
         )
+
+        logger.info(f"Sending deepgram request {url}")
 
         payload = {
             "text": text
