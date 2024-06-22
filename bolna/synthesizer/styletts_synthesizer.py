@@ -63,6 +63,14 @@ class StylettsSynthesizer(BaseSynthesizer):
                     chunk = base64.b64decode(res_json["audio"])
                     return chunk
 
+
+    def supports_websocket(self):
+        return False
+
+    def get_synthesized_characters(self):
+        return self.synthesized_characters
+    
+
     async def open_connection(self):
         pass
     

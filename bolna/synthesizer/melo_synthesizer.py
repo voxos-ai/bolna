@@ -84,7 +84,9 @@ class MeloSynthesizer(BaseSynthesizer):
 
     async def open_connection(self):
         pass
-
+    
+    def supports_websocket(self):
+        return False
     async def generate(self):
         while True:
             message = await self.internal_queue.get()
