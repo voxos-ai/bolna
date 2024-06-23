@@ -13,7 +13,16 @@ class PlivoOutputHandler(TelephonyOutputHandler):
         io_provider = 'plivo'
 
         super().__init__(io_provider, websocket, mark_set, log_dir_name)
-        self.is_chunking_supported = False
+        self.is_chunking_supported = True
+
+    async def handle_interruption(self):
+        logger.info("interrupting because user spoke in between")
+        message_clear = {
+            "event": "clearAudio",
+            "streamId": self.stream_sid,
+        }
+        await self.websocket.send_text(json.dumps(message_clear))
+        self.mark_set = set()
 
     async def form_media_message(self, audio_data, audio_format):
         base64_audio = base64.b64encode(audio_data).decode("utf-8")
@@ -30,11 +39,9 @@ class PlivoOutputHandler(TelephonyOutputHandler):
 
     async def form_mark_message(self, mark_id):
         mark_message = {
-            "event": "mark",
-            "streamSid": self.stream_sid,
-            "mark": {
-                "name": mark_id
-            }
+            "event": "checkpoint",
+            "streamId": self.stream_sid,
+            "name": mark_id
         }
 
         return mark_message
