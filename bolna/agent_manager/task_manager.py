@@ -1451,7 +1451,7 @@ class TaskManager(BaseManager):
                     meta_info={'io': 'default', "request_id": str(uuid.uuid4()), "cached": False, "sequence_id": -1, 'format': 'wav'}
                     await self._synthesize(create_ws_data_packet("Hey, are you still there?", meta_info= meta_info))
                 else:
-                    meta_info={'io': 'twilio', "request_id": str(uuid.uuid4()), "cached": False, "sequence_id": -1, 'format': 'pcm'}
+                    meta_info={'io': self.tools["output"].get_provider(), "request_id": str(uuid.uuid4()), "cached": False, "sequence_id": -1, 'format': 'pcm'}
                     await self._synthesize(create_ws_data_packet("Hey, are you still there?", meta_info= meta_info))
                 
                 #Just in case we need to clear messages sent before 
@@ -1510,7 +1510,7 @@ class TaskManager(BaseManager):
                 meta_info={'io': 'default', 'message_category': 'ambient_noise', "request_id": str(uuid.uuid4()), "sequence_id": -1, "type":'audio', 'format': 'wav'}
             else:
 
-                meta_info={'io': 'twilio', 'message_category': 'ambient_noise', 'stream_sid': self.stream_sid , "request_id": str(uuid.uuid4()), "cached": True, "type":'audio', "sequence_id": -1, 'format': 'pcm'}
+                meta_info={'io': self.tools["output"].get_provider(), 'message_category': 'ambient_noise', 'stream_sid': self.stream_sid , "request_id": str(uuid.uuid4()), "cached": True, "type":'audio', "sequence_id": -1, 'format': 'pcm'}
             while True:
                 logger.info(f"Before yielding ambient noise")
                 for chunk in yield_chunks_from_memory(audio, self.output_chunk_size*2 ):

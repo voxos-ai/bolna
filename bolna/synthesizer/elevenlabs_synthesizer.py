@@ -195,6 +195,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                     message = await self.internal_queue.get()
                     logger.info(f"Generating TTS response for message: {message}, using mulaw {self.use_mulaw}")
                     meta_info, text = message.get("meta_info"), message.get("data")
+                    audio = None
                     if self.caching:
                         if self.cache.get(text):
                             logger.info(f"Cache hit and hence returning quickly {text}")
