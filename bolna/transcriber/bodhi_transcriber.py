@@ -34,7 +34,7 @@ class BodhiTranscriber(BaseTranscriber):
         self.heartbeat_task = None
         self.sender_task = None
         self.model = "hi-general-v2-8khz"
-        self.sampling_rate = sampling_rate
+        self.sampling_rate = 8000 if telephony_provider in ["plivo", "twilio", "exotel"] else sampling_rate
         self.api_key = kwargs.get("transcriber_key", os.getenv('BODHI_API_KEY'))
         self.api_host = os.getenv('BODHI_HOST', 'bodhi.navana.ai')
         self.transcriber_output_queue = output_queue
