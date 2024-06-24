@@ -123,6 +123,9 @@ class Routes(BaseModel):
     embedding_model: Optional[str] = "Snowflake/snowflake-arctic-embed-l"
     routes: List[Route]
 
+class OpenaiAssistants(BaseModel):
+    name: Optional[str] = None
+    assistant_id: str = None
 
 class LLM(BaseModel):
     model: Optional[str] = "gpt-3.5-turbo-16k"
@@ -142,6 +145,8 @@ class LLM(BaseModel):
     routes: Optional[Routes] = None
     extraction_details: Optional[str] = None
     summarization_details: Optional[str] = None
+    backend: Optional[str] = "bolna"
+    extra_config: Optional[OpenaiAssistants] = None
 
 
 class MessagingModel(BaseModel):

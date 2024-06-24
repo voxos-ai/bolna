@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, OpenAI
 import json, requests, time
 
 from bolna.constants import PRE_FUNCTIONAL_CALL_MESSAGE
@@ -50,6 +50,14 @@ class OpenAiLLM(BaseLLM):
             else:
                 llm_key = kwargs['llm_key']
             self.async_client = AsyncOpenAI(api_key=llm_key)
+            api_key = llm_key
+        self.assistant_id = kwargs.get("assistant_id", None)
+        if self.assistant_id:
+            logger.info(f"Initializing OpenAI assistant with assistant id {self.assistant_id}")
+            self.openai = OpenAI(api_key=api_key)
+            self.thread_id = self.openai.beta.threads.create().id
+            self.model_args = {"max_completion_tokens": self.max_tokens, "temperature": self.temperature, "model": self.model}
+            logger.info(f'thread id : {self.thread_id}')
         self.run_id = kwargs.get("run_id", None)
         self.gave_out_prefunction_call_message = False
     
@@ -180,6 +188,58 @@ class OpenAiLLM(BaseLLM):
                                                                      stream=False, response_format=response_format)
         res = completion.choices[0].message.content
         return res
+
+    async def generate_assistant_stream(self, message, synthesize=True, request_json=False, meta_info=None):
+        if len(message) == 0:
+            raise Exception("No messages provided")
+
+        response_format = self.get_response_format(request_json)
+
+        answer, buffer, resp, called_fun, api_params, i = "", "", "", "", "", 0
+        logger.info(f"request to open ai {message} max tokens {self.max_tokens} ")
+        model_args = self.model_args
+        model_args["thread_id"] = self.thread_id
+        model_args["assistant_id"] = self.assistant_id
+        model_args["stream"] = True
+        model_args["response_format"] = response_format
+        logger.info(f"request to open ai with thread {self.thread_id} & asst. id {self.assistant_id}")
+
+        latency = False
+        start_time = time.time()
+        textual_response = False
+
+        runs = await self.async_client.beta.threads.runs.list(thread_id=model_args["thread_id"])
+        if runs.data and runs.data[0].status in ["in_progress", "queued", "requires_action"]:
+            await self.async_client.beta.threads.runs.cancel(thread_id=model_args["thread_id"], run_id=runs.data[0].id)
+
+        await self.async_client.beta.threads.messages.create(thread_id=model_args["thread_id"], role="user", content=message)
+
+        async for chunk in await self.async_client.beta.threads.runs.create(**model_args):
+            logger.info(f"chunk received : {chunk}")
+            if chunk.event == 'thread.message.delta':
+                if not self.started_streaming:
+                    first_chunk_time = time.time()
+                    latency = first_chunk_time - start_time
+                    logger.info(f"LLM Latency: {latency:.2f} s")
+                    self.started_streaming = True
+                textual_response = True
+                text_chunk = chunk.data.delta.content[0].text.value
+                answer += text_chunk
+                buffer += text_chunk
+                if len(buffer) >= self.buffer_size and synthesize:
+                    buffer_words = buffer.split(" ")
+                    text = ' '.join(buffer_words[:-1])
+
+                    if not self.started_streaming:
+                        self.started_streaming = True
+                    yield text, False, latency
+                    buffer = buffer_words[-1]
+
+        if synthesize:  # This is used only in streaming sense
+            yield buffer, True, latency
+        else:
+            yield answer, True, latency
+        self.started_streaming = False
 
     def get_response_format(self, is_json_format: bool):
         if is_json_format and self.model in ('gpt-4-1106-preview', 'gpt-3.5-turbo-1106'):
