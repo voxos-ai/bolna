@@ -1,3 +1,4 @@
+from bolna.transcriber.bodhi_transcriber import BodhiTranscriber
 from .synthesizer import PollySynthesizer, XTTSSynthesizer, ElevenlabsSynthesizer, OPENAISynthesizer, FourieSynthesizer, DeepgramSynthesizer, MeloSynthesizer, StylettsSynthesizer
 from .transcriber import DeepgramTranscriber, WhisperTranscriber
 from .input_handlers import DefaultInputHandler, TwilioInputHandler, ExotelInputHandler, PlivoInputHandler, DailyInputHandler
@@ -17,7 +18,8 @@ SUPPORTED_SYNTHESIZER_MODELS = {
 
 SUPPORTED_TRANSCRIBER_PROVIDERS = {
     'deepgram': DeepgramTranscriber,
-    'whisper': WhisperTranscriber 
+    'whisper': WhisperTranscriber,
+    'bodhi': BodhiTranscriber
 }
 
 #Backwards compatibility

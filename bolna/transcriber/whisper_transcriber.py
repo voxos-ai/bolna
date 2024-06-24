@@ -136,10 +136,12 @@ class WhisperTranscriber(BaseTranscriber):
                 self.num_frames += 1
 
                 audio_chunk:bytes = ws_data_packet.get('data')
-                # ulaw is encoding method , this is the inverse function
-                audio_chunk = ulaw2lin(audio_chunk, 2)
-                # convert from 8000 to 16000 HZ
-                audio_chunk = ratecv(audio_chunk, 2, 1, 8000, 16000, None)[0]
+
+                if self.provider in ["twilio", "exotel", "plivo"]:
+                    logger.info(f"It is a telephony provider")
+                    audio_chunk = ulaw2lin(audio_chunk, 2)
+                    audio_chunk = ratecv(audio_chunk, 2, 1, 8000, 16000, None)[0]
+                    
                 audio_chunk = self.bytes_to_float_array(audio_chunk).tobytes()
                 # save the audio cursor here
                 self.audio_cursor = self.num_frames * self.audio_frame_duration
