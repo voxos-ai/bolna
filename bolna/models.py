@@ -168,7 +168,7 @@ class APIParams(BaseModel):
     param: Optional[str] = None #Payload for the URL
 
 class ToolModel(BaseModel):
-    tools: str #Goes in as a prompt
+    tools:  Optional[str] = None #Goes in as a prompt
     tools_params: Dict[str, APIParams]
 
 class ToolsConfig(BaseModel):
