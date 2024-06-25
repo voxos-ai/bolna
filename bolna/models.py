@@ -1,6 +1,7 @@
 import json
 from typing import Optional, List, Union, Dict
 from pydantic import BaseModel, Field, validator, ValidationError, Json
+from pydantic_core import PydanticCustomError
 from .providers import *
 
 AGENT_WELCOME_MESSAGE = "This call is being recorded for quality assurance and training. Please speak now."
@@ -8,7 +9,7 @@ AGENT_WELCOME_MESSAGE = "This call is being recorded for quality assurance and t
 
 def validate_attribute(value, allowed_values):
     if value not in allowed_values:
-        raise ValidationError(f"Invalid provider. Supported values: {', '.join(allowed_values)}")
+        raise ValidationError(f"Invalid provider {value}. Supported values: {allowed_values}")
     return value
 
 
@@ -80,7 +81,8 @@ class Transcriber(BaseModel):
 
     @validator("provider")
     def validate_model(cls, value):
-        return validate_attribute(value, list(SUPPORTED_TRANSCRIBER_MODELS.keys()))
+        print(f"value {value}, PROVIDERS {list(SUPPORTED_TRANSCRIBER_PROVIDERS.keys())}")
+        return validate_attribute(value, list(SUPPORTED_TRANSCRIBER_PROVIDERS.keys()))
 
     @validator("language")
     def validate_language(cls, value):

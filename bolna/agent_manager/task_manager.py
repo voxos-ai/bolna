@@ -1617,7 +1617,9 @@ class TaskManager(BaseManager):
                   
                 if self.background_check_task is not None:
                     self.background_check_task.cancel()
-                    
+                
+                if self.first_message_task is not None:
+                    self.first_message_task.cancel()
             
                 if self.should_record:
                     output['recording_url'] = await save_audio_file_to_s3(self.conversation_recording, self.sampling_rate, self.assistant_id, self.run_id)
