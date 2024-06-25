@@ -46,6 +46,9 @@ class TaskManager(BaseManager):
         if task['tools_config'].get('api_tools', None) is not None:
             logger.info(f"API TOOLS is present {task['tools_config']['api_tools']}")
             self.kwargs['api_tools'] = task['tools_config']['api_tools']
+        if task['tools_config']["llm_agent"]['extra_config'].get('assistant_id', None) is not None:
+            self.kwargs['assistant_id'] = task['tools_config']["llm_agent"]['extra_config']['assistant_id']
+            logger.info(f"Assistant id for agent is {self.kwargs['assistant_id']}")
 
         logger.info(f"doing task {task}")
         self.task_id = task_id
@@ -450,6 +453,10 @@ class TaskManager(BaseManager):
         if self.task_config["task_type"] == "conversation":
             if self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "streaming":
                 self.tools["llm_agent"] = StreamingContextualAgent(llm)
+            elif self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "openai_assistant_agent":
+                if self.task_config["tools_config"]["llm_agent"]['backend'] == "openai_assistants":
+                    logger.info("setting up backend as openai_assistants")
+                    self.tools["llm_agent"] = OpenAIAssistantAgent(llm)
             elif self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] in ("preprocessed", "formulaic"):
                 preprocessed = self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "preprocessed"
                 logger.info(f"LLM TYPE {type(llm)}")
