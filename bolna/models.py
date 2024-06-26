@@ -132,7 +132,7 @@ class OpenaiAssistants(BaseModel):
 class LLM(BaseModel):
     model: Optional[str] = "gpt-3.5-turbo-16k"
     max_tokens: Optional[int] = 100
-    agent_flow_type: Optional[str] = "streaming"
+    agent_flow_type: str = "streaming" #It can be openai_asssitant, streaming, agent_dag
     family: Optional[str] = "openai"
     temperature: Optional[float] = 0.1
     request_json: Optional[bool] = False
@@ -147,9 +147,10 @@ class LLM(BaseModel):
     routes: Optional[Routes] = None
     extraction_details: Optional[str] = None
     summarization_details: Optional[str] = None
-    backend: Optional[str] = "bolna"
-    extra_config: Optional[OpenaiAssistants] = None
 
+class LLM_AGENT(BaseModel):
+    agent_type: str #can be streaming, openai_assistant, dag_based, etc 
+    extra_config: Union[OpenaiAssistants, LLM]
 
 class MessagingModel(BaseModel):
     provider: str
@@ -174,7 +175,7 @@ class ToolModel(BaseModel):
     tools_params: Dict[str, APIParams]
 
 class ToolsConfig(BaseModel):
-    llm_agent: Optional[LLM] = None
+    llm_agent: Optional[Union[LLM_AGENT, LLM]] = None
     synthesizer: Optional[Synthesizer] = None
     transcriber: Optional[Transcriber] = None
     input: Optional[IOModel] = None

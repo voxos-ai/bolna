@@ -4,6 +4,7 @@ from openai import AsyncOpenAI, OpenAI
 import json, requests, time
 
 from bolna.constants import PRE_FUNCTIONAL_CALL_MESSAGE
+from bolna.helpers.function_calling_helpers import trigger_api
 from bolna.helpers.utils import convert_to_request_log, format_messages
 from .llm import BaseLLM
 from bolna.helpers.logger_config import configure_logger
@@ -51,43 +52,9 @@ class OpenAiLLM(BaseLLM):
                 llm_key = kwargs['llm_key']
             self.async_client = AsyncOpenAI(api_key=llm_key)
             api_key = llm_key
-        self.assistant_id = kwargs.get("assistant_id", None)
-        if self.assistant_id:
-            logger.info(f"Initializing OpenAI assistant with assistant id {self.assistant_id}")
-            self.openai = OpenAI(api_key=api_key)
-            self.thread_id = self.openai.beta.threads.create().id
-            self.model_args = {"max_completion_tokens": self.max_tokens, "temperature": self.temperature, "model": self.model}
-            my_assistant = self.openai.beta.assistants.retrieve(self.assistant_id)
-            if my_assistant.tools is not None:
-                self.tools = [i for i in my_assistant.tools if i.type == "function"]
-            logger.info(f'thread id : {self.thread_id}')
+
         self.run_id = kwargs.get("run_id", None)
         self.gave_out_prefunction_call_message = False
-    
-    async def trigger_api(self, url, method, param, api_token, **kwargs):
-        try:
-            code = compile(param % kwargs, "<string>", "exec")
-            exec(code, globals(), kwargs)
-            req = param % kwargs
-            logger.info(f"Params {param % kwargs} \n {type(req)} \n {param} \n {kwargs} \n\n {req}")
-
-            headers = {'Content-Type': 'application/json'}
-            if api_token:
-                headers = {'Content-Type': 'application/json', 'Authorization': api_token}
-            if method == "get":
-                logger.info(f"Sending request {req}, {url}, {headers}")
-                response = requests.get(url, params=json.loads(req), headers=headers)
-                logger.info(f"Response from The servers {response.text}")
-                return response.text
-            elif method == "post":
-                logger.info(f"Sending request {json.loads(req)}, {url}, {headers}")
-                response = requests.post(url, json=json.loads(req), headers=headers)
-                logger.info(f"Response from The server {response.text}")
-                return response.text
-        except Exception as e:
-            message = str(f"We send {method} request to {url} & it returned us this error:", e)
-            logger.error(message)
-            return message
     
     async def generate_stream(self, messages, synthesize=True, request_json=False, meta_info = None):
         if len(messages) == 0:
@@ -158,7 +125,7 @@ class OpenAiLLM(BaseLLM):
             method = func_dict['method']
             param = func_dict['param']
             api_token = func_dict['api_token']
-            response = await self.trigger_api(url= url, method=method.lower(), param= param, api_token= api_token, **resp)
+            response = await trigger_api(url= url, method=method.lower(), param= param, api_token= api_token, **resp)
             content = f"We did made a function calling for user. We hit the function : {called_fun}, we hit the url {url} and send a {method} request and it returned us the response as given below: {str(response)} \n\n . Kindly understand the above response and convey this response in a conextual to user."
             model_args["messages"].append({"role":"system","content":content})
             logger.info(f"Logging function call parameters ")
