@@ -11,10 +11,12 @@ load_dotenv()
 
 
 class AzureSynthesizer(BaseSynthesizer):
-    def __init__(self, voice, engine="neural", stream=False, sampling_rate=16000, buffer_size=400, caching=True, **kwargs):
+    def __init__(self, voice, language, model="Neural", stream=False, sampling_rate=16000, buffer_size=400, caching=True, **kwargs):
         super().__init__(stream, buffer_size)
-        self.engine = engine
-        self.voice = voice #hard-code for testing to self.voice = "en-US-JennyNeural"
+        self.model = model
+        self.language = language
+        self.voice = f"{language}-{voice}{model}" #hard-code for testing to self.voice = "en-US-JennyNeural"
+        logger.info(f"{self.voice} initialized")
         self.sample_rate = str(sampling_rate)
         self.first_chunk_generated = False
         self.stream = stream
@@ -37,7 +39,7 @@ class AzureSynthesizer(BaseSynthesizer):
         return self.synthesized_characters
 
     def get_engine(self):
-        return self.engine
+        return self.model
 
     def supports_websocket(self):
         return False
