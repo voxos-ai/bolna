@@ -61,7 +61,6 @@ class OpenAIAssistantAgent(BaseAgent):
         model_args["thread_id"] = self.thread_id
         model_args["assistant_id"] = self.assistant_id
         model_args["stream"] = True
-        #model_args["response_format"] = response_format
         logger.info(f"request to open ai with thread {self.thread_id} & asst. id {self.assistant_id}")
 
         latency = False

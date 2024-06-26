@@ -71,7 +71,7 @@ class StylettsConfig(BaseModel):
 class Transcriber(BaseModel):
     model: Optional[str] = "nova-2"
     language: Optional[str] = None
-    stream: bool = False
+    stream: Optional[bool] = False
     sampling_rate: Optional[int] = 16000
     encoding: Optional[str] = "linear16"
     endpointing: Optional[int] = 400
@@ -92,7 +92,7 @@ class Transcriber(BaseModel):
 class Synthesizer(BaseModel):
     provider: str
     provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig, MeloConfig, StylettsConfig, DeepgramConfig] = Field(union_mode='smart')
-    stream: bool = False
+    stream: Optional[bool] = False
     buffer_size: Optional[int] = 40  # 40 characters in a buffer
     audio_format: Optional[str] = "pcm"
     caching: Optional[bool] = True
@@ -104,7 +104,7 @@ class Synthesizer(BaseModel):
 
 class IOModel(BaseModel):
     provider: str
-    format: str
+    format: Optional[str]
 
     @validator("provider")
     def validate_provider(cls, value):
@@ -118,12 +118,14 @@ class Route(BaseModel):
     response: Union[List[
         str], str]  # If length of responses is less than utterances, a random sentence will be used as a response and if it's equal, respective index will be used to use it as FAQs caching
     score_threshold: Optional[float] = 0.85  # this is the required threshold for cosine similarity
+    agent_prompt: Optional[str] = None
 
 
 # Routes can be used for FAQs caching, prompt routing, guard rails, agent assist function calling
 class Routes(BaseModel):
     embedding_model: Optional[str] = "Snowflake/snowflake-arctic-embed-l"
-    routes: List[Route]
+    routes: Optional[List[Route]] = None
+    routes_config: Optional[List[Route]] = None
 
 class OpenaiAssistants(BaseModel):
     name: Optional[str] = None
