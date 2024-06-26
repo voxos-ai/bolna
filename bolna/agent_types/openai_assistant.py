@@ -27,22 +27,23 @@ class OpenAIAssistantAgent(BaseAgent):
         else:
             self.trigger_function_call = False
         
+        self.buffer_size = buffer_size
+        self.max_tokens = max_tokens
+
         llm_key = kwargs.get('llm_key', os.getenv('OPENAI_API_KEY'))
-        self.assistant_id = kwargs.get("assistant_id", None)
+        self.assistant_id = assistant_id
         if self.assistant_id:
             logger.info(f"Initializing OpenAI assistant with assistant id {self.assistant_id}")
             self.openai = OpenAI(api_key=llm_key)
             self.thread_id = self.openai.beta.threads.create().id
-            self.model_args = {"max_completion_tokens": self.max_tokens, "temperature": self.temperature, "model": self.model}
+            self.model_args = {"max_completion_tokens": self.max_tokens}
             my_assistant = self.openai.beta.assistants.retrieve(self.assistant_id)
             if my_assistant.tools is not None:
                 self.tools = [i for i in my_assistant.tools if i.type == "function"]
             logger.info(f'thread id : {self.thread_id}')
 
         self.async_client = AsyncOpenAI(api_key=llm_key)
-        self.buffer_size = buffer_size
-        self.max_tokens = max_tokens
-
+        self.started_streaming = False
 
     async def generate(self, message, synthesize=False, meta_info=None):
         async for token in self.generate_assistant_stream(message[-1]['content'], synthesize=synthesize, meta_info=meta_info):
@@ -56,7 +57,7 @@ class OpenAIAssistantAgent(BaseAgent):
 
         answer, buffer, resp, called_fun, api_params, i = "", "", "", "", "", 0
         logger.info(f"request to open ai {message} max tokens {self.max_tokens} ")
-        model_args = self.model_args
+        model_args = {}
         model_args["thread_id"] = self.thread_id
         model_args["assistant_id"] = self.assistant_id
         model_args["stream"] = True

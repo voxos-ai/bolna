@@ -159,11 +159,11 @@ class TaskManager(BaseManager):
         self.stream = (self.task_config["tools_config"]['synthesizer'] is not None and self.task_config["tools_config"]["synthesizer"]["stream"]) and (self.enforce_streaming or not self.turn_based_conversation)
         #self.stream = not turn_based_conversation #Currently we are allowing only realtime conversation based usecases. Hence it'll always be true unless connected through dashboard
         self.is_local = False
-        llm_config = None
+        self.llm_config = None
 
         if not self.__is_openai_assistant_agent():
             if self.task_config["tools_config"]["llm_agent"] is not None:
-                llm_config = {
+                self.llm_config = {
                     "model": self.task_config["tools_config"]["llm_agent"]["model"],
                     "max_tokens": self.task_config["tools_config"]["llm_agent"]["max_tokens"],
                     "provider": self.task_config["tools_config"]["llm_agent"]["provider"]
@@ -184,11 +184,11 @@ class TaskManager(BaseManager):
         # setting transcriber
         self.__setup_transcriber()
         # setting synthesizer
-        self.__setup_synthesizer(llm_config)
+        self.__setup_synthesizer(self.llm_config)
 
         # setting llm
-        if llm_config is not None:
-            llm = self.__setup_llm(llm_config)
+        if self.llm_config is not None:
+            llm = self.__setup_llm(self.llm_config)
             #Setup tasks
             self.__setup_tasks(llm)
         else:
@@ -510,7 +510,7 @@ class TaskManager(BaseManager):
                 prompt_responses = await get_prompt_responses(assistant_id=self.assistant_id, local=self.is_local)
             current_task = "task_{}".format(task_id + 1)
             self.prompts = self.__prefill_prompts(self.task_config, prompt_responses.get(current_task, None), self.task_config['task_type'])
-            if self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "preprocessed":
+            if self._is_preprocessed_flow():
                 self.tools["llm_agent"].load_prompts_and_create_graph(self.prompts)
 
         if "system_prompt" in self.prompts:
@@ -857,7 +857,13 @@ class TaskManager(BaseManager):
             messages = copy.deepcopy(self.history)
             messages.append({'role': 'user', 'content': message['data']})
             ### TODO CHECK IF THIS IS EVEN REQUIRED
-            convert_to_request_log(message=format_messages(messages, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
+            model = None
+            if self.__is_openai_assistant_agent():
+                model = "openai_assistant"
+            else:
+                model = self.llm_config['model']
+
+            convert_to_request_log(message=format_messages(messages, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=model, run_id= self.run_id)
             
             async for llm_message in self.tools['llm_agent'].generate(messages, synthesize=True, meta_info = meta_info):
                 text_chunk, end_of_llm_stream, latency = llm_message
