@@ -115,8 +115,8 @@ class IOModel(BaseModel):
 class Route(BaseModel):
     route_name: str
     utterances: List[str]
-    response: Union[List[
-        str], str]  # If length of responses is less than utterances, a random sentence will be used as a response and if it's equal, respective index will be used to use it as FAQs caching
+    response: Optional[Union[List[
+        str], str]]  # If length of responses is less than utterances, a random sentence will be used as a response and if it's equal, respective index will be used to use it as FAQs caching
     score_threshold: Optional[float] = 0.85  # this is the required threshold for cosine similarity
     agent_prompt: Optional[str] = None
 
@@ -124,8 +124,8 @@ class Route(BaseModel):
 # Routes can be used for FAQs caching, prompt routing, guard rails, agent assist function calling
 class Routes(BaseModel):
     embedding_model: Optional[str] = "Snowflake/snowflake-arctic-embed-l"
-    routes: Optional[List[Route]] = None
-    routes_config: Optional[List[Route]] = None
+    routes: Optional[List[Route]] = None #Just keeping it for backwards compatibility
+    routes_config: Optional[List[Route]] = None #Changing it because it seems kinda complicated 
 
 class OpenaiAssistants(BaseModel):
     name: Optional[str] = None
