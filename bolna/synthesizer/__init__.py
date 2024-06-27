@@ -6,3 +6,4 @@ from .fourie_synthesizer import FourieSynthesizer
 from .deepgram_synthesizer import DeepgramSynthesizer
 from .melo_synthesizer import MeloSynthesizer
 from .styletts_synthesizer import StylettsSynthesizer
+from .azure_synthesizer import AzureSynthesizer
