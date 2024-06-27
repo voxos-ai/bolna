@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from bolna.helpers.logger_config import configure_logger
-from bolna.helpers.utils import create_ws_data_packet
+from bolna.helpers.utils import convert_audio_to_wav, create_ws_data_packet, pcm_to_wav_bytes, resample, wav_bytes_to_pcm
 from bolna.memory.cache.inmemory_scalar_cache import InmemoryScalarCache
 from .base_synthesizer import BaseSynthesizer
 import azure.cognitiveservices.speech as speechsdk
@@ -86,8 +86,11 @@ class AzureSynthesizer(BaseSynthesizer):
             if "end_of_llm_stream" in meta_info and meta_info["end_of_llm_stream"]:
                 meta_info["end_of_synthesizer_stream"] = True
                 self.first_chunk_generated = False
+            
             meta_info['text'] = text
             meta_info['format'] = 'wav'
+            message = wav_bytes_to_pcm(message)
+
             yield create_ws_data_packet(message, meta_info)
 
     async def open_connection(self):
