@@ -11,7 +11,7 @@ load_dotenv()
 
 
 class AzureSynthesizer(BaseSynthesizer):
-    def __init__(self, voice, language, model="Neural", stream=False, sampling_rate=16000, buffer_size=400, caching=True, **kwargs):
+    def __init__(self, voice, language, model="neural", stream=False, sampling_rate=16000, buffer_size=400, caching=True, **kwargs):
         super().__init__(stream, buffer_size)
         self.model = model
         self.language = language
