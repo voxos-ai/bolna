@@ -1,6 +1,7 @@
 import json
 from typing import Optional, List, Union, Dict
 from pydantic import BaseModel, Field, validator, ValidationError, Json
+from pydantic_core import PydanticCustomError
 from .providers import *
 
 AGENT_WELCOME_MESSAGE = "This call is being recorded for quality assurance and training. Please speak now."
@@ -8,7 +9,7 @@ AGENT_WELCOME_MESSAGE = "This call is being recorded for quality assurance and t
 
 def validate_attribute(value, allowed_values):
     if value not in allowed_values:
-        raise ValidationError(f"Invalid provider. Supported values: {', '.join(allowed_values)}")
+        raise ValidationError(f"Invalid provider {value}. Supported values: {allowed_values}")
     return value
 
 
@@ -66,6 +67,10 @@ class StylettsConfig(BaseModel):
     diffusion_steps: int = 5
     embedding_scale: float = 1
 
+class AzureConfig(BaseModel):
+    voice: str
+    model: str
+    language: str
 
 class Transcriber(BaseModel):
     model: Optional[str] = "nova-2"
@@ -80,7 +85,8 @@ class Transcriber(BaseModel):
 
     @validator("provider")
     def validate_model(cls, value):
-        return validate_attribute(value, list(SUPPORTED_TRANSCRIBER_MODELS.keys()))
+        print(f"value {value}, PROVIDERS {list(SUPPORTED_TRANSCRIBER_PROVIDERS.keys())}")
+        return validate_attribute(value, list(SUPPORTED_TRANSCRIBER_PROVIDERS.keys()))
 
     @validator("language")
     def validate_language(cls, value):
@@ -89,7 +95,7 @@ class Transcriber(BaseModel):
 
 class Synthesizer(BaseModel):
     provider: str
-    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig, MeloConfig, StylettsConfig, DeepgramConfig] = Field(union_mode='smart')
+    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig, MeloConfig, StylettsConfig, DeepgramConfig, AzureConfig] = Field(union_mode='smart')
     stream: bool = False
     buffer_size: Optional[int] = 40  # 40 characters in a buffer
     audio_format: Optional[str] = "pcm"
@@ -97,7 +103,7 @@ class Synthesizer(BaseModel):
 
     @validator("provider")
     def validate_model(cls, value):
-        return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai", "deepgram", "melotts", "styletts"])
+        return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai", "deepgram", "melotts", "styletts", "azuretts"])
 
 
 class IOModel(BaseModel):
