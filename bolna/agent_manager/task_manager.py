@@ -46,7 +46,7 @@ class TaskManager(BaseManager):
         if task['tools_config'].get('api_tools', None) is not None:
             logger.info(f"API TOOLS is present {task['tools_config']['api_tools']}")
             self.kwargs['api_tools'] = task['tools_config']['api_tools']
-        if task['tools_config']["llm_agent"]['extra_config'].get('assistant_id', None) is not None:
+        if (task['tools_config']["llm_agent"].get("extra_config", None) and task['tools_config']["llm_agent"]['extra_config'].get('assistant_id', None)) is not None:
             self.kwargs['assistant_id'] = task['tools_config']["llm_agent"]['extra_config']['assistant_id']
             logger.info(f"Assistant id for agent is {self.kwargs['assistant_id']}")
 
