@@ -42,17 +42,22 @@ class TaskManager(BaseManager):
         self.average_llm_latency = 0.0
         self.average_synthesizer_latency = 0.0
         self.average_transcriber_latency = 0.0
+        self.task_config = task
+
         logger.info(f"API TOOLS IN TOOLS CONFIG {task['tools_config'].get('api_tools')}")
         if task['tools_config'].get('api_tools', None) is not None:
             logger.info(f"API TOOLS is present {task['tools_config']['api_tools']}")
             self.kwargs['api_tools'] = task['tools_config']['api_tools']
+
+        if self.__has_extra_config():
+            self.kwargs['assistant_id'] = task['tools_config']["llm_agent"]['extra_config']['assistant_id']
+            logger.info(f"Assistant id for agent is {self.kwargs['assistant_id']}")
 
         logger.info(f"doing task {task}")
         self.task_id = task_id
         self.assistant_name = assistant_name
         self.tools = {}
         self.websocket = ws
-        self.task_config = task
         self.context_data = context_data
         logger.info(f"turn_based_conversation {turn_based_conversation}")
         self.turn_based_conversation = turn_based_conversation
@@ -292,6 +297,10 @@ class TaskManager(BaseManager):
                 else:
                     self.filler_preset_directory = f"{os.getenv('FILLERS_PRESETS_DIR')}/{self.synthesizer_voice.lower()}"
 
+    def __has_extra_config(self):
+        extra_config = self.task_config['tools_config']["llm_agent"].get("extra_config", None)
+        return False if extra_config is None else True
+
     def __setup_routes(self, routes):
         embedding_model = routes.get("embedding_model", os.getenv("ROUTE_EMBEDDING_MODEL"))
         self.route_encoder = FastEmbedEncoder(name=embedding_model)
@@ -448,9 +457,13 @@ class TaskManager(BaseManager):
 
     def __setup_tasks(self, llm):
         if self.task_config["task_type"] == "conversation":
-            if self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "streaming":
+            agent_type = self.task_config["tools_config"]["llm_agent"].get("agent_type", self.task_config["tools_config"]["llm_agent"]["agent_flow_type"])
+            if agent_type == "streaming":
                 self.tools["llm_agent"] = StreamingContextualAgent(llm)
-            elif self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] in ("preprocessed", "formulaic"):
+            elif agent_type == "openai_assistant":
+                logger.info("setting up backend as openai_assistants")
+                self.tools["llm_agent"] = OpenAIAssistantAgent(llm)
+            elif agent_type in ("preprocessed", "formulaic"):
                 preprocessed = self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "preprocessed"
                 logger.info(f"LLM TYPE {type(llm)}")
                 self.tools["llm_agent"] = GraphBasedConversationAgent(llm, context_data=self.context_data,
