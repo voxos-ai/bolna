@@ -12,6 +12,6 @@ class OpenAIAssistantAgent(BaseAgent):
         self.llm = llm
 
     async def generate(self, message, synthesize=False, meta_info=None):
-        async for token in self.llm.generate_assistant_stream(message[-1]['content'], synthesize=synthesize, meta_info=meta_info):
+        async for token in self.llm.generate_assistant_stream(message, synthesize=synthesize, meta_info=meta_info):
             logger.info('Agent: {}'.format(token))
             yield token

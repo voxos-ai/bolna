@@ -55,12 +55,12 @@ class OpenAiLLM(BaseLLM):
         if self.assistant_id:
             logger.info(f"Initializing OpenAI assistant with assistant id {self.assistant_id}")
             self.openai = OpenAI(api_key=api_key)
-            self.thread_id = self.openai.beta.threads.create().id
+            #self.thread_id = self.openai.beta.threads.create().id
             self.model_args = {"max_completion_tokens": self.max_tokens, "temperature": self.temperature, "model": self.model}
             my_assistant = self.openai.beta.assistants.retrieve(self.assistant_id)
             if my_assistant.tools is not None:
                 self.tools = [i for i in my_assistant.tools if i.type == "function"]
-            logger.info(f'thread id : {self.thread_id}')
+            #logger.info(f'thread id : {self.thread_id}')
         self.run_id = kwargs.get("run_id", None)
         self.gave_out_prefunction_call_message = False
     
@@ -200,29 +200,30 @@ class OpenAiLLM(BaseLLM):
 
         answer, buffer, resp, called_fun, api_params, i = "", "", "", "", "", 0
         logger.info(f"request to open ai {message} max tokens {self.max_tokens} ")
-        model_args = self.model_args
-        model_args["thread_id"] = self.thread_id
-        model_args["assistant_id"] = self.assistant_id
-        model_args["stream"] = True
-        model_args["response_format"] = response_format
-        logger.info(f"request to open ai with thread {self.thread_id} & asst. id {self.assistant_id}")
-
         latency = False
         start_time = time.time()
         textual_response = False
 
         if self.trigger_function_call:
             tools = self.tools
+        
+        thread_id = self.openai.beta.threads.create(messages= message[1:-2]).id
 
-        runs = await self.async_client.beta.threads.runs.list(thread_id=model_args["thread_id"])
-        if runs.data and runs.data[0].status in ["in_progress", "queued", "requires_action"]:
-            await self.async_client.beta.threads.runs.cancel(thread_id=model_args["thread_id"], run_id=runs.data[0].id)
+        model_args = self.model_args
+        model_args["thread_id"] = thread_id
+        model_args["assistant_id"] = self.assistant_id
+        model_args["stream"] = True
+        model_args["response_format"] = response_format
+        logger.info(f"request to open ai with thread {thread_id} & asst. id {self.assistant_id}")
 
-        await self.async_client.beta.threads.messages.create(thread_id=model_args["thread_id"], role="user", content=message)
+        await self.async_client.beta.threads.messages.create(thread_id=model_args["thread_id"], role="user", content=message[-1]['content'])
 
         async for chunk in await self.async_client.beta.threads.runs.create(**model_args):
             logger.info(f"chunk received : {chunk}")
             if self.trigger_function_call and chunk.event == "thread.run.step.delta":
+                if chunk.data.delta.step_details.tool_calls[0].type == "file_search":
+                    yield "Let me see", False, time.time() - start_time
+                    continue
                 textual_response = False
                 if not self.started_streaming:
                     first_chunk_time = time.time()
