@@ -32,7 +32,7 @@ ACCIDENTAL_INTERRUPTION_PHRASES = [
     "that's enough", "shush", "listen", "excuse me", "hold up", "not now", "stop there", "stop speaking"
 ]
 
-PRE_FUNCTIONAL_CALL_MESSAGE = "Just give me a moment, I'll do that and will be back with you"
+PRE_FUNCTION_CALL_MESSAGE = "Just give me a moment, I'll do that and will be back with you"
 
 FILLER_PHRASES = [
     "No worries.", "It's fine.", "I'm here.", "No rush.", "Take your time.",
@@ -55,3 +55,5 @@ FILLER_DICT = {
   "Clarification": ["Please clarify.", "Can you explain?", "More details?", "Can you elaborate?"],
   "Confirmation": ["Got it.", "Okay.", "Understood."]
 }
+
+CHECKING_THE_DOCUMENTS_FILLER = "Umm, yeah let me see"
