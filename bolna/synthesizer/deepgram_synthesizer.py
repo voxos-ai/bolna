@@ -49,16 +49,21 @@ class DeepgramSynthesizer(BaseSynthesizer):
         payload = {
             "text": text
         }
-
-        async with aiohttp.ClientSession() as session:
-            if payload is not None:
-                async with session.post(url, headers=headers, json=payload) as response:
-                    if response.status == 200:
-                        chunk = await response.read()
-                        return chunk
-            else:
-                logger.info("Payload was null")
-
+        try:
+            async with aiohttp.ClientSession() as session:
+                if payload is not None:
+                    async with session.post(url, headers=headers, json=payload) as response:
+                        if response.status == 200:
+                            chunk = await response.read()
+                            logger.info(f"status for deepgram request {response.status} response {len(await response.read())}")
+                            return chunk
+                        else:
+                            logger.info(f"status for deepgram reques {response.status} response {len(await response.read())}")
+                            return b'\x00'
+                else:
+                    logger.info("Payload was null")
+        except Exception as e:
+            logger.error("something went wrong")
     def supports_websocket(self):
         return False
 
