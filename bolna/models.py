@@ -134,7 +134,7 @@ class OpenaiAssistants(BaseModel):
     assistant_id: str = None
 
 class LLM(BaseModel):
-    model: Optional[str] = "gpt-3.5-turbo-16k"
+    model: Optional[str] = "gpt-3.5-turbo"
     max_tokens: Optional[int] = 100
     agent_flow_type: Optional[str] = "streaming"
     family: Optional[str] = "openai"

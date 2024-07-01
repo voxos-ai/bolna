@@ -15,8 +15,8 @@ class InmemoryScalarCache(BaseCache):
                 return self.data_dict[key] 
             if time.time() - self.ttl_dict[key] < 0:
                 return self.data_dict[key]
-            del self.ttl_dict[key]
-            del self.data_dict[key]
+            #del self.ttl_dict[key]
+            #del self.data_dict[key]
         
         logger.info(f"Cache miss for key {key}")
         return None
