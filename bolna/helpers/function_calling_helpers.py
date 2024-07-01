@@ -5,7 +5,7 @@ from bolna.helpers.logger_config import configure_logger
 logger = configure_logger(__name__)
 
 
-async def trigger_api(self, url, method, param, api_token,  **kwargs):
+async def trigger_api(url, method, param, api_token,  **kwargs):
         try:
             code = compile(param % kwargs, "<string>", "exec")
             exec(code, globals(), kwargs)

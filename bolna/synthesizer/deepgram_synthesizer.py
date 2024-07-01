@@ -1,3 +1,4 @@
+import copy
 import aiohttp
 import os
 from dotenv import load_dotenv
@@ -82,7 +83,6 @@ class DeepgramSynthesizer(BaseSynthesizer):
 
     async def generate(self):
         while True:
-            logger.info("Generating TTS response")
             message = await self.internal_queue.get()
             logger.info(f"Generating TTS response for message: {message}")
             meta_info, text = message.get("meta_info"), message.get("data")
@@ -116,5 +116,5 @@ class DeepgramSynthesizer(BaseSynthesizer):
             yield create_ws_data_packet(message, meta_info)
 
     async def push(self, message):
-        logger.info("Pushed message to internal queue")
-        self.internal_queue.put_nowait(message)
+        logger.info(f"Pushed message to internal queue {message}")
+        self.internal_queue.put_nowait(copy.deepcopy(message))

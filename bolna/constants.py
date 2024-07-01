@@ -56,4 +56,4 @@ FILLER_DICT = {
   "Confirmation": ["Got it.", "Okay.", "Understood."]
 }
 
-CHECKING_THE_DOCUMENTS_FILLER = "Umm, yeah let me see"
+CHECKING_THE_DOCUMENTS_FILLER = "Umm, just a moment, getting details..."

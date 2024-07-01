@@ -10,7 +10,7 @@ import uuid
 import copy
 from datetime import datetime
 
-from bolna.constants import ACCIDENTAL_INTERRUPTION_PHRASES, FILLER_DICT, PRE_FUNCTION_CALL_MESSAGE, PRE_FUNCTIONAL_CALL_MESSAGE
+from bolna.constants import ACCIDENTAL_INTERRUPTION_PHRASES, FILLER_DICT, PRE_FUNCTION_CALL_MESSAGE
 from bolna.helpers.function_calling_helpers import trigger_api
 from bolna.memory.cache.vector_cache import VectorCache
 from .base_manager import BaseManager
@@ -162,9 +162,9 @@ class TaskManager(BaseManager):
         self.stream = (self.task_config["tools_config"]['synthesizer'] is not None and self.task_config["tools_config"]["synthesizer"]["stream"]) and (self.enforce_streaming or not self.turn_based_conversation)
         #self.stream = not turn_based_conversation #Currently we are allowing only realtime conversation based usecases. Hence it'll always be true unless connected through dashboard
         self.is_local = False
-        llm_config = None
+        self.llm_config = None
         if self.task_config["tools_config"]["llm_agent"] is not None:
-            llm_config = {
+            self.llm_config = {
                 "model": self.task_config["tools_config"]["llm_agent"]["model"],
                 "max_tokens": self.task_config["tools_config"]["llm_agent"]["max_tokens"],
                 "provider": self.task_config["tools_config"]["llm_agent"]["provider"]
@@ -185,9 +185,9 @@ class TaskManager(BaseManager):
         # setting transcriber
         self.__setup_transcriber()
         # setting synthesizer
-        self.__setup_synthesizer(llm_config)
+        self.__setup_synthesizer(self.llm_config)
         # setting llm
-        llm = self.__setup_llm(llm_config)
+        llm = self.__setup_llm(self.llm_config)
         #Setup tasks
         self.__setup_tasks(llm)
         
@@ -809,15 +809,17 @@ class TaskManager(BaseManager):
     
     async def __execute_function_call(self, url, method, param, api_token, model_args, meta_info, next_step, called_fun, **resp):
         response = await trigger_api(url= url, method=method.lower(), param= param, api_token= api_token, **resp)
-        content = f"We did made a function calling for user. We hit the function : {called_fun}, we hit the url {url} and send a {method} request and it returned us the response as given below: {str(response)} \n\n . Kindly understand the above response and convey this response in a conextual to user."
+        content = f"We did made a function calling for user. We hit the function : {called_fun}, we hit the url {url} and send a {method} request and it returned us the response as given below: {str(response)} \n\n . Kindly understand the above response and convey this response in a context to user."
         model_args["messages"].append({"role":"system","content":content})
         logger.info(f"Logging function call parameters ")
-        convert_to_request_log(format_messages(model_args['messages'], True), meta_info, self.model, "llm", direction = "request", is_cached= False, run_id = self.run_id)
-        await self.do_llm_generation(model_args["messages"], meta_info, next_step, should_trigger_function_call = True)
+        convert_to_request_log(format_messages(model_args['messages'], True), meta_info, self.llm_config['model'], "llm", direction = "request", is_cached= False, run_id = self.run_id)
+        await self.__do_llm_generation(model_args["messages"], meta_info, next_step, should_trigger_function_call = True)
 
     async def __do_llm_generation(self, messages, meta_info, next_step, should_bypass_synth = False, should_trigger_function_call = False):
         llm_response = ""
+        logger.info(f"MEssages vefore generation {messages}")
         async for llm_message in self.tools['llm_agent'].generate(messages, synthesize=True, meta_info = meta_info):
+            logger.info(f"llm_message {llm_message}")
             data, end_of_llm_stream, latency, trigger_function_call = llm_message
 
             if trigger_function_call:
@@ -864,13 +866,15 @@ class TaskManager(BaseManager):
                     else:
                         logger.info(f"There was a conversation between function call and this and changing relevant history point")
                         #There was a conversation
-                        for i in self.history[::-1]:
-                            if self.history[i]['content'] == PRE_FUNCTION_CALL_MESSAGE:
-                                self.history[-1]['content'] += llm_response
+                        for entry in reversed(self.history):
+                            if entry['content'] == PRE_FUNCTION_CALL_MESSAGE:
+                                entry['content'] += llm_response
                                 break
+                        self.interim_history = copy.deepcopy(self.history)
                          
                 else:
-                    messages = messages.append({"role": "assistant", "content": llm_response})
+                    logger.info(f"There was no function call {messages}")
+                    messages.append({"role": "assistant", "content": llm_response})
                     self.interim_history = copy.deepcopy(messages)
                     self.llm_response_generated = True
                     if self.callee_silent:
@@ -882,7 +886,6 @@ class TaskManager(BaseManager):
         next_step = None
         
         logger.info("agent flow is not preprocessed")
-        llm_response = ""
 
         start_time = time.time()
         should_bypass_synth = 'bypass_synth' in meta_info and meta_info['bypass_synth'] == True
@@ -924,11 +927,12 @@ class TaskManager(BaseManager):
             self.llm_processed_request_ids.add(self.current_request_id)
         else:
             messages = copy.deepcopy(self.history)
+            logger.info(f"Message {messages} history {self.history}")
             messages.append({'role': 'user', 'content': message['data']})
             ### TODO CHECK IF THIS IS EVEN REQUIRED
             convert_to_request_log(message=format_messages(messages, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
 
-            self.__do_llm_generation(messages, meta_info, next_step, should_bypass_synth)
+            await self.__do_llm_generation(messages, meta_info, next_step, should_bypass_synth)
             # TODO : Write a better check for completion prompt 
             if self.use_llm_to_determine_hangup and not self.turn_based_conversation:
                 answer = await self.tools["llm_agent"].check_for_completion(self.history, self.check_for_completion_prompt)
