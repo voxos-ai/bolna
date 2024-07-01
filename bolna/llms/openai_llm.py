@@ -56,7 +56,7 @@ class OpenAiLLM(BaseLLM):
             logger.info(f"Initializing OpenAI assistant with assistant id {self.assistant_id}")
             self.openai = OpenAI(api_key=api_key)
             #self.thread_id = self.openai.beta.threads.create().id
-            self.model_args = {"max_completion_tokens": self.max_tokens, "temperature": self.temperature, "model": self.model}
+            self.model_args = {"max_completion_tokens": self.max_tokens, "temperature": self.temperature}
             my_assistant = self.openai.beta.assistants.retrieve(self.assistant_id)
             if my_assistant.tools is not None:
                 self.tools = [i for i in my_assistant.tools if i.type == "function"]
@@ -214,7 +214,7 @@ class OpenAiLLM(BaseLLM):
         async for chunk in await self.async_client.beta.threads.runs.create(**model_args):
             logger.info(f"chunk received : {chunk}")
             if self.trigger_function_call and chunk.event == "thread.run.step.delta":
-                if chunk.data.delta.step_details.tool_calls[0].type == "file_search":
+                if chunk.data.delta.step_details.tool_calls[0].type == "file_search" or chunk.data.delta.step_details.tool_calls[0].type == "search_files":
                     yield CHECKING_THE_DOCUMENTS_FILLER, False, time.time() - start_time, False
                     continue
                 textual_response = False
