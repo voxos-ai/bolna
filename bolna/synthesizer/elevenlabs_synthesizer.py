@@ -199,7 +199,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                     if self.caching:
                         if self.cache.get(text):
                             logger.info(f"Cache hit and hence returning quickly {text}")
-                            message = self.cache.get(text)
+                            audio = self.cache.get(text)
                             meta_info['is_cached'] = True
                         else:
                             c = len(text)

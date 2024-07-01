@@ -815,9 +815,45 @@ class TaskManager(BaseManager):
         convert_to_request_log(format_messages(model_args['messages'], True), meta_info, self.llm_config['model'], "llm", direction = "request", is_cached= False, run_id = self.run_id)
         await self.__do_llm_generation(model_args["messages"], meta_info, next_step, should_trigger_function_call = True)
 
+    def __store_into_history(self, meta_info, messages, llm_response, should_trigger_function_call = False):
+        if self.current_request_id in self.llm_rejected_request_ids:
+            logger.info("##### User spoke while LLM was generating response")
+        else:
+            self.llm_response_generated = True
+            convert_to_request_log(message=llm_response, meta_info= meta_info, component="llm", direction="response", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
+            if should_trigger_function_call:
+                #Now, we need to consider 2 things here
+                #1. There was silence between function call and now
+                #2. There was a conversation till now
+                logger.info(f"There was a function call and need to make that work")
+                
+                if self.interim_history[-1]['role'] == 'assistant' and self.interim_history[-1]['content'] == PRE_FUNCTION_CALL_MESSAGE:
+                    logger.info(f"There was a no conversation between function call")
+                    #Nothing was spoken
+                    self.interim_history[-1]['content'] += llm_response
+                else:
+                    
+                    logger.info(f"There was a conversation between function call and this and changing relevant history point")
+                    #There was a conversation
+                    messages = copy.deepcopy(self.interim_history)
+                    for entry in reversed(messages):
+                        if entry['content'] == PRE_FUNCTION_CALL_MESSAGE:
+                            entry['content'] += llm_response
+                            break
+                    
+                self.interim_history = copy.deepcopy(messages)
+            else:
+                logger.info(f"There was no function call {messages}")
+                messages.append({"role": "assistant", "content": llm_response})
+                self.interim_history = copy.deepcopy(messages)
+                if self.callee_silent:
+                    logger.info("##### When we got utterance end, maybe LLM was still generating response. So, copying into history")
+                    self.history = copy.deepcopy(self.interim_history)
+                #self.__update_transcripts()
+                        
     async def __do_llm_generation(self, messages, meta_info, next_step, should_bypass_synth = False, should_trigger_function_call = False):
         llm_response = ""
-        logger.info(f"MEssages vefore generation {messages}")
+        logger.info(f"MEssages before generation {messages}")
         async for llm_message in self.tools['llm_agent'].generate(messages, synthesize=True, meta_info = meta_info):
             logger.info(f"llm_message {llm_message}")
             data, end_of_llm_stream, latency, trigger_function_call = llm_message
@@ -826,12 +862,14 @@ class TaskManager(BaseManager):
                 logger.info(f"Triggering function call for {data}")
                 self.llm_task = asyncio.create_task(self.__execute_function_call(next_step = next_step, **data))
                 return
+            
 
             if latency and (len(self.llm_latencies) == 0 or self.llm_latencies[-1] != latency):
                 meta_info["llm_latency"] = latency
                 self.llm_latencies.append(latency)
                 self.average_llm_latency = sum(self.llm_latencies) / len(self.llm_latencies)
                 logger.info(f"Got llm latencies {self.llm_latencies}")
+
             llm_response += " " + data
             logger.info(f"Got a response from LLM {llm_response}")
             if self.stream:
@@ -839,48 +877,25 @@ class TaskManager(BaseManager):
                     meta_info["end_of_llm_stream"] = True
                 text_chunk = self.__process_stop_words(data, meta_info)
                 logger.info(f"##### O/P from LLM {text_chunk} {llm_response}")
-                await self._handle_llm_output(next_step, text_chunk, should_bypass_synth, meta_info)
-                
-        if not self.stream:
-            meta_info["end_of_llm_stream"] = True
-            messages.append({"role": "assistant", "content": llm_response})
-            self.history = copy.deepcopy(messages)
-            await self._handle_llm_output(next_step, llm_response, should_bypass_synth, meta_info)
-            convert_to_request_log(message = llm_response, meta_info= meta_info, component="llm", direction="response", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
-        else:    
-            if self.current_request_id in self.llm_rejected_request_ids:
-                logger.info("##### User spoke while LLM was generating response")
-            else:
-                convert_to_request_log(message=llm_response, meta_info= meta_info, component="llm", direction="response", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
-                
-                if should_trigger_function_call:
-                    #Now, we need to consider 2 things here
-                    #1. There was silence between function call and now
-                    #2. There was a conversation till now
-                
-                    if self.history[-1]['role'] == 'assistant' and self.history[-1]['content'] == PRE_FUNCTION_CALL_MESSAGE:
-                        logger.info(f"There was a no conversation between function call")
-                        #Nothing was spoken
-                        self.llm_response_generated = True
-                        self.history[-1]['content'] += llm_response
-                    else:
-                        logger.info(f"There was a conversation between function call and this and changing relevant history point")
-                        #There was a conversation
-                        for entry in reversed(self.history):
-                            if entry['content'] == PRE_FUNCTION_CALL_MESSAGE:
-                                entry['content'] += llm_response
-                                break
-                        self.interim_history = copy.deepcopy(self.history)
-                         
-                else:
-                    logger.info(f"There was no function call {messages}")
-                    messages.append({"role": "assistant", "content": llm_response})
+
+                # A hack as during the 'await' part control passes to llm streaming function parameters
+                # So we have to make sure we've commited the filler message
+                if text_chunk == PRE_FUNCTION_CALL_MESSAGE:
+                    logger.info("Got a pre function call message")
+                    messages.append({'role':'assistant', 'content': PRE_FUNCTION_CALL_MESSAGE})
                     self.interim_history = copy.deepcopy(messages)
-                    self.llm_response_generated = True
-                    if self.callee_silent:
-                        logger.info("##### When we got utterance end, maybe LLM was still generating response. So, copying into history")
-                        self.history = copy.deepcopy(self.interim_history)
-                    #self.__update_transcripts()
+
+                await self._handle_llm_output(next_step, text_chunk, should_bypass_synth, meta_info)
+            else:
+                meta_info["end_of_llm_stream"] = True
+                messages.append({"role": "assistant", "content": llm_response})
+                self.history = copy.deepcopy(messages)
+                await self._handle_llm_output(next_step, llm_response, should_bypass_synth, meta_info)
+                convert_to_request_log(message = llm_response, meta_info= meta_info, component="llm", direction="response", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
+        
+        if self.stream and llm_response != PRE_FUNCTION_CALL_MESSAGE:
+            logger.info(f"Storing {llm_response} into history should_trigger_function_call {should_trigger_function_call}")
+            self.__store_into_history(meta_info, messages, llm_response, should_trigger_function_call= should_trigger_function_call)
                     
     async def _process_conversation_task(self, message, sequence, meta_info):
         next_step = None

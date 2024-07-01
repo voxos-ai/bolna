@@ -71,7 +71,7 @@ class OpenAiLLM(BaseLLM):
         
         response_format = self.get_response_format(request_json)
 
-        answer, buffer, resp, called_fun, api_params, i = "", "", "", "", "", 0
+        answer, buffer, resp, called_fun, i = "", "", "", "", 0
         logger.info(f"request to open ai {messages} max tokens {self.max_tokens} ")
         model_args = self.model_args
         model_args["response_format"] = response_format
@@ -102,8 +102,9 @@ class OpenAiLLM(BaseLLM):
                     yield buffer, False, latency, False
                     buffer = ''
                 logger.info(f"Response from LLM {resp}")
-                yield buffer, False, latency, False
-                buffer = ''
+                if buffer != '':
+                    yield buffer, False, latency, False
+                    buffer = ''
                 if chunk.choices[0].delta.function_call.name:
                     logger.info(f"Should do a function call {chunk.choices[0].delta.function_call.name}")
                     called_fun = str(chunk.choices[0].delta.function_call.name)
@@ -273,6 +274,9 @@ class OpenAiLLM(BaseLLM):
                 "method":method.lower(), 
                 "param": param, 
                 "api_token":api_token, 
+                "model_args": model_args,
+                "meta_info": meta_info,
+                "called_fun": called_fun,
                 **resp
             }
 
