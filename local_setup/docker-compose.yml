@@ -47,6 +47,8 @@ services:
       - "8001:8001"
     depends_on:
       - redis
+      - ngrok
+      - bolna-app
     env_file:
       - .env
 
@@ -59,5 +61,7 @@ services:
       - "8002:8002"
     depends_on:
       - redis
+      - ngrok
+      - bolna-app
     env_file:
       - .env
