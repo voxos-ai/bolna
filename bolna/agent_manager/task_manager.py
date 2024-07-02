@@ -637,6 +637,8 @@ class TaskManager(BaseManager):
 
     def _is_formulaic_flow(self):
         return self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "formulaic"
+    def _is_rag_flow(self):
+        return self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "rag"
 
     def _get_next_step(self, sequence, origin):
         try:
