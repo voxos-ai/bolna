@@ -1,5 +1,4 @@
 services:
-
   # main bolna service
   bolna-app:
     image: bolna-app:latest
@@ -26,7 +25,7 @@ services:
   # ngrok for local tunneling
   ngrok:
     image: ngrok/ngrok:latest
-    restart: unless-stopped
+    # restart: unless-stopped
     command:
       - "start"
       - "--all"
@@ -63,5 +62,17 @@ services:
       - redis
       - ngrok
       - bolna-app
+    env_file:
+      - .env
+      
+  voximplant_app:
+    image: voximplant_app:latest
+    build: 
+      context: .
+      dockerfile: dockerfiles/voximplant-server.Dockerfile
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
     env_file:
       - .env
