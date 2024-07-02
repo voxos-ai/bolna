@@ -68,6 +68,7 @@ class StylettsConfig(BaseModel):
     embedding_scale: float = 1
 
 
+
 class Transcriber(BaseModel):
     model: Optional[str] = "nova-2"
     language: Optional[str] = None
@@ -156,6 +157,23 @@ class MessagingModel(BaseModel):
     provider: str
     template: str
 
+
+class Node(BaseModel):
+    type: str
+    llm: LLM
+    exit_criteria: str
+    exit_response: Optional[str] = None
+    exit_prompt: Optional[str] = None
+    is_root: Optional[bool] = False
+
+class Edge(BaseModel):
+    start_node: Node
+    end_node: Node
+    condition: Optional[tuple] = None #extracted value from previous step and it's value
+
+class LLM_AGENT_GRAPH(BaseModel):
+    nodes: List[Node]
+    edges: List[Edge]
 
 # Need to redefine it
 class CalendarModel(BaseModel):

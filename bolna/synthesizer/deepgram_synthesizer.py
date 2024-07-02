@@ -1,3 +1,4 @@
+import copy
 import aiohttp
 import os
 from dotenv import load_dotenv
@@ -49,16 +50,21 @@ class DeepgramSynthesizer(BaseSynthesizer):
         payload = {
             "text": text
         }
-
-        async with aiohttp.ClientSession() as session:
-            if payload is not None:
-                async with session.post(url, headers=headers, json=payload) as response:
-                    if response.status == 200:
-                        chunk = await response.read()
-                        return chunk
-            else:
-                logger.info("Payload was null")
-
+        try:
+            async with aiohttp.ClientSession() as session:
+                if payload is not None:
+                    async with session.post(url, headers=headers, json=payload) as response:
+                        if response.status == 200:
+                            chunk = await response.read()
+                            logger.info(f"status for deepgram request {response.status} response {len(await response.read())}")
+                            return chunk
+                        else:
+                            logger.info(f"status for deepgram reques {response.status} response {len(await response.read())}")
+                            return b'\x00'
+                else:
+                    logger.info("Payload was null")
+        except Exception as e:
+            logger.error("something went wrong")
     def supports_websocket(self):
         return False
 
@@ -77,7 +83,6 @@ class DeepgramSynthesizer(BaseSynthesizer):
 
     async def generate(self):
         while True:
-            logger.info("Generating TTS response")
             message = await self.internal_queue.get()
             logger.info(f"Generating TTS response for message: {message}")
             meta_info, text = message.get("meta_info"), message.get("data")
@@ -111,5 +116,5 @@ class DeepgramSynthesizer(BaseSynthesizer):
             yield create_ws_data_packet(message, meta_info)
 
     async def push(self, message):
-        logger.info("Pushed message to internal queue")
-        self.internal_queue.put_nowait(message)
+        logger.info(f"Pushed message to internal queue {message}")
+        self.internal_queue.put_nowait(copy.deepcopy(message))
