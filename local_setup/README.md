@@ -13,7 +13,7 @@ The setup consists of four containers:
 
 Use docker to build the images using `.env` file as the environment file and run them locally
 1. `docker-compose build --no-cache <twilio-app | plivo-app>`: rebuild images for `twilio-app` or `plivo-app` as defined in the `docker-compose.yml`.
-2. `docker-compose up`: run the build images
+2. `docker-compose up <twilio-app | plivo-app>`: run the build images
 
 Once the docker containers are up, you can now start to create your agents and instruct them to initiate calls.
 
