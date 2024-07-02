@@ -129,9 +129,12 @@ class Routes(BaseModel):
     embedding_model: Optional[str] = "Snowflake/snowflake-arctic-embed-l"
     routes: List[Route]
 
+class OpenaiAssistants(BaseModel):
+    name: Optional[str] = None
+    assistant_id: str = None
 
 class LLM(BaseModel):
-    model: Optional[str] = "gpt-3.5-turbo-16k"
+    model: Optional[str] = "gpt-3.5-turbo"
     max_tokens: Optional[int] = 100
     agent_flow_type: Optional[str] = "streaming"
     family: Optional[str] = "openai"
@@ -148,6 +151,8 @@ class LLM(BaseModel):
     routes: Optional[Routes] = None
     extraction_details: Optional[str] = None
     summarization_details: Optional[str] = None
+    backend: Optional[str] = "bolna"
+    extra_config: Optional[OpenaiAssistants] = None
 
 
 class MessagingModel(BaseModel):
@@ -169,7 +174,7 @@ class APIParams(BaseModel):
     param: Optional[str] = None #Payload for the URL
 
 class ToolModel(BaseModel):
-    tools: str #Goes in as a prompt
+    tools:  Optional[str] = None #Goes in as a prompt
     tools_params: Dict[str, APIParams]
 
 class ToolsConfig(BaseModel):
