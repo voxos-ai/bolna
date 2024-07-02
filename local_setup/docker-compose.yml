@@ -35,7 +35,6 @@ services:
       - ./ngrok-config.yml:/etc/ngrok.yml
     ports:
       - 4040:4040
-
   ### Telephony servers ###
   twilio-app:
     image: twilio-app:latest
@@ -74,5 +73,7 @@ services:
       - "8000:8000"
     depends_on:
       - redis
+      - ngrok
+      - bolna-app
     env_file:
       - .env
