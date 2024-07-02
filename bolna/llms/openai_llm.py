@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from openai import AsyncOpenAI, OpenAI
 import json, requests, time
 
+from bolna.helpers.function_calling_helpers import trigger_api
 from bolna.constants import CHECKING_THE_DOCUMENTS_FILLER, PRE_FUNCTION_CALL_MESSAGE
 from bolna.helpers.utils import convert_to_request_log, format_messages
 from .llm import BaseLLM
@@ -51,6 +52,7 @@ class OpenAiLLM(BaseLLM):
                 llm_key = kwargs['llm_key']
             self.async_client = AsyncOpenAI(api_key=llm_key)
             api_key = llm_key
+
         self.assistant_id = kwargs.get("assistant_id", None)
         if self.assistant_id:
             logger.info(f"Initializing OpenAI assistant with assistant id {self.assistant_id}")
@@ -136,6 +138,7 @@ class OpenAiLLM(BaseLLM):
             method = func_dict['method']
             param = func_dict['param']
             api_token = func_dict['api_token']
+
             api_call_return = {
                 "url": url, 
                 "method":method.lower(), 
@@ -193,12 +196,14 @@ class OpenAiLLM(BaseLLM):
 
         answer, buffer, resp, called_fun, api_params, i = "", "", "", "", "", 0
         logger.info(f"request to open ai {message} max tokens {self.max_tokens} ")
+
         latency = False
         start_time = time.time()
         textual_response = False
 
         if self.trigger_function_call:
             tools = self.tools
+
         
         thread_id = self.openai.beta.threads.create(messages= message[1:-2]).id
 
@@ -230,6 +235,7 @@ class OpenAiLLM(BaseLLM):
                     yield buffer, False, latency, False
                     buffer = ''
                 yield buffer, False, latency, False
+
                 buffer = ''
                 if chunk.data.delta.step_details.tool_calls[0].function.name and chunk.data.delta.step_details.tool_calls[0].function.arguments is not None:
                     logger.info(f"Should do a function call {chunk.data.delta.step_details.tool_calls[0].function.name}")
@@ -264,7 +270,6 @@ class OpenAiLLM(BaseLLM):
             resp = json.loads(resp)
             func_dict = self.api_params[called_fun]
             logger.info(f"Payload to send {resp} func_dict {func_dict}")
-            
             url = func_dict['url']
             method = func_dict['method']
             param = func_dict['param']
@@ -281,6 +286,7 @@ class OpenAiLLM(BaseLLM):
             }
 
             yield api_call_return, False, latency, True
+
             response = await self.trigger_api(url=url, method=method.lower(), param=param, api_token=api_token, **resp)
             content = f"We did made a function calling for user. We hit the function : {called_fun}, we hit the url {url} and send a {method} request and it returned us the response as given below: {str(response)} \n\n . Kindly understand the above response and convey this response in a contextual form to user."
             logger.info(f"Logging function call parameters ")
