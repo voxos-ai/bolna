@@ -16,4 +16,4 @@ RUN pip install ffprobe
 RUN pip install aiofiles
 
 EXPOSE 5001
-CMD ["uvicorn", "quickstart_server:app", "--host", "0.0.0.0", "--port", "5001"]
+CMD ["uvicorn", "quickstart_server:app", "--host", "0.0.0.0", "--port", "5000"]
