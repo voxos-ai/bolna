@@ -57,3 +57,4 @@ FILLER_DICT = {
 }
 
 CHECKING_THE_DOCUMENTS_FILLER = "Umm, just a moment, getting details..."
+PREDEFINED_FUNCTIONS = ['transfer_call']

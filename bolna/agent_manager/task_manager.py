@@ -10,6 +10,8 @@ import uuid
 import copy
 from datetime import datetime
 
+import aiohttp
+
 from bolna.constants import ACCIDENTAL_INTERRUPTION_PHRASES, FILLER_DICT, PRE_FUNCTION_CALL_MESSAGE
 from bolna.helpers.function_calling_helpers import trigger_api
 from bolna.memory.cache.vector_cache import VectorCache
@@ -221,7 +223,6 @@ class TaskManager(BaseManager):
                     self.__setup_routes(self.routes)
                     logger.info(f"Time to setup routes {time.time() - start_time}")
 
-            
 
         # for long pauses and rushing
             if conversation_config is not None:
@@ -808,13 +809,31 @@ class TaskManager(BaseManager):
         await self._handle_llm_output(next_step, filler, should_bypass_synth, new_meta_info, is_filler = True)
     
     async def __execute_function_call(self, url, method, param, api_token, model_args, meta_info, next_step, called_fun, **resp):
+        if called_fun == "transfer_call":
+            call_sid = self.tools["input"].get_call_sid()
+            user_id, agent_id = self.assistant_id.split("/")
+
+            if url is None:
+                url = os.getenv("CALL_TRANSFER_WEBHOOK_URL")
+                payload = {'call_sid': call_sid, "agent_id": agent_id, "user_id": user_id }
+            else:
+                payload = {'call_sid': call_sid, "agent_id": agent_id }
+            async with aiohttp.ClientSession() as session:
+                logger.info(f"Sending the payload to stop the conversation {payload} url {url}")
+                async with session.post(url, json = payload) as response:
+                    response_text = await response.text()
+                    logger.info(f"Response from the server after call transfer: {response_text}")
+                    return
+                
         response = await trigger_api(url= url, method=method.lower(), param= param, api_token= api_token, **resp)
         content = f"We did made a function calling for user. We hit the function : {called_fun}, we hit the url {url} and send a {method} request and it returned us the response as given below: {str(response)} \n\n . Kindly understand the above response and convey this response in a context to user."
         model_args["messages"].append({"role":"system","content":content})
         logger.info(f"Logging function call parameters ")
         convert_to_request_log(format_messages(model_args['messages'], True), meta_info, self.llm_config['model'], "llm", direction = "request", is_cached= False, run_id = self.run_id)
-        await self.__do_llm_generation(model_args["messages"], meta_info, next_step, should_trigger_function_call = True)
-
+        if called_fun != "transfer_call":
+            await self.__do_llm_generation(model_args["messages"], meta_info, next_step, should_trigger_function_call = True)
+            
+            
     def __store_into_history(self, meta_info, messages, llm_response, should_trigger_function_call = False):
         if self.current_request_id in self.llm_rejected_request_ids:
             logger.info("##### User spoke while LLM was generating response")
