@@ -21,10 +21,13 @@ class TelephonyInputHandler(DefaultInputHandler):
         self.mark_set = mark_set
         self.last_media_received = 0
         self.io_provider = None
-    
+
     def get_stream_sid(self):
         return self.stream_sid
-    
+
+    def get_call_sid(self):
+        return self.call_sid
+
     async def call_start(self, packet):
         pass
 
