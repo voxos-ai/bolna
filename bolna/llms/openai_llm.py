@@ -275,7 +275,7 @@ class OpenAiLLM(BaseLLM):
                     yield text, False, latency, False
                     buffer = buffer_words[-1]
 
-        if self.trigger_function_call and not textual_response and (all(key in resp for key in tools[i].function.parameters['properties'].keys())) and (called_fun in self.api_params):
+        if self.trigger_function_call and not textual_response and not called_fun in PREDEFINED_FUNCTIONS and (all(key in resp for key in tools[i].function.parameters['properties'].keys())) and (called_fun in self.api_params):
             self.gave_out_prefunction_call_message = False
             logger.info(f"Function call parameters {resp}")
             convert_to_request_log(resp, meta_info, self.model, "llm", direction="response", is_cached=False, run_id=self.run_id)
@@ -299,6 +299,25 @@ class OpenAiLLM(BaseLLM):
             }
 
             yield api_call_return, False, latency, True
+        elif self.trigger_function_call and not textual_response and called_fun in PREDEFINED_FUNCTIONS:
+            func_dict = self.api_params[called_fun]
+            url = func_dict['url']
+            method = func_dict['method']
+            api_token = func_dict['api_token']
+
+            api_call_return = {
+                "url": url, 
+                "method":method.lower(), 
+                "param": None, 
+                "api_token":api_token, 
+                "model_args": None,
+                "meta_info": meta_info,
+                "called_fun": called_fun,
+                "resp" : None
+            }
+
+            yield api_call_return, False, latency, True
+            
             response = await self.trigger_api(url=url, method=method.lower(), param=param, api_token=api_token, **resp)
             content = f"We did made a function calling for user. We hit the function : {called_fun}, we hit the url {url} and send a {method} request and it returned us the response as given below: {str(response)} \n\n . Kindly understand the above response and convey this response in a contextual form to user."
             logger.info(f"Logging function call parameters ")
