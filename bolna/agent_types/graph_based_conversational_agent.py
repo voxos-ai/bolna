@@ -60,7 +60,10 @@ class Graph:
     # @TODO complete this function
     def remove_node(self, parent, node):
         print("Not yet implemented")
-
+"""
+{role content}
+...
+"""
 
 class GraphBasedConversationAgent(BaseAgent):
     def __init__(self, llm, prompts, context_data=None, preprocessed=True):
