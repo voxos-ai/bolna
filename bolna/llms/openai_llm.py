@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from openai import AsyncOpenAI, OpenAI
 import json, requests, time
 
-from bolna.constants import CHECKING_THE_DOCUMENTS_FILLER, PRE_FUNCTION_CALL_MESSAGE, PREDEFINED_FUNCTIONS
+from bolna.constants import CHECKING_THE_DOCUMENTS_FILLER, PRE_FUNCTION_CALL_MESSAGE, PREDEFINED_FUNCTIONS, TRANSFERING_CALL_FILLER
 from bolna.helpers.utils import convert_to_request_log, format_messages
 from .llm import BaseLLM
 from bolna.helpers.logger_config import configure_logger
@@ -94,9 +94,14 @@ class OpenAiLLM(BaseLLM):
                 logger.info(f"LLM Latency: {latency:.2f} s")
                 self.started_streaming = True
             if self.trigger_function_call and dict(chunk.choices[0].delta).get('function_call'):
+                if chunk.choices[0].delta.function_call.name:
+                    logger.info(f"Should do a function call {chunk.choices[0].delta.function_call.name}")
+                    called_fun = str(chunk.choices[0].delta.function_call.name)
+                    i = [i for i in range(len(tools)) if called_fun == tools[i]["name"]][0]
+
                 if not self.gave_out_prefunction_call_message and not textual_response:
-                    
-                    yield PRE_FUNCTION_CALL_MESSAGE, True, latency, False
+                    filler = PRE_FUNCTION_CALL_MESSAGE if called_fun != "transfer_call" else TRANSFERING_CALL_FILLER
+                    yield filler , True, latency, False
                     self.gave_out_prefunction_call_message = True
                 if len(buffer) > 0:
                     yield buffer, False, latency, False
@@ -105,10 +110,6 @@ class OpenAiLLM(BaseLLM):
                 if buffer != '':
                     yield buffer, False, latency, False
                     buffer = ''
-                if chunk.choices[0].delta.function_call.name:
-                    logger.info(f"Should do a function call {chunk.choices[0].delta.function_call.name}")
-                    called_fun = str(chunk.choices[0].delta.function_call.name)
-                    i = [i for i in range(len(tools)) if called_fun == tools[i]["name"]][0]
                 if (text_chunk := chunk.choices[0].delta.function_call.arguments):
                     resp += text_chunk
             elif text_chunk := chunk.choices[0].delta.content:
@@ -241,18 +242,22 @@ class OpenAiLLM(BaseLLM):
                     latency = first_chunk_time - start_time
                     logger.info(f"LLM Latency: {latency:.2f} s")
                     self.started_streaming = True
+                
+                if chunk.data.delta.step_details.tool_calls[0].function.name and chunk.data.delta.step_details.tool_calls[0].function.arguments is not None:
+                    logger.info(f"Should do a function call {chunk.data.delta.step_details.tool_calls[0].function.name}")
+                    called_fun = str(chunk.data.delta.step_details.tool_calls[0].function.name)
+                    i = [i for i in range(len(tools)) if called_fun == tools[i].function.name][0]
+                    
                 if not self.gave_out_prefunction_call_message and not textual_response:
-                    yield PRE_FUNCTION_CALL_MESSAGE, True, latency, False
+                    filler = PRE_FUNCTION_CALL_MESSAGE if called_fun != "transfer_call" else TRANSFERING_CALL_FILLER
+                    yield filler, True, latency, False
                     self.gave_out_prefunction_call_message = True
                 if len(buffer) > 0:
                     yield buffer, False, latency, False
                     buffer = ''
                 yield buffer, False, latency, False
                 buffer = ''
-                if chunk.data.delta.step_details.tool_calls[0].function.name and chunk.data.delta.step_details.tool_calls[0].function.arguments is not None:
-                    logger.info(f"Should do a function call {chunk.data.delta.step_details.tool_calls[0].function.name}")
-                    called_fun = str(chunk.data.delta.step_details.tool_calls[0].function.name)
-                    i = [i for i in range(len(tools)) if called_fun == tools[i].function.name][0]
+                
                 if (text_chunk := chunk.data.delta.step_details.tool_calls[0].function.arguments):
                     resp += text_chunk
                     logger.info(f"Response from LLM {resp}")
@@ -317,7 +322,7 @@ class OpenAiLLM(BaseLLM):
             }
 
             yield api_call_return, False, latency, True
-            
+
             response = await self.trigger_api(url=url, method=method.lower(), param=param, api_token=api_token, **resp)
             content = f"We did made a function calling for user. We hit the function : {called_fun}, we hit the url {url} and send a {method} request and it returned us the response as given below: {str(response)} \n\n . Kindly understand the above response and convey this response in a contextual form to user."
             logger.info(f"Logging function call parameters ")
