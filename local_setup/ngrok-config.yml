@@ -2,11 +2,11 @@ region: us
 version: '2'
 tunnels:
   twilio-app:
-    addr: twilio-app:8001
+    addr: twilio-app:8000
     proto: http
   plivo-app:
-    addr: plivo-app:8002
+    addr: plivo-app:8001
     proto: http
   bolna-app:
-    addr: bolna-app:5001
+    addr: bolna-app:5000
     proto: http
