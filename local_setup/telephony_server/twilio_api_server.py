@@ -63,7 +63,7 @@ async def make_call(request: Request):
             method="POST",
             record=True
         )
-
+        print(f'Call data: {call}')
         return PlainTextResponse("done", status_code=200)
 
     except Exception as e:
