@@ -453,6 +453,14 @@ class TaskManager(BaseManager):
         if self.task_config["task_type"] == "conversation":
             if self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "streaming":
                 self.tools["llm_agent"] = StreamingContextualAgent(llm)
+            # llama index rag
+            elif self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "llama-index-rag":
+                self.tools["llm_agent"] = LlamaIndexRag(
+                        vector_id=self.task_config["tools_config"]["llm_agent"].get("vector_id","791910c9-a625-4a60-97bc-8d2e0f46698b"),
+                        temperature=0.1,
+                        model=self.task_config["tools_config"]["llm_agent"]["model"]
+                    )
+            #---------------------------------------------------------------------------    
             elif self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "openai_assistant_agent":
                 if self.task_config["tools_config"]["llm_agent"]['backend'] == "openai_assistants":
                     logger.info("setting up backend as openai_assistants")

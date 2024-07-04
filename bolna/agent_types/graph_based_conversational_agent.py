@@ -151,6 +151,7 @@ class GraphBasedConversationAgent(BaseAgent):
             else:
                 # @TODO add non-preprocessed flow
                 async for message in self._get_next_formulaic_agent_next_step(history, True, False):
+                    "string"
                     yield message
 
         except Exception as e:
