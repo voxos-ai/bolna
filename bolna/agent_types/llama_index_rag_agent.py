@@ -60,5 +60,5 @@ class LlamaIndexRag(BaseAgent):
         logger.info(f"LLAMA INDEX: {message}")
         message, his = self.conversion(message)
         # message, history = self.conversion(histroy=history)
-        for token in self.agent.chat(message.content,his).response_gen:
-            yield token
+        for token in self.agent.stream_chat(message.content,his).response_gen:
+            yield token, False, 0.99
