@@ -27,10 +27,10 @@ class LlamaIndexRag(BaseAgent):
         self.vector_store = LanceDBVectorStore(lance_db,self.vector_id)
         storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
         vector_index = VectorStoreIndex.from_vector_store(storage_context.vector_store)
-        self.query_engine = vector_index.as_query_engine(
-            similarity_top_k=8,
-            streaming=True
-        )
+        # self.query_engine = vector_index.as_query_engine(
+        #     similarity_top_k=8,
+        #     streaming=True
+        # )
         self.tools = [
             QueryEngineTool(
                 vector_index.as_query_engine(

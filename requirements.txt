@@ -26,3 +26,10 @@ huggingface-hub
 semantic-router
 sentence_transformers
 optimum[onnxruntime]
+awscli
+torchaudio
+llama-index
+llama-parse
+lancedb
+llama-index-vector-stores-lancedb
+python-multipart

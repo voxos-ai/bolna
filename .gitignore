@@ -170,3 +170,4 @@ agent_data/**/mp3
 */*/__pycache__/
 logs/
 agent_data/
+testing_scripts/
