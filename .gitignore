@@ -169,5 +169,4 @@ agent_data/**/mp3
 logs/
 agent_data/
 
-local_setup/credentials/
-local_setup/ngrok-config.yml
+.env

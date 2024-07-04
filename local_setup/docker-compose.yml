@@ -37,6 +37,7 @@ services:
       - 4040:4040
     environment:
       - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+
   ### Telephony servers ###
   twilio-app:
     image: twilio-app:latest
@@ -45,6 +46,20 @@ services:
       dockerfile: dockerfiles/twilio_server.Dockerfile
     ports:
       - "8000:8000"
+    depends_on:
+      - redis
+      - ngrok
+      - bolna-app
+    env_file:
+      - .env
+
+  plivo-app:
+    image: plivo-app:latest
+    build:
+      context: .
+      dockerfile: dockerfiles/plivo_server.Dockerfile
+    ports:
+      - "8000:8001"
     depends_on:
       - redis
       - ngrok
