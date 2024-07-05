@@ -8,7 +8,7 @@ load_dotenv()
 
 
 class DailyOutputHandler:
-    def __init__(self, io_provider='daily', websocket=None, queue=None, room_url=None):
+    def __init__(self, io_provider='daily', websocket=None, queue=None, room_url=None, mark_set=None):
         self.websocket = websocket
         self.is_interruption_task_on = False
         self.queue = queue
