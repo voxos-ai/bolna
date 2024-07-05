@@ -3,8 +3,7 @@ from dotenv import load_dotenv
 from openai import AsyncOpenAI, OpenAI
 import json, requests, time
 
-from bolna.helpers.function_calling_helpers import trigger_api
-from bolna.constants import CHECKING_THE_DOCUMENTS_FILLER, PRE_FUNCTION_CALL_MESSAGE
+from bolna.constants import CHECKING_THE_DOCUMENTS_FILLER, PRE_FUNCTION_CALL_MESSAGE, PREDEFINED_FUNCTIONS, TRANSFERING_CALL_FILLER
 from bolna.helpers.utils import convert_to_request_log, format_messages
 from .llm import BaseLLM
 from bolna.helpers.logger_config import configure_logger
@@ -97,9 +96,14 @@ class OpenAiLLM(BaseLLM):
                 logger.info(f"LLM Latency: {latency:.2f} s")
                 self.started_streaming = True
             if self.trigger_function_call and dict(chunk.choices[0].delta).get('function_call'):
+                if chunk.choices[0].delta.function_call.name:
+                    logger.info(f"Should do a function call {chunk.choices[0].delta.function_call.name}")
+                    called_fun = str(chunk.choices[0].delta.function_call.name)
+                    i = [i for i in range(len(tools)) if called_fun == tools[i]["name"]][0]
+
                 if not self.gave_out_prefunction_call_message and not textual_response:
-                    
-                    yield PRE_FUNCTION_CALL_MESSAGE, True, latency, False
+                    filler = PRE_FUNCTION_CALL_MESSAGE if called_fun != "transfer_call" else TRANSFERING_CALL_FILLER
+                    yield filler , True, latency, False
                     self.gave_out_prefunction_call_message = True
                 if len(buffer) > 0:
                     yield buffer, False, latency, False
@@ -108,10 +112,6 @@ class OpenAiLLM(BaseLLM):
                 if buffer != '':
                     yield buffer, False, latency, False
                     buffer = ''
-                if chunk.choices[0].delta.function_call.name:
-                    logger.info(f"Should do a function call {chunk.choices[0].delta.function_call.name}")
-                    called_fun = str(chunk.choices[0].delta.function_call.name)
-                    i = [i for i in range(len(tools)) if called_fun == tools[i]["name"]][0]
                 if (text_chunk := chunk.choices[0].delta.function_call.arguments):
                     resp += text_chunk
             elif text_chunk := chunk.choices[0].delta.content:
@@ -127,7 +127,7 @@ class OpenAiLLM(BaseLLM):
                     yield text, False, latency, False
                     buffer = buffer_words[-1]
 
-        if self.trigger_function_call and (all(key in resp for key in tools[i]["parameters"]["properties"].keys())) and (called_fun in self.api_params):
+        if self.trigger_function_call and called_fun not in PREDEFINED_FUNCTIONS and (all(key in resp for key in tools[i]["parameters"]["properties"].keys())) and (called_fun in self.api_params):
             self.gave_out_prefunction_call_message = False
             logger.info(f"Function call paramaeters {resp}")
             convert_to_request_log(resp, meta_info, self.model, "llm", direction = "response", is_cached= False, run_id = self.run_id)
@@ -149,6 +149,24 @@ class OpenAiLLM(BaseLLM):
                 "meta_info": meta_info,
                 "called_fun": called_fun,
                 **resp
+            }
+
+            yield api_call_return, False, latency, True
+        elif self.trigger_function_call and called_fun in PREDEFINED_FUNCTIONS:
+            func_dict = self.api_params[called_fun]
+            url = func_dict['url']
+            method = func_dict['method']
+            api_token = func_dict['api_token']
+
+            api_call_return = {
+                "url": url, 
+                "method":method.lower(), 
+                "param": None, 
+                "api_token":api_token, 
+                "model_args": None,
+                "meta_info": meta_info,
+                "called_fun": called_fun,
+                "resp" : None
             }
 
             yield api_call_return, False, latency, True
@@ -229,8 +247,15 @@ class OpenAiLLM(BaseLLM):
                     latency = first_chunk_time - start_time
                     logger.info(f"LLM Latency: {latency:.2f} s")
                     self.started_streaming = True
+                
+                if chunk.data.delta.step_details.tool_calls[0].function.name and chunk.data.delta.step_details.tool_calls[0].function.arguments is not None:
+                    logger.info(f"Should do a function call {chunk.data.delta.step_details.tool_calls[0].function.name}")
+                    called_fun = str(chunk.data.delta.step_details.tool_calls[0].function.name)
+                    i = [i for i in range(len(tools)) if called_fun == tools[i].function.name][0]
+                    
                 if not self.gave_out_prefunction_call_message and not textual_response:
-                    yield PRE_FUNCTION_CALL_MESSAGE, True, latency, False
+                    filler = PRE_FUNCTION_CALL_MESSAGE if called_fun != "transfer_call" else TRANSFERING_CALL_FILLER
+                    yield filler, True, latency, False
                     self.gave_out_prefunction_call_message = True
                 if len(buffer) > 0:
                     yield buffer, False, latency, False
@@ -238,10 +263,7 @@ class OpenAiLLM(BaseLLM):
                 yield buffer, False, latency, False
 
                 buffer = ''
-                if chunk.data.delta.step_details.tool_calls[0].function.name and chunk.data.delta.step_details.tool_calls[0].function.arguments is not None:
-                    logger.info(f"Should do a function call {chunk.data.delta.step_details.tool_calls[0].function.name}")
-                    called_fun = str(chunk.data.delta.step_details.tool_calls[0].function.name)
-                    i = [i for i in range(len(tools)) if called_fun == tools[i].function.name][0]
+                
                 if (text_chunk := chunk.data.delta.step_details.tool_calls[0].function.arguments):
                     resp += text_chunk
                     logger.info(f"Response from LLM {resp}")
@@ -264,7 +286,7 @@ class OpenAiLLM(BaseLLM):
                     yield text, False, latency, False
                     buffer = buffer_words[-1]
 
-        if self.trigger_function_call and not textual_response and (all(key in resp for key in tools[i].function.parameters['properties'].keys())) and (called_fun in self.api_params):
+        if self.trigger_function_call and not textual_response and not called_fun in PREDEFINED_FUNCTIONS and (all(key in resp for key in tools[i].function.parameters['properties'].keys())) and (called_fun in self.api_params):
             self.gave_out_prefunction_call_message = False
             logger.info(f"Function call parameters {resp}")
             convert_to_request_log(resp, meta_info, self.model, "llm", direction="response", is_cached=False, run_id=self.run_id)
@@ -284,6 +306,25 @@ class OpenAiLLM(BaseLLM):
                 "meta_info": meta_info,
                 "called_fun": called_fun,
                 **resp
+            }
+
+            yield api_call_return, False, latency, True
+            
+        elif self.trigger_function_call and not textual_response and called_fun in PREDEFINED_FUNCTIONS:
+            func_dict = self.api_params[called_fun]
+            url = func_dict['url']
+            method = func_dict['method']
+            api_token = func_dict['api_token']
+
+            api_call_return = {
+                "url": url, 
+                "method":method.lower(), 
+                "param": None, 
+                "api_token":api_token, 
+                "model_args": None,
+                "meta_info": meta_info,
+                "called_fun": called_fun,
+                "resp" : None
             }
 
             yield api_call_return, False, latency, True
