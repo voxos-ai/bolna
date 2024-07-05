@@ -1,0 +1,42 @@
+services:
+
+  # main bolna service
+  bolna-app:
+    image: bolna-app:latest
+    build:
+      context: .
+      dockerfile: dockerfiles/bolna_server.Dockerfile
+    ports:
+      - "5001:5001"
+    depends_on:
+      - redis
+    env_file:
+        - .env
+    volumes:
+      - ../agent_data:/app/agent_data
+      - $HOME/.aws/credentials:/root/.aws/credentials:ro
+      - $HOME/.aws/config:/root/.aws/config:ro
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - NGROK_HOST=ngrok
+      - NGROK_PORT=4040
+
+  # redis service used as a persistent storage
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+
+  # ngrok for local tunneling
+  ngrok:
+    image: ngrok/ngrok:latest
+    restart: unless-stopped
+    command:
+      - "start"
+      - "--all"
+      - "--config"
+      - "/etc/ngrok.yml"
+    volumes:
+      - ./ngrok-config.yml:/etc/ngrok.yml
+    ports:
+      - 4040:4040
