@@ -60,5 +60,12 @@ class LlamaIndexRag(BaseAgent):
         logger.info(f"LLAMA INDEX: {message}")
         message, his = self.conversion(message)
         # message, history = self.conversion(histroy=history)
+        buffer:str = ""
         for token in self.agent.stream_chat(message.content,his).response_gen:
-            yield token, False, 0.99
+            buffer += " "+token
+            if len(buffer.split(" ")) >= 40:
+                yield buffer.strip(), False, 0.99
+                logger.info(f"LLM RESPONSE: {buffer}")
+                buffer = ""
+        logger.info(f"LLM RESPONSE: {buffer}")
+        yield buffer.strip(), False, 0.99
