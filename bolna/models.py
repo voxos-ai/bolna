@@ -2,6 +2,8 @@ import json
 from typing import Optional, List, Union, Dict
 from pydantic import BaseModel, Field, validator, ValidationError, Json
 from pydantic_core import PydanticCustomError
+
+from bolna.agent_types.base_agent import BaseAgent
 from .providers import *
 
 AGENT_WELCOME_MESSAGE = "This call is being recorded for quality assurance and training. Please speak now."
@@ -105,7 +107,7 @@ class Synthesizer(BaseModel):
 
 class IOModel(BaseModel):
     provider: str
-    format: str
+    format: Optional[str] = "wav"
 
     @validator("provider")
     def validate_provider(cls, value):
@@ -124,16 +126,20 @@ class Route(BaseModel):
 # Routes can be used for FAQs caching, prompt routing, guard rails, agent assist function calling
 class Routes(BaseModel):
     embedding_model: Optional[str] = "Snowflake/snowflake-arctic-embed-l"
-    routes: List[Route]
+    routes: Optional[List[Route]] = []
 
 class OpenaiAssistants(BaseModel):
     name: Optional[str] = None
     assistant_id: str = None
+    max_tokens: Optional[int] =100
+    temperature: Optional[int] = 0.2
+    buffer_size: Optional[int] = 100
+
 
 class LLM(BaseModel):
     model: Optional[str] = "gpt-3.5-turbo-16k"
     max_tokens: Optional[int] = 100
-    agent_flow_type: str = "streaming" #It can be openai_asssitant, streaming, agent_dag
+    agent_flow_type: str = "streaming" #It can be llamaindex_rag, simple_llm_agent, router_agent, dag_agent, openai_assistant, custom
     family: Optional[str] = "openai"
     temperature: Optional[float] = 0.1
     request_json: Optional[bool] = False
@@ -145,21 +151,15 @@ class LLM(BaseModel):
     presence_penalty: Optional[float] = 0.0
     provider: Optional[str] = "openai"
     base_url: Optional[str] = None
-    routes: Optional[Routes] = None
+    routes: Optional[Routes] = None 
+    route_details: Optional[Routes] = None #Just to reduce confusion
     extraction_details: Optional[str] = None
     summarization_details: Optional[str] = None
-
-class LLM_AGENT(BaseModel):
-    agent_type: str #can be streaming, openai_assistant, dag_based, etc 
-    extra_config: Union[OpenaiAssistants, LLM]
-
-class MessagingModel(BaseModel):
-    provider: str
-    template: str
-
+    prompt: Optional[str] = None
 
 class Node(BaseModel):
-    type: str
+    id: str
+    type: str #Can be router or conversation for now
     llm: LLM
     exit_criteria: str
     exit_response: Optional[str] = None
@@ -167,13 +167,26 @@ class Node(BaseModel):
     is_root: Optional[bool] = False
 
 class Edge(BaseModel):
-    start_node: Node
-    end_node: Node
+    start_node: str # Node ID
+    end_node: str
     condition: Optional[tuple] = None #extracted value from previous step and it's value
 
 class LLM_AGENT_GRAPH(BaseModel):
     nodes: List[Node]
     edges: List[Edge]
+
+class ROUTER_AGENT(BaseModel):
+    route_agent_map: Dict[str, LLM]
+
+class LLM_AGENT(BaseModel):
+    agent_flow_type: str
+    agent_type: str #can be llamaindex_rag, simple_llm_agent, router_agent, dag_agent, openai_assistant, custom, etc 
+    extra_config: Union[OpenaiAssistants, LLM_AGENT_GRAPH, ROUTER_AGENT, LLM]
+
+
+class MessagingModel(BaseModel):
+    provider: str
+    template: str
 
 # Need to redefine it
 class CalendarModel(BaseModel):
@@ -227,8 +240,7 @@ class Task(BaseModel):
     tools_config: ToolsConfig
     toolchain: ToolsChainModel
     task_type: Optional[str] = "conversation"  # extraction, summarization, notification
-    task_config: Optional[ConversationConfig] = dict() #Just keeping it for backwards compatibility
-    conversation_config: ConversationConfig = dict()
+    task_config: ConversationConfig = dict()
     
 class AgentModel(BaseModel):
     agent_name: str

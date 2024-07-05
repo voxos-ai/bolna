@@ -906,7 +906,7 @@ class TaskManager(BaseManager):
                 messages.append({"role": "assistant", "content": llm_response})
                 self.history = copy.deepcopy(messages)
                 await self._handle_llm_output(next_step, llm_response, should_bypass_synth, meta_info)
-                convert_to_request_log(message = llm_response, meta_info= meta_info, component="llm", direction="response", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
+                convert_to_request_log(message = llm_response, meta_info= meta_info, component="llm", direction="response", model=self.tools["llm_agent"].get_model(), run_id= self.run_id)
         
         if self.stream and llm_response != PRE_FUNCTION_CALL_MESSAGE:
             logger.info(f"Storing {llm_response} into history should_trigger_function_call {should_trigger_function_call}")

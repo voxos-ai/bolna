@@ -14,7 +14,7 @@ logger = configure_logger(__name__)
 
 
 class OpenAIAssistantAgent(BaseAgent):
-    def __init__(self, name, assistant_id, max_tokens = 100, temperature = 0.2, **kwargs):
+    def __init__(self, name, assistant_id, max_tokens = 100, temperature = 0.2, buffer_size = 100, **kwargs):
         super().__init__()
         self.name = name
         self.assistant_id = assistant_id
@@ -22,6 +22,7 @@ class OpenAIAssistantAgent(BaseAgent):
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.started_streaming = False
+        self.buffer_size = buffer_size
         if self.custom_tools is not None:
             self.trigger_function_call = True
             self.api_params = self.custom_tools['tools_params']
