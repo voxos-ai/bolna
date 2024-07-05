@@ -46,6 +46,8 @@ class LiteLLM(BaseLLM):
             if "api_version" in kwargs:
                 self.model_args["api_version"] = kwargs["api_version"]
 
+    def get_model(self):
+        return self.model
     async def generate_stream(self, messages, synthesize=True, meta_info = None):
         answer, buffer = "", ""
         model_args = self.model_args.copy()

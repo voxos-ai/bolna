@@ -66,7 +66,8 @@ class OpenAiLLM(BaseLLM):
         self.run_id = kwargs.get("run_id", None)
         self.gave_out_prefunction_call_message = False
     
-    
+    def get_model(self):
+        return self.model
     async def generate_stream(self, messages, synthesize=True, request_json=False, meta_info = None):
         if len(messages) == 0:
             raise Exception("No messages provided")

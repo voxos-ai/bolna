@@ -467,16 +467,18 @@ class TaskManager(BaseManager):
 
     def __setup_tasks(self, llm = None):
         if self.task_config["task_type"] == "conversation":
-            if "agent_flow_type" in  self.task_config["tools_config"]["llm_agent"]:
-                if self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "streaming":
+            agent_type = self.task_config["tools_config"]["llm_agent"].get("agent_type","simple_llm_agent")
+            if agent_type == "simple_llm_agent":
                     self.tools["llm_agent"] = StreamingContextualAgent(llm)
-                elif self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] in ("preprocessed", "formulaic"):
-                    preprocessed = self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "preprocessed"
-                    self.tools["llm_agent"] = GraphBasedConversationAgent(llm, context_data=self.context_data,
-                                                                        prompts=self.prompts, preprocessed=preprocessed)
-            elif self.task_config["tools_config"]["llm_agent"]["agent_type"] == "openai_assistant":
+                # elif self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] in ("preprocessed", "formulaic"):
+                #     preprocessed = self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "preprocessed"
+                #     self.tools["llm_agent"] = GraphBasedConversationAgent(llm, context_data=self.context_data,
+                #                                                         prompts=self.prompts, preprocessed=preprocessed)
+            elif agent_type == "openai_assistant":
                 logger.info("setting up backend as openai_assistants")
                 self.tools["llm_agent"] = OpenAIAssistantAgent(**self.task_config["tools_config"]["llm_agent"]['extra_config'])
+            else:
+                raise(f"{agent_type} Agent type is not created yet")
 
         elif self.task_config["task_type"] == "extraction":
             logger.info("Setting up extraction agent")
@@ -504,7 +506,8 @@ class TaskManager(BaseManager):
     ########################
     async def load_prompt(self, assistant_name, task_id, local, **kwargs):
         logger.info("prompt and config setup started")
-        if self.task_config["task_type"] == "webhook" or self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "openai_assistant":
+        agent_type = self.task_config["tools_config"]["llm_agent"].get("agent_type", "simple_llm_agent")
+        if self.task_config["task_type"] == "webhook" or agent_type in ["openai_assistant", "llamaindex_rag_agent"]:
             return
         self.is_local = local
         
@@ -957,7 +960,7 @@ class TaskManager(BaseManager):
             logger.info(f"Message {messages} history {self.history}")
             messages.append({'role': 'user', 'content': message['data']})
             ### TODO CHECK IF THIS IS EVEN REQUIRED
-            convert_to_request_log(message=format_messages(messages, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
+            convert_to_request_log(message=format_messages(messages, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model= self.tools["llm_agent"].get_model(), run_id= self.run_id)
             await self.__do_llm_generation(messages, meta_info, next_step, should_bypass_synth)
             # TODO : Write a better check for completion prompt 
             if self.use_llm_to_determine_hangup and not self.turn_based_conversation:
