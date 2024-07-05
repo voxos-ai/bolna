@@ -300,6 +300,8 @@ class TaskManager(BaseManager):
                     self.filler_preset_directory = f"{os.getenv('FILLERS_PRESETS_DIR')}/{self.synthesizer_voice.lower()}"
 
     def __has_extra_config(self):
+        if self.task_config["task_type"] == "webhook":
+            return False
         extra_config = self.task_config['tools_config']["llm_agent"].get("extra_config", None)
         return False if extra_config is None else True
 
@@ -1227,18 +1229,16 @@ class TaskManager(BaseManager):
     def __enqueue_chunk(self, chunk, i, number_of_chunks, meta_info):
         logger.info(f"Meta_info of chunk {meta_info} {i} {number_of_chunks}")
         meta_info['chunk_id'] = i
+        copied_meta_info = copy.deepcopy(meta_info)
         if i == 0 and "is_first_chunk" in meta_info and meta_info["is_first_chunk"]:
-            copied_meta_info = copy.deepcopy(meta_info)
             logger.info(f"##### Sending first chunk")
             copied_meta_info["is_first_chunk_of_entire_response"] = True
-            self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, copied_meta_info))
-        elif i == number_of_chunks - 1 and (meta_info['sequence_id'] == -1 or ("end_of_synthesizer_stream" in meta_info and meta_info['end_of_synthesizer_stream'])):
+        
+        if i == number_of_chunks - 1 and (meta_info['sequence_id'] == -1 or ("end_of_synthesizer_stream" in meta_info and meta_info['end_of_synthesizer_stream'])):
             logger.info(f"##### Truly a final chunk")
-            copied_meta_info = meta_info.copy()
             copied_meta_info["is_final_chunk_of_entire_response"] = True
-            self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, copied_meta_info))
-        else:
-            self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, meta_info))
+            
+        self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, copied_meta_info))
 
     async def __listen_synthesizer(self):
         try:
@@ -1300,7 +1300,7 @@ class TaskManager(BaseManager):
 
     async def __send_preprocessed_audio(self, meta_info, text):
         meta_info = copy.deepcopy(meta_info)
-        yield_in_chunks = self.yield_chunks
+        yield_in_chunks = self.yield_chunks if self.first_message_passed == True else False
         try:
             #TODO: Either load IVR audio into memory before call or user s3 iter_cunks
             # This will help with interruption in IVR
@@ -1337,17 +1337,18 @@ class TaskManager(BaseManager):
                             logger.info(f"File doesn't exist in S3. Hence we're synthesizing it from synthesizer")
                             meta_info['cached'] = False
                             await self._synthesize(create_ws_data_packet(meta_info['text'], meta_info= meta_info))
+                            return
                         else:
                             logger.info(f"Sending the agent welcome message")
                             meta_info['is_first_chunk'] = True
-                if yield_in_chunks:
+                if yield_in_chunks and audio_chunk is not None:
                     i = 0
                     number_of_chunks = math.ceil(len(audio_chunk)/self.output_chunk_size)
                     logger.info(f"Audio chunk size {len(audio_chunk)}, chunk size {self.output_chunk_size}")
                     for chunk in yield_chunks_from_memory(audio_chunk, chunk_size=self.output_chunk_size):
                         self.__enqueue_chunk(chunk, i, number_of_chunks, meta_info)
                         i +=1
-                else:
+                elif audio_chunk is not None:
                     meta_info['chunk_id'] = 1
                     meta_info["is_first_chunk_of_entire_response"] = True
                     meta_info["is_final_chunk_of_entire_response"] = True
@@ -1504,7 +1505,7 @@ class TaskManager(BaseManager):
 
                 if "is_first_chunk_of_entire_response" in message['meta_info'] and message['meta_info']['is_first_chunk_of_entire_response']:
                     logger.info(f"First chunk stuff")
-                    self.started_transmitting_audio = True
+                    self.started_transmitting_audio = True if "is_final_chunk_of_entire_response" not in message['meta_info'] else False
                     self.consider_next_transcript_after = time.time() + self.duration_to_prevent_accidental_interruption
                     self.__process_latency_data(message) 
                 else:
