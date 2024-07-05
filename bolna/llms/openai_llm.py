@@ -51,6 +51,7 @@ class OpenAiLLM(BaseLLM):
                 llm_key = kwargs['llm_key']
             self.async_client = AsyncOpenAI(api_key=llm_key)
             api_key = llm_key
+
         self.assistant_id = kwargs.get("assistant_id", None)
         if self.assistant_id:
             logger.info(f"Initializing OpenAI assistant with assistant id {self.assistant_id}")
@@ -64,7 +65,8 @@ class OpenAiLLM(BaseLLM):
         self.run_id = kwargs.get("run_id", None)
         self.gave_out_prefunction_call_message = False
     
-    
+    def get_model(self):
+        return self.model
     async def generate_stream(self, messages, synthesize=True, request_json=False, meta_info = None):
         if len(messages) == 0:
             raise Exception("No messages provided")
@@ -137,6 +139,7 @@ class OpenAiLLM(BaseLLM):
             method = func_dict['method']
             param = func_dict['param']
             api_token = func_dict['api_token']
+
             api_call_return = {
                 "url": url, 
                 "method":method.lower(), 
@@ -212,12 +215,14 @@ class OpenAiLLM(BaseLLM):
 
         answer, buffer, resp, called_fun, api_params, i = "", "", "", "", "", 0
         logger.info(f"request to open ai {message} max tokens {self.max_tokens} ")
+
         latency = False
         start_time = time.time()
         textual_response = False
 
         if self.trigger_function_call:
             tools = self.tools
+
         
         thread_id = self.openai.beta.threads.create(messages= message[1:-2]).id
 
@@ -256,6 +261,7 @@ class OpenAiLLM(BaseLLM):
                     yield buffer, False, latency, False
                     buffer = ''
                 yield buffer, False, latency, False
+
                 buffer = ''
                 
                 if (text_chunk := chunk.data.delta.step_details.tool_calls[0].function.arguments):
@@ -287,7 +293,6 @@ class OpenAiLLM(BaseLLM):
             resp = json.loads(resp)
             func_dict = self.api_params[called_fun]
             logger.info(f"Payload to send {resp} func_dict {func_dict}")
-            
             url = func_dict['url']
             method = func_dict['method']
             param = func_dict['param']
@@ -304,6 +309,7 @@ class OpenAiLLM(BaseLLM):
             }
 
             yield api_call_return, False, latency, True
+            
         elif self.trigger_function_call and not textual_response and called_fun in PREDEFINED_FUNCTIONS:
             func_dict = self.api_params[called_fun]
             url = func_dict['url']
