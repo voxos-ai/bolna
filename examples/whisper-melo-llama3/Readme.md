@@ -53,7 +53,8 @@ curl --location 'http://192.168.1.10:5001/agent' \
           "transcriber": {
             "encoding": "linear16",
             "language": "en",
-            "model": "whisper",
+            "model": "small",
+            "provider": "whisper",
             "stream": true,
             "task": "transcribe"
           },
