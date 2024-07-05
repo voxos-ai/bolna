@@ -68,4 +68,4 @@ class LlamaIndexRag(BaseAgent):
                 logger.info(f"LLM RESPONSE: {buffer}")
                 buffer = ""
         logger.info(f"LLM RESPONSE: {buffer}")
-        yield buffer.strip(), False, 0.99
+        yield buffer.strip(), True, 0.99
