@@ -1,6 +1,6 @@
 region: us
 version: '2'
-authtoken: 2f7xLlOjTrniEoEaR5TzjDGynMM_6ttKnBsXnLtv1B1RwK65P
+authtoken: <ngrok auth token>
 tunnels:
   bolna-app:
     addr: bolna-app:5001

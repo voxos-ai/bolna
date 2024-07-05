@@ -6,8 +6,6 @@ Introducing our Dockerized solution! Seamlessly merge [Bolna](https://github.com
 ```shell
 docker compose up -d
 ```
-the output something like this
-![alt text](./img/docker_up.png "docker compose up -d")
 
 note: make sure that your all service were runing
 
@@ -16,7 +14,7 @@ note: make sure that your all service were runing
 ### Creating Agent
 for creating agent you have to execute following command mention below
 ```shell
-curl --location 'http://0.0.0.0:5001/agent' \
+curl --location 'http://192.168.1.10:5001/agent' \
 --header 'Content-Type: application/json' \
 --data '{
   "agent_config": {
@@ -99,7 +97,9 @@ curl --location 'http://0.0.0.0:5001/agent' \
 
 ```
 below given is the response 
-![alt text](./img/agent_res.png "agent response")
+```
+{"agent_id":"dcfe02de-bOdf-4589-b15b-64c76f0077d0", "state" : "created" }
+```
 save / copy the agent_id we have to use in next step
 
 ### Connect frontend to the websocket call
@@ -110,7 +110,6 @@ save / copy the agent_id we have to use in next step
 ```shell
 docker compose down
 ```
-![alt text](./img/docker_dw.png "docker compose up -d")
 
 ### Conservation DENO
 This is demo using below prompt to the LLM
