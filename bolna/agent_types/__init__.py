@@ -6,3 +6,4 @@ from .webhook_agent import WebhookAgent
 from .openai_assistant import OpenAIAssistantAgent
 from .llama_index_rag_agent import LlamaIndexRag
 from .llama_index_rag_agent_new import LlamaIndexRagNew
+from .llama_index_simple_query import LlamaIndexSimpleRag

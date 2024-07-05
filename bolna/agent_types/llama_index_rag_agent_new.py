@@ -31,16 +31,17 @@ class LlamaIndexRagNew(BaseAgent):
         Settings.llm = OpenAI(model=self.model, temperature=self.temperature, api_key=self.OPENAI_KEY)
 
         # Initialize components
-        asyncio.run(self.initialize_components())
+        # asyncio.run(self.initialize_components())
+        self.initialize_components()
 
-    async def initialize_components(self):
+    def initialize_components(self):
         self.vector_store = LanceDBVectorStore(lance_db, table_name=self.vector_id)
         storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
         
-        loop = asyncio.get_running_loop()
-        with ThreadPoolExecutor() as pool:
-            self.vector_index = await loop.run_in_executor(pool, VectorStoreIndex.from_vector_store, storage_context.vector_store)
-        
+        # loop = asyncio.get_running_loop()
+        # with ThreadPoolExecutor() as pool:
+        #     self.vector_index = await loop.run_in_executor(pool, VectorStoreIndex.from_vector_store, storage_context.vector_store)
+        self.vector_index =  VectorStoreIndex.from_vector_store(storage_context.vector_store)
         self.query_engine = self.vector_index.as_query_engine(similarity_top_k=8, streaming=True)
         
         self.tools = [
@@ -54,11 +55,11 @@ class LlamaIndexRagNew(BaseAgent):
         ]
 
         # Routing Query Engine
-        self.r_agent = RouterQueryEngine(
-            query_engine_tools = self.tools,
-            selector = LLMSingleSelector.from_defaults(),
-            verbose = True
-        )
+        # self.r_agent = RouterQueryEngine(
+        #     query_engine_tools = self.tools,
+        #     selector = LLMSingleSelector.from_defaults(),
+        #     verbose = True
+        # )
 
         # LLM Agent
         self.agent = OpenAIAgent.from_tools(tools=self.tools, verbose=True)
@@ -80,7 +81,7 @@ class LlamaIndexRagNew(BaseAgent):
 
             async with asyncio.TaskGroup() as tg:
                 agent_task = tg.create_task(asyncio.to_thread(self.agent.stream_chat, message.content, chat_history=history))
-                vector_task = tg.create_task(asyncio.to_thread(self.vector_index.as_query_engine().message.content, message.content))
+                vector_task = tg.create_task(asyncio.to_thread(self.vector_index.as_query_engine(), message.content))
 
             logger.info("Agent Streaming Result:")
             for token in agent_task.result().response_gen:

@@ -454,9 +454,19 @@ class TaskManager(BaseManager):
             if self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "streaming":
                 self.tools["llm_agent"] = StreamingContextualAgent(llm)
             # llama index rag
+                
             elif self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "llama-index-rag":
+                # logger.info(f"vector id{self.task_config['tools_config']['llm_agent'].get('vector_id')}")
                 self.tools["llm_agent"] = LlamaIndexRag(
-                        vector_id=self.task_config["tools_config"]["llm_agent"].get("vector_id","a37a7bd5-64d8-44fa-84e0-05db3e99e8e8"),
+                        vector_id=self.task_config["tools_config"]["llm_agent"].get("vector_id"),
+                        temperature=0.1,
+                        model=self.task_config["tools_config"]["llm_agent"]["model"]
+                    )
+            # simple rag
+            elif self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "llama-index-rag-simple":
+                # logger.info(f"vector id{self.task_config['tools_config']['llm_agent'].get('vector_id')}")
+                self.tools["llm_agent"] = LlamaIndexSimpleRag(
+                        vector_id=self.task_config["tools_config"]["llm_agent"].get("vector_id"),
                         temperature=0.1,
                         model=self.task_config["tools_config"]["llm_agent"]["model"]
                     )
