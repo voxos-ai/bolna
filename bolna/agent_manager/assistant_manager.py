@@ -26,9 +26,7 @@ class AssistantManager(BaseManager):
         self.output_queue = output_queue
         self.kwargs = kwargs
         self.conversation_history = conversation_history
-        logger.info("####")
-        self.kwargs['agent_welcome_message'] = agent_config.get('agent_welcome_message', AGENT_WELCOME_MESSAGE)
-        logger.info("####")
+        self.kwargs['agent_welcome_message'] = update_prompt_with_context(agent_config.get('agent_welcome_message', AGENT_WELCOME_MESSAGE), context_data)
 
     async def run(self, local=False, run_id=None):
         """

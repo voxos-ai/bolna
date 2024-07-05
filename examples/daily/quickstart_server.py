@@ -110,8 +110,7 @@ async def websocket_endpoint(agent_id: str, websocket: WebSocket, user_agent: st
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=404, detail="Agent not found")
-
-    assistant_manager = AssistantManager(agent_config, websocket, agent_id, room_url)
+    assistant_manager = AssistantManager(agent_config, websocket, agent_id, room_url=room_url)
 
     try:
         async for index, task_output in assistant_manager.run(local=True):
