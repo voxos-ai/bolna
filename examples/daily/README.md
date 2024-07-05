@@ -1,5 +1,5 @@
 # Bolna With Daily
-Introducing our Dockerized solution! Seamlessly merge [Bolna](https://github.com/bolna-ai/bolna) with [Daily](https://github.com/daily-co) for websocket connection we use daily and for tunning we use ngrok. This is docker compose by which you can host bolna server Daily together in cloud just by clone this repo  and follow these simple steps to deploy, but before that you have to make sure that you have [docker](https://docs.docker.com/engine/install/) and [docker compose](https://docs.docker.com/compose/install/) and make a .env file refer to .env-sample and also put ngrok auth token in ngrok-config.yml file
+Introducing our Dockerized solution! Seamlessly merge [Bolna](https://github.com/bolna-ai/bolna) with [Daily](https://github.com/daily-co) for websocket connection. This is docker compose by which you can host bolna server Daily together in cloud just by clone this repo  and follow these simple steps to deploy, but before that you have to make sure that you have [docker](https://docs.docker.com/engine/install/) and [docker compose](https://docs.docker.com/compose/install/) and make a .env file refer to .env-sample.
 
 
 ### Start Serices

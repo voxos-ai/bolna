@@ -1,7 +1,0 @@
-region: us
-version: '2'
-authtoken: <ngrok auth token>
-tunnels:
-  bolna-app:
-    addr: bolna-app:5001
-    proto: http
