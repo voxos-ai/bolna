@@ -10,6 +10,8 @@ import uuid
 import copy
 from datetime import datetime
 
+import aiohttp
+
 from bolna.constants import ACCIDENTAL_INTERRUPTION_PHRASES, FILLER_DICT, PRE_FUNCTION_CALL_MESSAGE
 from bolna.helpers.function_calling_helpers import trigger_api
 from bolna.memory.cache.vector_cache import VectorCache
@@ -230,7 +232,6 @@ class TaskManager(BaseManager):
                     self.__setup_routes(self.routes)
                     logger.info(f"Time to setup routes {time.time() - start_time}")
 
-            
 
         # for long pauses and rushing
             if conversation_config is not None:
@@ -308,6 +309,8 @@ class TaskManager(BaseManager):
                     self.filler_preset_directory = f"{os.getenv('FILLERS_PRESETS_DIR')}/{self.synthesizer_voice.lower()}"
 
     def __has_extra_config(self):
+        if self.task_config["task_type"] == "webhook":
+            return False
         extra_config = self.task_config['tools_config']["llm_agent"].get("extra_config", None)
         return False if extra_config is None else True
 
@@ -823,13 +826,31 @@ class TaskManager(BaseManager):
         await self._handle_llm_output(next_step, filler, should_bypass_synth, new_meta_info, is_filler = True)
     
     async def __execute_function_call(self, url, method, param, api_token, model_args, meta_info, next_step, called_fun, **resp):
+        if called_fun == "transfer_call":
+            call_sid = self.tools["input"].get_call_sid()
+            user_id, agent_id = self.assistant_id.split("/")
+
+            if url is None:
+                url = os.getenv("CALL_TRANSFER_WEBHOOK_URL")
+                payload = {'call_sid': call_sid, "agent_id": agent_id, "user_id": user_id }
+            else:
+                payload = {'call_sid': call_sid, "agent_id": agent_id }
+            async with aiohttp.ClientSession() as session:
+                logger.info(f"Sending the payload to stop the conversation {payload} url {url}")
+                async with session.post(url, json = payload) as response:
+                    response_text = await response.text()
+                    logger.info(f"Response from the server after call transfer: {response_text}")
+                    return
+                
         response = await trigger_api(url= url, method=method.lower(), param= param, api_token= api_token, **resp)
         content = f"We did made a function calling for user. We hit the function : {called_fun}, we hit the url {url} and send a {method} request and it returned us the response as given below: {str(response)} \n\n . Kindly understand the above response and convey this response in a context to user."
         model_args["messages"].append({"role":"system","content":content})
         logger.info(f"Logging function call parameters ")
         convert_to_request_log(format_messages(model_args['messages'], True), meta_info, self.llm_config['model'], "llm", direction = "request", is_cached= False, run_id = self.run_id)
-        await self.__do_llm_generation(model_args["messages"], meta_info, next_step, should_trigger_function_call = True)
-
+        if called_fun != "transfer_call":
+            await self.__do_llm_generation(model_args["messages"], meta_info, next_step, should_trigger_function_call = True)
+            
+            
     def __store_into_history(self, meta_info, messages, llm_response, should_trigger_function_call = False):
         if self.current_request_id in self.llm_rejected_request_ids:
             logger.info("##### User spoke while LLM was generating response")
@@ -1222,18 +1243,16 @@ class TaskManager(BaseManager):
     def __enqueue_chunk(self, chunk, i, number_of_chunks, meta_info):
         logger.info(f"Meta_info of chunk {meta_info} {i} {number_of_chunks}")
         meta_info['chunk_id'] = i
+        copied_meta_info = copy.deepcopy(meta_info)
         if i == 0 and "is_first_chunk" in meta_info and meta_info["is_first_chunk"]:
-            copied_meta_info = copy.deepcopy(meta_info)
             logger.info(f"##### Sending first chunk")
             copied_meta_info["is_first_chunk_of_entire_response"] = True
-            self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, copied_meta_info))
-        elif i == number_of_chunks - 1 and (meta_info['sequence_id'] == -1 or ("end_of_synthesizer_stream" in meta_info and meta_info['end_of_synthesizer_stream'])):
+        
+        if i == number_of_chunks - 1 and (meta_info['sequence_id'] == -1 or ("end_of_synthesizer_stream" in meta_info and meta_info['end_of_synthesizer_stream'])):
             logger.info(f"##### Truly a final chunk")
-            copied_meta_info = meta_info.copy()
             copied_meta_info["is_final_chunk_of_entire_response"] = True
-            self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, copied_meta_info))
-        else:
-            self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, meta_info))
+            
+        self.buffered_output_queue.put_nowait(create_ws_data_packet(chunk, copied_meta_info))
 
     async def __listen_synthesizer(self):
         try:
@@ -1295,7 +1314,7 @@ class TaskManager(BaseManager):
 
     async def __send_preprocessed_audio(self, meta_info, text):
         meta_info = copy.deepcopy(meta_info)
-        yield_in_chunks = self.yield_chunks
+        yield_in_chunks = self.yield_chunks if self.first_message_passed == True else False
         try:
             #TODO: Either load IVR audio into memory before call or user s3 iter_cunks
             # This will help with interruption in IVR
@@ -1332,17 +1351,18 @@ class TaskManager(BaseManager):
                             logger.info(f"File doesn't exist in S3. Hence we're synthesizing it from synthesizer")
                             meta_info['cached'] = False
                             await self._synthesize(create_ws_data_packet(meta_info['text'], meta_info= meta_info))
+                            return
                         else:
                             logger.info(f"Sending the agent welcome message")
                             meta_info['is_first_chunk'] = True
-                if yield_in_chunks:
+                if yield_in_chunks and audio_chunk is not None:
                     i = 0
                     number_of_chunks = math.ceil(len(audio_chunk)/self.output_chunk_size)
                     logger.info(f"Audio chunk size {len(audio_chunk)}, chunk size {self.output_chunk_size}")
                     for chunk in yield_chunks_from_memory(audio_chunk, chunk_size=self.output_chunk_size):
                         self.__enqueue_chunk(chunk, i, number_of_chunks, meta_info)
                         i +=1
-                else:
+                elif audio_chunk is not None:
                     meta_info['chunk_id'] = 1
                     meta_info["is_first_chunk_of_entire_response"] = True
                     meta_info["is_final_chunk_of_entire_response"] = True
@@ -1499,7 +1519,7 @@ class TaskManager(BaseManager):
 
                 if "is_first_chunk_of_entire_response" in message['meta_info'] and message['meta_info']['is_first_chunk_of_entire_response']:
                     logger.info(f"First chunk stuff")
-                    self.started_transmitting_audio = True
+                    self.started_transmitting_audio = True if "is_final_chunk_of_entire_response" not in message['meta_info'] else False
                     self.consider_next_transcript_after = time.time() + self.duration_to_prevent_accidental_interruption
                     self.__process_latency_data(message) 
                 else:

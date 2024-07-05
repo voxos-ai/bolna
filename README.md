@@ -121,7 +121,7 @@ Once you have the above docker setup and running, you can create agents and init
                     "transcriber": {
                         "encoding": "linear16",
                         "language": "en",
-                        "model": "deepgram",
+                        "provider": "deepgram",
                         "stream": true
                     }
                 },
