@@ -220,6 +220,14 @@ curl --request POST \
 		}
 	],
 	"agent_type": "Lead Qualification"
-	}
+	},
+    "agent_prompts": {
+        "task_2" : {
+            "system_prompt" : "summarize the conversation"
+        },
+        "task_3" : {
+             "system_prompt" : "Extract the user sentiment in json with the key  'sentiment' "
+        }
+    }
 }
 ```
