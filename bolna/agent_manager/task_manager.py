@@ -464,6 +464,16 @@ class TaskManager(BaseManager):
             agent_type = self.task_config["tools_config"]["llm_agent"].get("agent_type", self.task_config["tools_config"]["llm_agent"]["agent_flow_type"])
             if agent_type == "streaming":
                 self.tools["llm_agent"] = StreamingContextualAgent(llm)
+            #----------------------------------------
+            elif agent_type == "llama_rag":
+                self.tools["llm_agent"] = LlamaIndexRag(
+                    vector_id=self.task_config["tools_config"]["llm_agent"]["vector_id"],
+                    temperature = self.task_config["tools_config"]["llm_agent"]["temperature"],
+                    model = self.task_config["tools_config"]["llm_agent"]["model"]
+                )
+                #TODO:
+                #1. add other parameter
+            #-----------------------------------------
             elif agent_type == "openai_assistant":
                 logger.info("setting up backend as openai_assistants")
                 self.tools["llm_agent"] = OpenAIAssistantAgent(llm)
