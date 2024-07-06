@@ -1,5 +1,5 @@
 # Bolna With Daily
-Introducing our Dockerized solution! Seamlessly merge [Bolna](https://github.com/bolna-ai/bolna) with [Daily](https://github.com/daily-co) for websocket connection. This is docker compose by which you can host bolna server Daily together in cloud just by clone this repo  and follow these simple steps to deploy, but before that you have to make sure that you have [docker](https://docs.docker.com/engine/install/) and [docker compose](https://docs.docker.com/compose/install/) and make a .env file refer to .env-sample.
+Seamlessly merge [Bolna](https://github.com/bolna-ai/bolna) with [Daily](https://github.com/daily-co) for websocket connection. This is docker compose by which you can host bolna server Daily together in cloud just by clone this repo  and follow these simple steps to deploy, but before that you have to make sure that you have [docker](https://docs.docker.com/engine/install/) and [docker compose](https://docs.docker.com/compose/install/) and make a .env file refer to .env-sample.
 
 in .env file kindly save
 DAILY_API_KEY = YOUR_DAILY_API_KEY
@@ -105,6 +105,9 @@ below given is the response
 save / copy the agent_id we have to use in next step
 
 ### Connect frontend to the websocket call
+
+Example frontent - https://codefile.io/f/rWIsJ0GztJ
+
 1. Connect your frontend with the (’/chat/v1/{agent_id}’) websocket and use the agent_id you saved in above step. It's that easy!
 2. Our daily web-socket call will be up and running, so you can start chatting with the agent through your frontend!
 
@@ -113,7 +116,7 @@ save / copy the agent_id we have to use in next step
 docker compose down
 ```
 
-### Conservation DENO
+### Conservation DEMO
 This is demo using below prompt to the LLM
 ```json
 "task_1": {
