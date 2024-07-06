@@ -15,7 +15,7 @@ import asyncio
 from .logger_config import configure_logger
 dotenv.load_dotenv()
 
-lance_db = os.getenv("LANCEDB_DIR","RAG")
+lance_db = "/tmp/RAG"
 llama_cloud_key = os.getenv("LLAMA_CLOUD_API_KEY")
 chatgpt = os.getenv("OPENAI_API_KEY")
 logger = configure_logger(__name__)
@@ -30,8 +30,8 @@ async def ingestion_task(temp_file_name:str,table_name:str,chunk_size:int = 512,
     embed_model = OpenAIEmbedding(model="text-embedding-3-small",api_key=chatgpt)
     llm = OpenAI(model="gpt-3.5-turbo", temperature=0.2,api_key=chatgpt)
     logger.info(f"Emdeding model, LLM model and Llama Parser were loaded")
-    if LanceDBVectorStore(f"./{lance_db}")._table_exists(table_name):
-        vector_store = LanceDBVectorStore(f"./{lance_db}",table_name,mode="append")
+    if LanceDBVectorStore(lance_db)._table_exists(table_name):
+        vector_store = LanceDBVectorStore(lance_db,table_name,mode="append")
         logger.info(f"vector store is loaded")
         docs = await parser.aload_data(temp_file_name)
         node_parser = MarkdownElementNodeParser(num_workers=8,llm=llm)
@@ -43,7 +43,7 @@ async def ingestion_task(temp_file_name:str,table_name:str,chunk_size:int = 512,
         storage_context = StorageContext.from_defaults(vector_store=vector_store)
         vector_index = VectorStoreIndex(nodes=nodes,storage_context=storage_context,embed_model=embed_model)
     else:
-        vector_store = LanceDBVectorStore(f"./{lance_db}",table_name)
+        vector_store = LanceDBVectorStore(lance_db,table_name)
         logger.info(f"vector store is loaded")
         docs = await parser.aload_data(temp_file_name)
         node_parser = MarkdownElementNodeParser(num_workers=8,llm=llm)

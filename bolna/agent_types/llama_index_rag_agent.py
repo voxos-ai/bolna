@@ -24,15 +24,17 @@ class LlamaIndexRag(BaseAgent):
         self.temperature = temperature
         self.model = model
         self.OPENAI_KEY = os.getenv('OPENAI_API_KEY')
+        logger.info(f"LLAMA INDEX VALUES :{(lance_db,vector_id)}")
         self.llm = OpenAI(model=self.model, temperature=self.temperature,api_key=self.OPENAI_KEY)
-        self.vector_store = LanceDBVectorStore(f"./{lance_db}",self.vector_id)
+        self.vector_store = LanceDBVectorStore(uri=lance_db,table_name=self.vector_id)
         storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
-        vector_index = VectorStoreIndex.from_vector_store(storage_context.vector_store)
+        vector_index = VectorStoreIndex(nodes=[],storage_context=storage_context)
+        self.query_engine = vector_index.as_query_engine()
+        res = self.query_engine.query("who is inside this doc")
+        logger.info(f"TEST QUERY: {res}")
         self.tools = [
             QueryEngineTool(
-                vector_index.as_query_engine(
-                    similarity_top_k=8
-                ),
+               vector_index.as_query_engine(),
                 metadata=ToolMetadata(
                     name="search",
                     description="Search the document, pass the entire user message in the query",
@@ -60,8 +62,9 @@ class LlamaIndexRag(BaseAgent):
                 latency = time.time() - __
             buffer += " "+token
             if len(buffer.split(" ")) >= 40:
-                yield buffer.strip(), False, latency
+                yield buffer.strip(), False, latency, False
                 logger.info(f"LLM BUFFER FULL BUFFER OUTPUT: {buffer}")
                 buffer = ""
         logger.info(f"LLM BUFFER FLUSH BUFFER OUTPUT: {buffer}")
-        yield buffer.strip(), True, latency
+        if len(buffer) > 0:
+            yield buffer.strip(), True, latency, False

@@ -140,7 +140,7 @@ Once you have the above docker setup and running, you can create agents and init
 ```
 </details>
 
-2. The response of the previous API will return a uuid as the `agent_id`. Use this `agent_id` to initiate a call via the telephony server running on `8001` port (for Twilio) or `8002` port (for Plivo) at `http://localhost:8001/call`
+1. The response of the previous API will return a uuid as the `agent_id`. Use this `agent_id` to initiate a call via the telephony server running on `8001` port (for Twilio) or `8002` port (for Plivo) at `http://localhost:8001/call`
 
 <details>
 <summary>Call Payload</summary><br>
