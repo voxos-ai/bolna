@@ -13,6 +13,7 @@ from llama_index.core import StorageContext
 from llama_index.core.llms import ChatMessage
 from llama_index.agent.openai import OpenAIAgent
 import time
+import asyncio
 
 dotenv.load_dotenv()
 logger = configure_logger(__name__)
@@ -57,11 +58,15 @@ class LlamaIndexRag(BaseAgent):
 
     async def generate(self, message, **k):
         logger.info(f"Genrate function Input: {message}")
-        message, his = self.conversion(message)
+        
+        # message, his = self.conversion(message)
+        message, his = await asyncio.to_thread(self.conversion,message)
         buffer:str = ""
         latency:float = -1
         __ = time.time()
-        for token in self.agent.stream_chat(message.content,his).response_gen:
+        token_genrator = await asyncio.to_thread(self.agent.stream_chat,message.content,his)
+        # for token in self.agent.stream_chat(message.content,his).response_gen:
+        for token in token_genrator.response_gen:
             if latency < 0:
                 latency = time.time() - __
             buffer += " "+token

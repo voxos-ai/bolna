@@ -47,20 +47,6 @@ async def start_ingestion(table_id:str,file:UploadFile):
     if file.content_type in ["application/pdf","application/x-pdf"]:
         temp_file = tempfile.NamedTemporaryFile()
         temp_file.write(await file.read())
-        # TODO: make function which take temp file name and process it
-
-        #PROBLEM: did able to work but give error when working with two file process together 
-        ## i think there were some issue of event loop
-        # prev = temp_file.name
-        # table = str(uuid.uuid4())
-        # file_name = f"/tmp/{table}.pdf"
-        # os.rename(prev,file_name)
-        # await ingestion_task(temp_file_name=file_name,table_name=table)
-        # os.rename(file_name,prev)
-        # return {"status":"sucess","message":table}
-
-        ## next idea is to make new thread for each job and use structure i use in my manager
-        # its working now 
         prev = temp_file.name
         if table_id != "None":
             table = table_id

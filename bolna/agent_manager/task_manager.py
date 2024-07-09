@@ -25,8 +25,13 @@ from bolna.helpers.logger_config import configure_logger
 from semantic_router import Route
 from semantic_router.layer import RouteLayer
 from semantic_router.encoders import FastEmbedEncoder
+from concurrent.futures import ThreadPoolExecutor
 
 asyncio.get_event_loop().set_debug(True)
+
+# this is exp.. can we change
+# asyncio.get_event_loop().set_default_executor(ThreadPoolExecutor(20))
+
 logger = configure_logger(__name__)
 
 
