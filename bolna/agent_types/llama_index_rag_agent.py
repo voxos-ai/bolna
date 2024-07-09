@@ -33,10 +33,6 @@ class LlamaIndexRag(BaseAgent):
         storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
         vector_index = VectorStoreIndex(nodes=[],storage_context=storage_context)
         self.query_engine = vector_index.as_query_engine()
-
-        # VERIFY CODE
-        # res = self.query_engine.query("who is inside this doc")
-        # logger.info(f"TEST QUERY: {res}")
         self.tools = [
             QueryEngineTool(
                vector_index.as_query_engine(),

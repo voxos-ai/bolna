@@ -8,11 +8,15 @@ from llama_index.core.node_parser import (
     MarkdownElementNodeParser,
     SentenceSplitter
 )
+from typing import Dict, Tuple
 from llama_index.core import VectorStoreIndex
 from llama_index.core import StorageContext
 import dotenv
 import asyncio
 from .logger_config import configure_logger
+import tempfile
+import threading
+
 dotenv.load_dotenv()
 
 lance_db = "/tmp/RAG"
@@ -59,3 +63,52 @@ def create_table(table_name,temp_file_name:str):
     loop = asyncio.new_event_loop()
     # table_name = str(uuid4())
     loop.run_until_complete(ingestion_task(temp_file_name=temp_file_name,table_name=table_name))
+
+class TaskStatus:
+    SUCCESS = "SUCCESS"
+    WAIT = "WAIT"
+    PROCESSING = "PROCESSING"
+    ERROR = "ERROR"
+class IngestionTask:
+    def __init__(self,file_name:str, chunk_size:int = 512, overlaping:int = 200) -> None:
+        self.chunk_size = chunk_size
+        self.overlaping = overlaping
+        self.file_name = file_name
+        
+        self._status:int = TaskStatus.WAIT
+        self._table_id:str = None
+        self._message:str = None
+class IngestionPipeline:
+    def __init__(self) -> None:
+        self.task_queue:asyncio.queues.Queue = asyncio.queues.Queue()
+        # self.TaskIngestionThread = threading.Thread(target=self.__start)
+        self.task_keeping_status_dict:Dict[str:IngestionTask] = dict()
+        # self.TaskIngestionThread.start()
+        ingestion_task = asyncio.get_event_loop().create_task(self.start())
+
+    async def add_task(self,task_id:str, task:IngestionTask):
+        self.task_keeping_status_dict[task_id] = task
+        await self.task_queue.put(task)
+
+    async def check_task_status(self,task_id)->Tuple[int,str,str]:
+        task:IngestionTask = self.task_keeping_status_dict.get(task_id)
+        return task._status, task._table_id, task._message
+    
+    async def start(self):
+        while True:
+            task:IngestionTask = await self.task_queue.get()
+            logger.info(f"got packet for processing")
+            task._status = TaskStatus.PROCESSING
+            table_id = str(uuid4())
+            try:
+                await ingestion_task(task.file_name,table_id,task.chunk_size,task.overlaping)
+                task._table_id = table_id
+                task._message = "every thing run succesfully"
+                task._status = TaskStatus.SUCCESS
+            except:
+                task._message = "there is an error"
+                task._status = TaskStatus.ERROR
+    def __start(self):
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(self.start())
+    
