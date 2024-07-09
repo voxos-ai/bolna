@@ -18,20 +18,24 @@ dotenv.load_dotenv()
 logger = configure_logger(__name__)
 
 class LlamaIndexRag(BaseAgent):
-    def __init__(self,vector_id, temperature, model):
+    def __init__(self,vector_id, temperature, model, buffer = 40, max_tokens = 100):
         super().__init__()
         self.vector_id = vector_id
         self.temperature = temperature
         self.model = model
+        self.buffer = buffer
+        self.max_token = max_tokens
         self.OPENAI_KEY = os.getenv('OPENAI_API_KEY')
         logger.info(f"LLAMA INDEX VALUES :{(lance_db,vector_id)}")
-        self.llm = OpenAI(model=self.model, temperature=self.temperature,api_key=self.OPENAI_KEY)
+        self.llm = OpenAI(model=self.model, temperature=self.temperature,api_key=self.OPENAI_KEY,max_tokens=self.max_token)
         self.vector_store = LanceDBVectorStore(uri=lance_db,table_name=self.vector_id)
         storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
         vector_index = VectorStoreIndex(nodes=[],storage_context=storage_context)
         self.query_engine = vector_index.as_query_engine()
-        res = self.query_engine.query("who is inside this doc")
-        logger.info(f"TEST QUERY: {res}")
+
+        # VERIFY CODE
+        # res = self.query_engine.query("who is inside this doc")
+        # logger.info(f"TEST QUERY: {res}")
         self.tools = [
             QueryEngineTool(
                vector_index.as_query_engine(),
@@ -61,7 +65,7 @@ class LlamaIndexRag(BaseAgent):
             if latency < 0:
                 latency = time.time() - __
             buffer += " "+token
-            if len(buffer.split(" ")) >= 40:
+            if len(buffer.split(" ")) >= self.buffer:
                 yield buffer.strip(), False, latency, False
                 logger.info(f"LLM BUFFER FULL BUFFER OUTPUT: {buffer}")
                 buffer = ""

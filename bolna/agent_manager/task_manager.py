@@ -466,11 +466,15 @@ class TaskManager(BaseManager):
                 self.tools["llm_agent"] = StreamingContextualAgent(llm)
             #----------------------------------------
             elif agent_type == "llama_rag":
+                del llm
                 self.tools["llm_agent"] = LlamaIndexRag(
                     vector_id=self.task_config["tools_config"]["llm_agent"]["vector_id"],
                     temperature = self.task_config["tools_config"]["llm_agent"]["temperature"],
-                    model = self.task_config["tools_config"]["llm_agent"]["model"]
+                    model = self.task_config["tools_config"]["llm_agent"]["model"],
+                    buffer = 40,
+                    max_tokens = self.task_config["tools_config"]["llm_agent"]["max_tokens"]
                 )
+                logger.info("Llama-index rag agent is created")
                 #TODO:
                 #1. add other parameter
             #-----------------------------------------
