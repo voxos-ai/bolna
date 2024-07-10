@@ -776,6 +776,7 @@ class TaskManager(BaseManager):
             self.interim_history = copy.deepcopy(messages)
             if self.callee_silent:
                 logger.info("When we got utterance end, maybe LLM was still generating response. So, copying into history")
+                logger.info(f"$$$$$$$$$ UPDATING HISTORY via interim histroy Prev: {self.history}, new {self.interim_history}")
                 self.history = copy.deepcopy(self.interim_history)
 
     async def _process_conversation_formulaic_task(self, message, sequence, meta_info):
@@ -812,6 +813,7 @@ class TaskManager(BaseManager):
     
     async def __execute_function_call(self, url, method, param, api_token, model_args, meta_info, next_step, called_fun, **resp):
         if called_fun == "transfer_call":
+            logger.info(f"Transfer call function called param {param}")
             call_sid = self.tools["input"].get_call_sid()
             user_id, agent_id = self.assistant_id.split("/")
 
@@ -820,6 +822,11 @@ class TaskManager(BaseManager):
                 payload = {'call_sid': call_sid, "agent_id": agent_id, "user_id": user_id }
             else:
                 payload = {'call_sid': call_sid, "agent_id": agent_id }
+            
+            if param is not None:
+                logger.info(f"Gotten response {resp}")
+                payload = {**payload, **resp}
+
             async with aiohttp.ClientSession() as session:
                 logger.info(f"Sending the payload to stop the conversation {payload} url {url}")
                 async with session.post(url, json = payload) as response:
@@ -862,13 +869,17 @@ class TaskManager(BaseManager):
                             entry['content'] += llm_response
                             break
                     
-                self.interim_history = copy.deepcopy(messages)
+                    self.interim_history = copy.deepcopy(messages)
+                #Assuming that callee was silent
+                logger.info(f"$$$$$$$$$ UPDATING HISTORY via interim histroy Prev: {self.history}, new {self.interim_history}")
+                self.history = copy.deepcopy(self.interim_history)
             else:
                 logger.info(f"There was no function call {messages}")
                 messages.append({"role": "assistant", "content": llm_response})
                 self.interim_history = copy.deepcopy(messages)
                 if self.callee_silent:
                     logger.info("##### When we got utterance end, maybe LLM was still generating response. So, copying into history")
+                    logger.info(f"$$$$$$$$$ UPDATING HISTORY via interim histroy Prev: {self.history}, new {self.interim_history}")
                     self.history = copy.deepcopy(self.interim_history)
                 #self.__update_transcripts()
                         
@@ -910,6 +921,7 @@ class TaskManager(BaseManager):
             else:
                 meta_info["end_of_llm_stream"] = True
                 messages.append({"role": "assistant", "content": llm_response})
+                logger.info(f"$$$$$$$$$ UPDATING HISTORY via messages Prev: {self.history}, new {messages}")
                 self.history = copy.deepcopy(messages)
                 await self._handle_llm_output(next_step, llm_response, should_bypass_synth, meta_info)
                 convert_to_request_log(message = llm_response, meta_info= meta_info, component="llm", direction="response", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
@@ -949,6 +961,7 @@ class TaskManager(BaseManager):
                 self.llm_response_generated = True
                 if self.callee_silent:
                     logger.info("##### When we got utterance end, maybe LLM was still generating response. So, copying into history")
+                    logger.info(f"$$$$$$$$$ UPDATING HISTORY via interim histroy Prev: {self.history}, new {self.interim_history}")
                     self.history = copy.deepcopy(self.interim_history)
 
             else:
@@ -1119,6 +1132,7 @@ class TaskManager(BaseManager):
                         logger.info(f"INTERIM TRANSCRIPT WHEN EVERYTING IS OVER {self.interim_history}")
                         if self.llm_response_generated:
                             logger.info(f"LLM RESPONSE WAS GENERATED AND HENCE MOVING INTERIM HISTORY TO HISTORY")
+                            logger.info(f"$$$$$$$$$ UPDATING HISTORY via interim histroy Prev: {self.history}, new {self.interim_history}")
                             self.history = copy.deepcopy(self.interim_history)
                         meta_info = message['meta_info']
                         transcriber_message = ""
