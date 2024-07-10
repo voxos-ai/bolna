@@ -812,6 +812,7 @@ class TaskManager(BaseManager):
     
     async def __execute_function_call(self, url, method, param, api_token, model_args, meta_info, next_step, called_fun, **resp):
         if called_fun == "transfer_call":
+            logger.info(f"Transfer call function called param {param}")
             call_sid = self.tools["input"].get_call_sid()
             user_id, agent_id = self.assistant_id.split("/")
 
@@ -820,6 +821,11 @@ class TaskManager(BaseManager):
                 payload = {'call_sid': call_sid, "agent_id": agent_id, "user_id": user_id }
             else:
                 payload = {'call_sid': call_sid, "agent_id": agent_id }
+            
+            if param is not None:
+                logger.info(f"Gotten response {resp}")
+                payload = {**payload, **resp}
+
             async with aiohttp.ClientSession() as session:
                 logger.info(f"Sending the payload to stop the conversation {payload} url {url}")
                 async with session.post(url, json = payload) as response:
@@ -862,7 +868,9 @@ class TaskManager(BaseManager):
                             entry['content'] += llm_response
                             break
                     
-                self.interim_history = copy.deepcopy(messages)
+                    self.interim_history = copy.deepcopy(messages)
+                #Assuming that callee was silent
+                self.history = copy.deepcopy(self.interim_history)
             else:
                 logger.info(f"There was no function call {messages}")
                 messages.append({"role": "assistant", "content": llm_response})
@@ -1513,8 +1521,8 @@ class TaskManager(BaseManager):
                     if duration > 0:
                         logger.info(f"##### Sleeping for {duration} to maintain quueue on our side {self.sampling_rate}")
                         await asyncio.sleep(duration - 0.030) #30 milliseconds less
-
-                self.last_transmitted_timesatamp = time.time()
+                if message['meta_info']['sequence_id'] != -1: #Making sure we only track the conversation's last transmitted timesatamp
+                    self.last_transmitted_timesatamp = time.time()
                 logger.info(f"##### Updating Last transmitted timestamp to {self.last_transmitted_timesatamp}")
                 
         except Exception as e:
@@ -1523,6 +1531,7 @@ class TaskManager(BaseManager):
 
     
     async def __check_for_completion(self):
+        logger.info(f"Starting task to check for completion")
         while True:
             await asyncio.sleep(2)
             if self.last_transmitted_timesatamp == 0:
@@ -1642,8 +1651,11 @@ class TaskManager(BaseManager):
                 if not self.turn_based_conversation or self.enforce_streaming:
                     logger.info(f"Setting up other servers")
                     self.first_message_task = asyncio.create_task(self.__first_message())
-                    if not self.use_llm_to_determine_hangup :
-                        self.hangup_task = asyncio.create_task(self.__check_for_completion())
+                    #if not self.use_llm_to_determine_hangup :
+                    # By default we will hang up after x amount of silence
+                    # We still need to
+                    self.hangup_task = asyncio.create_task(self.__check_for_completion())
+                    
                     if self.should_backchannel:
                         self.backchanneling_task = asyncio.create_task(self.__check_for_backchanneling())
                     if self.ambient_noise:

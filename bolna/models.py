@@ -167,14 +167,20 @@ class CalendarModel(BaseModel):
     email: str
     time: str
 
+class ToolDescription(BaseModel):
+    name: str
+    description: str
+    parameters: Dict
+
 class APIParams(BaseModel):
     url: str
     method: Optional[str] = "POST"
     api_token: Optional[str] = None
     param: Optional[str] = None #Payload for the URL
 
+
 class ToolModel(BaseModel):
-    tools:  Optional[str] = None #Goes in as a prompt
+    tools:  Optional[Union[str, List[ToolDescription]]] = None
     tools_params: Dict[str, APIParams]
 
 class ToolsConfig(BaseModel):
