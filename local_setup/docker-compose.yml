@@ -6,6 +6,8 @@ services:
     build:
       context: .
       dockerfile: dockerfiles/bolna_server.Dockerfile
+      args:
+        BRANCH: ${BRANCH:-master}
     ports:
       - "5001:5001"
     depends_on:
