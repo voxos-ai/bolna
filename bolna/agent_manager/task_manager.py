@@ -1527,8 +1527,8 @@ class TaskManager(BaseManager):
                     if duration > 0:
                         logger.info(f"##### Sleeping for {duration} to maintain quueue on our side {self.sampling_rate}")
                         await asyncio.sleep(duration - 0.030) #30 milliseconds less
-
-                self.last_transmitted_timesatamp = time.time()
+                if message['meta_info']['sequence_id'] != -1: #Making sure we only track the conversation's last transmitted timesatamp
+                    self.last_transmitted_timesatamp = time.time()
                 logger.info(f"##### Updating Last transmitted timestamp to {self.last_transmitted_timesatamp}")
                 
         except Exception as e:
@@ -1537,6 +1537,7 @@ class TaskManager(BaseManager):
 
     
     async def __check_for_completion(self):
+        logger.info(f"Starting task to check for completion")
         while True:
             await asyncio.sleep(2)
             if self.last_transmitted_timesatamp == 0:
