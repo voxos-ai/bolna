@@ -1,6 +1,6 @@
 region: us
 version: '2'
-authtoken: <your-auth-token>
+authtoken: <your-ngrok-authtoken>
 tunnels:
   twilio-app:
     addr: twilio-app:8001
