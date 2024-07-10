@@ -1656,8 +1656,11 @@ class TaskManager(BaseManager):
                 if not self.turn_based_conversation or self.enforce_streaming:
                     logger.info(f"Setting up other servers")
                     self.first_message_task = asyncio.create_task(self.__first_message())
-                    if not self.use_llm_to_determine_hangup :
-                        self.hangup_task = asyncio.create_task(self.__check_for_completion())
+                    #if not self.use_llm_to_determine_hangup :
+                    # By default we will hang up after x amount of silence
+                    # We still need to
+                    self.hangup_task = asyncio.create_task(self.__check_for_completion())
+                    
                     if self.should_backchannel:
                         self.backchanneling_task = asyncio.create_task(self.__check_for_backchanneling())
                     if self.ambient_noise:
