@@ -171,8 +171,7 @@ class ElevenlabsSynthesizer(BaseSynthesizer):
                         audio = message
                     else:
                         self.meta_info['format'] = "wav"
-                        audio = resample(convert_audio_to_wav(message, source_format="mp3"), int(self.sampling_rate),
-                                             format="wav")
+                        audio = resample(message, int(self.sampling_rate))
 
                     yield create_ws_data_packet(audio, self.meta_info)
                     if not self.first_chunk_generated:

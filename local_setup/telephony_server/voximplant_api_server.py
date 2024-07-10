@@ -2,23 +2,17 @@ import os
 import json
 import requests
 import uuid
-from twilio.twiml.voice_response import VoiceResponse, Connect
-from twilio.rest import Client
+from voximplant.apiclient import VoximplantAPI, VoximplantException
 from dotenv import load_dotenv
 import redis.asyncio as redis
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 
-app = FastAPI()
+app = FastAPI(port=8000)
 load_dotenv()
-port = 8001
+port = 8000
 
-twilio_account_sid = os.getenv('TWILIO_ACCOUNT_SID')
-twilio_auth_token = os.getenv('TWILIO_AUTH_TOKEN')
-twilio_phone_number = os.getenv('TWILIO_PHONE_NUMBER')
-
-# Initialize Twilio client
-twilio_client = Client(twilio_account_sid, twilio_auth_token)
+rule_id = os.getenv('VOXIMPLANT_RULE_ID')
 
 
 def populate_ngrok_tunnels():
@@ -31,20 +25,22 @@ def populate_ngrok_tunnels():
         for tunnel in data['tunnels']:
             if tunnel['name'] == 'twilio-app':
                 app_callback_url = tunnel['public_url']
-            elif tunnel['name'] == 'bolna-app':
+            elif tunnel['name'] == 'voximplant':
                 websocket_url = tunnel['public_url'].replace('https:', 'wss:')
 
         return app_callback_url, websocket_url
     else:
         print(f"Error: Unable to fetch data. Status code: {response.status_code}")
 
-
 @app.post('/call')
 async def make_call(request: Request):
     try:
         call_details = await request.json()
         agent_id = call_details.get('agent_id', None)
-
+        recipient_phone_number = call_details.get('recipient_phone_number')
+        # recipient phone validation below
+        if not recipient_phone_number:
+            raise HTTPException(status_code=404, detail="Recipient phone number not provided")
         if not agent_id:
             raise HTTPException(status_code=404, detail="Agent not provided")
         
@@ -55,34 +51,26 @@ async def make_call(request: Request):
 
         print(f'app_callback_url: {app_callback_url}')
         print(f'websocket_url: {websocket_url}')
+        print(f'recipient_phone_number: {recipient_phone_number}')
 
-        call = twilio_client.calls.create(
-            to=call_details.get('recipient_phone_number'),
-            from_=twilio_phone_number,
-            url=f"{app_callback_url}/twilio_callback?ws_url={websocket_url}&agent_id={agent_id}",
-            method="POST",
-            record=True
-        )
-        print(f'Call data: {call}')
+        voxapi = VoximplantAPI("credentials/voximplant.json")
+
+        try:
+            # Start the scenario
+            res = voxapi.start_scenarios(
+                rule_id=rule_id,  # Replace with your actual rule ID
+                script_custom_data=json.dumps({
+                    "ws_url": websocket_url,
+                    "agent_id": agent_id,
+                    "destination": recipient_phone_number
+                })
+            )
+            print(res)
+        except VoximplantException as e:
+            raise HTTPException(status_code=500, detail=f"Error starting scenario: {e.message}")
+
         return PlainTextResponse("done", status_code=200)
 
     except Exception as e:
         print(f"Exception occurred in make_call: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
-
-
-@app.post('/twilio_callback')
-async def twilio_callback(ws_url: str = Query(...), agent_id: str = Query(...)):
-    try:
-        response = VoiceResponse()
-
-        connect = Connect()
-        websocket_twilio_route = f'{ws_url}/chat/v1/{agent_id}'
-        connect.stream(url=websocket_twilio_route)
-        print(f"websocket connection done to {websocket_twilio_route}")
-        response.append(connect)
-
-        return PlainTextResponse(str(response), status_code=200, media_type='text/xml')
-
-    except Exception as e:
-        print(f"Exception occurred in twilio_callback: {e}")
