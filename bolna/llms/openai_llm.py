@@ -206,7 +206,10 @@ class OpenAiLLM(BaseLLM):
         textual_response = False
 
         if self.trigger_function_call:
-            tools = self.tools
+            if type(self.tools) is str:
+                tools = json.loads(self.tools)
+            else:
+                tools = self.tools
         
         thread_id = self.openai.beta.threads.create(messages= message[1:-2]).id
 
@@ -271,7 +274,7 @@ class OpenAiLLM(BaseLLM):
         
         if self.trigger_function_call and called_fun in self.api_params:
             func_dict = self.api_params[called_fun]
-            logger.info(f"PAyload to send {resp} func_dict {func_dict}")
+            logger.info(f"PAyload to send {resp} func_dict {func_dict} and tools {tools}")
             self.gave_out_prefunction_call_message = False
 
             url = func_dict['url']
@@ -289,80 +292,15 @@ class OpenAiLLM(BaseLLM):
                 #**resp
             }
         
-            if tools[i].get("parameters", None) is not None and (all(key in resp for key in tools[i]["parameters"]["properties"].keys())):
+            if tools[i].function.parameters is not None and (all(key in resp for key in tools[i].function.parameters["properties"].keys())):
                 logger.info(f"Function call paramaeters {resp}")
                 convert_to_request_log(resp, meta_info, self.model, "llm", direction = "response", is_cached= False, run_id = self.run_id)
                 resp  = json.loads(resp)
                 api_call_return = {**api_call_return, **resp}
             else:
+                logger.info(f"No parameters in function call")
                 api_call_return['resp'] = None
             yield api_call_return, False, latency, True
-
-        # if self.trigger_function_call and not textual_response and not called_fun in PREDEFINED_FUNCTIONS and (all(key in resp for key in tools[i].function.parameters['properties'].keys())) and (called_fun in self.api_params):
-        #     self.gave_out_prefunction_call_message = False
-        #     logger.info(f"Function call parameters {resp}")
-        #     convert_to_request_log(resp, meta_info, self.model, "llm", direction="response", is_cached=False, run_id=self.run_id)
-        #     resp = json.loads(resp)
-        #     func_dict = self.api_params[called_fun]
-        #     logger.info(f"Payload to send {resp} func_dict {func_dict}")
-            
-        #     url = func_dict['url']
-        #     method = func_dict['method']
-        #     param = func_dict['param']
-        #     api_token = func_dict['api_token']
-        #     api_call_return = {
-        #         "url": url, 
-        #         "method":method.lower(), 
-        #         "param": param, 
-        #         "api_token":api_token, 
-        #         "model_args": model_args,
-        #         "meta_info": meta_info,
-        #         "called_fun": called_fun,
-        #         **resp
-        #     }
-
-        #     yield api_call_return, False, latency, True
-        # elif self.trigger_function_call and not textual_response and called_fun in PREDEFINED_FUNCTIONS:
-        #     func_dict = self.api_params[called_fun]
-        #     url = func_dict['url']
-        #     method = func_dict['method']
-        #     api_token = func_dict['api_token']
-
-        #     api_call_return = {
-        #         "url": url, 
-        #         "method":method.lower(), 
-        #         "param": None, 
-        #         "api_token":api_token, 
-        #         "model_args": None,
-        #         "meta_info": meta_info,
-        #         "called_fun": called_fun,
-        #         "resp" : None
-        #     }
-
-        #     yield api_call_return, False, latency, True
-
-            # response = await self.trigger_api(url=url, method=method.lower(), param=param, api_token=api_token, **resp)
-            # content = f"We did made a function calling for user. We hit the function : {called_fun}, we hit the url {url} and send a {method} request and it returned us the response as given below: {str(response)} \n\n . Kindly understand the above response and convey this response in a contextual form to user."
-            # logger.info(f"Logging function call parameters ")
-            # runs = await self.async_client.beta.threads.runs.list(thread_id=model_args["thread_id"])
-            # if runs.data and runs.data[0].status in ["in_progress", "queued", "requires_action"]:
-            #     await self.async_client.beta.threads.runs.cancel(thread_id=model_args["thread_id"], run_id=runs.data[0].id)
-
-            # await self.async_client.beta.threads.messages.create(thread_id=model_args["thread_id"], role="assistant", content=content)
-            # async for chunk in await self.async_client.beta.threads.runs.create(**model_args):
-            #     logger.info(f"chunk received : {chunk}")
-            #     if chunk.event == 'thread.message.delta':
-            #         text_chunk = chunk.data.delta.content[0].text.value
-            #         answer += text_chunk
-            #         buffer += text_chunk
-            #         if len(buffer) >= self.buffer_size and synthesize:
-            #             buffer_words = buffer.split(" ")
-            #             text = ' '.join(buffer_words[:-1])
-
-            #             if not self.started_streaming:
-            #                 self.started_streaming = True
-            #             yield text, False, latency, False
-            #             buffer = buffer_words[-1]
 
         if synthesize:  # This is used only in streaming sense
             yield buffer, True, latency, False
