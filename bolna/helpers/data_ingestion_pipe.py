@@ -79,12 +79,16 @@ class IngestionTask:
         self._table_id:str = None
         self._message:str = None
 class IngestionPipeline:
-    def __init__(self) -> None:
+    def __init__(self,nuof_process:int=2) -> None:
         self.task_queue:asyncio.queues.Queue = asyncio.queues.Queue()
         # self.TaskIngestionThread = threading.Thread(target=self.__start)
         self.task_keeping_status_dict:Dict[str:IngestionTask] = dict()
         # self.TaskIngestionThread.start()
-        ingestion_task = asyncio.get_event_loop().create_task(self.start())
+        # ingestion_task = asyncio.get_event_loop().create_task(self.start())
+        ingestion_tasks = []
+        for _ in range(nuof_process):
+            ingestion_tasks.append(asyncio.create_task(self.start()))
+        # asyncio.gather(ingestion_tasks)
 
     async def add_task(self,task_id:str, task:IngestionTask):
         self.task_keeping_status_dict[task_id] = task
@@ -95,8 +99,11 @@ class IngestionPipeline:
         return task._status, task._table_id, task._message
     
     async def start(self):
+        logger.info("INGESTION PROCESS STARTED")
         while True:
+            
             task:IngestionTask = await self.task_queue.get()
+            
             logger.info(f"got packet for processing")
             task._status = TaskStatus.PROCESSING
             table_id = str(uuid4())
@@ -105,10 +112,15 @@ class IngestionPipeline:
                 task._table_id = table_id
                 task._message = "every thing run succesfully"
                 task._status = TaskStatus.SUCCESS
-            except:
+            except Exception as e:
+                logger.info(f"ERROR: {e}")
                 task._message = "there is an error"
                 task._status = TaskStatus.ERROR
-    def __start(self):
-        loop = asyncio.new_event_loop()
-        loop.run_until_complete(self.start())
+    def _start(self):
+        # loop = asyncio.new_event_loop()
+        # try: 
+        #     loop.run_in_executor(self.start())
+        # except Exception as e:
+        #     logger.info(f"error: {e}")
+        asyncio.run(self.start())
     
