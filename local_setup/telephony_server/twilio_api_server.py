@@ -60,7 +60,7 @@ async def make_call(request: Request):
             call = twilio_client.calls.create(
                 to=call_details.get('recipient_phone_number'),
                 from_=twilio_phone_number,
-                url=f"{telephony_host}/twilio_callback?bolna_host={bolna_host}&agent_id={agent_id}",
+                url=f"{telephony_host}/twilio_connect?bolna_host={bolna_host}&agent_id={agent_id}",
                 method="POST",
                 record=True
             )
@@ -74,7 +74,7 @@ async def make_call(request: Request):
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
-@app.post('/twilio_callback')
+@app.post('/twilio_connect')
 async def twilio_callback(bolna_host: str = Query(...), agent_id: str = Query(...)):
     try:
         response = VoiceResponse()
