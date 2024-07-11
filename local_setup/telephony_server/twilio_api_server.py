@@ -75,7 +75,7 @@ async def make_call(request: Request):
 
 
 @app.post('/twilio_connect')
-async def twilio_callback(bolna_host: str = Query(...), agent_id: str = Query(...)):
+async def twilio_connect(bolna_host: str = Query(...), agent_id: str = Query(...)):
     try:
         response = VoiceResponse()
 
