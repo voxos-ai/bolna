@@ -208,7 +208,7 @@ class TaskManager(BaseManager):
             logger.info(f"Conversation config {conversation_config}")
 
             self.call_transfer_number = conversation_config.get("call_transfer_number", None)
-
+            logger.info(f"Will transfer call to {self.call_transfer_number}")
             self.kwargs["process_interim_results"] = "true" if conversation_config.get("optimize_latency", False) is True else "false"
             logger.info(f"Processing interim results {self.kwargs['process_interim_results'] }")
             # Routes

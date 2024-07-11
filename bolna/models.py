@@ -173,7 +173,7 @@ class ToolDescription(BaseModel):
     parameters: Dict
 
 class APIParams(BaseModel):
-    url: str
+    url: Optional[str] = None
     method: Optional[str] = "POST"
     api_token: Optional[str] = None
     param: Optional[str] = None #Payload for the URL
