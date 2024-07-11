@@ -820,7 +820,7 @@ class TaskManager(BaseManager):
             logger.info(f"Transfer call function called param {param}")
             call_sid = self.tools["input"].get_call_sid()
             user_id, agent_id = self.assistant_id.split("/")
-
+            self.history = copy.deepcopy(model_args["messages"])
             if url is None:
                 url = os.getenv("CALL_TRANSFER_WEBHOOK_URL")
                 payload = {'call_sid': call_sid, "agent_id": agent_id, "user_id": user_id, "call_transfer_number": self.call_transfer_number}
