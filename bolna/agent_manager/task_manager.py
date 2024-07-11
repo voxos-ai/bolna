@@ -198,6 +198,7 @@ class TaskManager(BaseManager):
         self.hangup_task = None
         
         if task_id == 0:
+            
             self.background_check_task = None
             self.hangup_task = None
             self.output_chunk_size = 16384 if self.sampling_rate == 24000 else 4096 #0.5 second chunk size for calls
@@ -205,6 +206,9 @@ class TaskManager(BaseManager):
             self.nitro = True 
             conversation_config = task.get("task_config", {})
             logger.info(f"Conversation config {conversation_config}")
+
+            self.call_transfer_number = conversation_config.get("call_transfer_number", None)
+
             self.kwargs["process_interim_results"] = "true" if conversation_config.get("optimize_latency", False) is True else "false"
             logger.info(f"Processing interim results {self.kwargs['process_interim_results'] }")
             # Routes
@@ -272,7 +276,7 @@ class TaskManager(BaseManager):
                         self.filenames = get_file_names_in_directory(self.backchanneling_audios)
                         logger.info(f"Backchanneling audio location {self.backchanneling_audios}")
                     except Exception as e:
-                        logger.error(f"Something went wrong an putting should backchannel to false")
+                        logger.error(f"Something went wrong an putting should backchannel to false {e}")
                         self.should_backchannel = False
                 else:
                     logger.info(f"Not setting up backchanneling")
@@ -668,8 +672,9 @@ class TaskManager(BaseManager):
         logger.info(f" TASK CONFIG  {self.task_config['task_type']}")
         if self.task_config["task_type"] == "webhook":
             logger.info(f"Input patrameters {self.input_parameters}")
-            logger.info(f"DOING THE POST REQUEST TO WEBHOOK {self.input_parameters['extraction_details']}")
-            self.webhook_response = await self.tools["webhook_agent"].execute(self.input_parameters['extraction_details'])
+            extraction_details = self.input_parameters.get('extraction_details', {})
+            logger.info(f"DOING THE POST REQUEST TO WEBHOOK {extraction_details}")
+            self.webhook_response = await self.tools["webhook_agent"].execute(extraction_details)
             logger.info(f"Response from the server {self.webhook_response}")
         
         else:
@@ -818,7 +823,7 @@ class TaskManager(BaseManager):
 
             if url is None:
                 url = os.getenv("CALL_TRANSFER_WEBHOOK_URL")
-                payload = {'call_sid': call_sid, "agent_id": agent_id, "user_id": user_id }
+                payload = {'call_sid': call_sid, "agent_id": agent_id, "user_id": user_id, "call_transfer_number": self.call_transfer_number}
             else:
                 payload = {'call_sid': call_sid, "agent_id": agent_id }
             

@@ -212,6 +212,7 @@ class ConversationConfig(BaseModel):
     ambient_noise_track: Optional[str] = "convention_hall"
     call_terminate: Optional[int] = 90
     use_fillers: Optional[bool] = False
+    call_transfer_number: Optional[str] = ""
 
 
 class Task(BaseModel):
