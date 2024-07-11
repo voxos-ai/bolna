@@ -668,9 +668,10 @@ class TaskManager(BaseManager):
         logger.info(f" TASK CONFIG  {self.task_config['task_type']}")
         if self.task_config["task_type"] == "webhook":
             logger.info(f"Input patrameters {self.input_parameters}")
-            logger.info(f"DOING THE POST REQUEST TO WEBHOOK {self.input_parameters['extraction_details']}")
-            self.webhook_response = await self.tools["webhook_agent"].execute(self.input_parameters['extraction_details'])
-            logger.info(f"Response from the server {self.webhook_response}")
+            if 'extraction_details' in self.input_parameters:
+                logger.info(f"DOING THE POST REQUEST TO WEBHOOK {self.input_parameters['extraction_details']}")
+                self.webhook_response = await self.tools["webhook_agent"].execute(self.input_parameters['extraction_details'])
+                logger.info(f"Response from the server {self.webhook_response}")
         
         else:
             message = format_messages(self.input_parameters["messages"])  # Remove the initial system prompt
