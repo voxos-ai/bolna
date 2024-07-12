@@ -1536,7 +1536,6 @@ class TaskManager(BaseManager):
             traceback.print_exc()
             logger.error(f'Error in processing message output')
 
-    
     async def __check_for_completion(self):
         logger.info(f"Starting task to check for completion")
         while True:
