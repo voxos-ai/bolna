@@ -505,6 +505,8 @@ class TaskManager(BaseManager):
         if self.task_config["task_type"] == "webhook" or self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "openai_assistant":
             return
         self.is_local = local
+        today = datetime.now().strftime("%A, %B %d, %Y")
+
         
         if "prompt" in self.task_config["tools_config"]["llm_agent"]:
             #This will be tre when we have extraction or maybe never
@@ -536,7 +538,7 @@ class TaskManager(BaseManager):
             
             self.system_prompt = {
                 'role': "system",
-                'content': f"{enriched_prompt}\n{notes}\n{DATE_PROMPT}"
+                'content': f"{enriched_prompt}\n{notes}\n{DATE_PROMPT.format(today)}"
             }
         else:
             self.system_prompt = {
