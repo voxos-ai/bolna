@@ -173,7 +173,7 @@ class ToolDescription(BaseModel):
     parameters: Dict
 
 class APIParams(BaseModel):
-    url: str
+    url: Optional[str] = None
     method: Optional[str] = "POST"
     api_token: Optional[str] = None
     param: Optional[str] = None #Payload for the URL
@@ -212,6 +212,7 @@ class ConversationConfig(BaseModel):
     ambient_noise_track: Optional[str] = "convention_hall"
     call_terminate: Optional[int] = 90
     use_fillers: Optional[bool] = False
+    call_transfer_number: Optional[str] = ""
 
     @validator('hangup_after_silence', pre=True, always=True)
     def set_hangup_after_silence(cls, v):
