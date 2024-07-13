@@ -1353,7 +1353,6 @@ class TaskManager(BaseManager):
                         self.buffered_output_queue = asyncio.Queue()
                     meta_info["format"] = "pcm"
                     if 'message_category' in meta_info and meta_info['message_category'] == "agent_welcome_message":
-                        #making sure agent welcome message is a part of history
                         if audio_chunk is None:
                             logger.info(f"File doesn't exist in S3. Hence we're synthesizing it from synthesizer")
                             meta_info['cached'] = False
