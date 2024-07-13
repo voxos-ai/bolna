@@ -214,6 +214,10 @@ class ConversationConfig(BaseModel):
     use_fillers: Optional[bool] = False
     call_transfer_number: Optional[str] = ""
 
+    @validator('hangup_after_silence', pre=True, always=True)
+    def set_hangup_after_silence(cls, v):
+        return v if v is not None else 10  # Set default value if None is passed
+
 
 class Task(BaseModel):
     tools_config: ToolsConfig
