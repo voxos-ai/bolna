@@ -286,11 +286,6 @@ class TaskManager(BaseManager):
                     logger.info(f"Agent welcome message present {self.kwargs['agent_welcome_message']}")
                     self.first_message_task = None
                     self.transcriber_message = ''
-                    #If history is empty and agent welcome message is not empty add it to history
-                    if len(self.history) == 0 and len(self.kwargs['agent_welcome_message']) != 0:
-                        self.history.append({'role': 'assistant', 'content':self.kwargs['agent_welcome_message']})
-                        self.interim_history = copy.deepcopy(self.history.copy())
-
                 
                 # Ambient noise
                 self.ambient_noise = conversation_config.get("ambient_noise", False)
@@ -555,6 +550,10 @@ class TaskManager(BaseManager):
             self.history = [] if len(self.history) == 0 else self.history
         else:
             self.history = [self.system_prompt] if len(self.history) == 0 else [self.system_prompt] + self.history
+
+        #If history is empty and agent welcome message is not empty add it to history
+        if len(self.history) == 1 and len(self.kwargs['agent_welcome_message']) != 0:
+            self.history.append({'role': 'assistant', 'content':self.kwargs['agent_welcome_message']})
 
         self.interim_history = copy.deepcopy(self.history)
 
