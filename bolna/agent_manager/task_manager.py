@@ -286,6 +286,11 @@ class TaskManager(BaseManager):
                     logger.info(f"Agent welcome message present {self.kwargs['agent_welcome_message']}")
                     self.first_message_task = None
                     self.transcriber_message = ''
+                    #If history is empty and agent welcome message is not empty add it to history
+                    if len(self.history) == 0 and len(self.kwargs['agent_welcome_message']) != 0:
+                        self.history.append({'role': 'assistant', 'content':self.kwargs['agent_welcome_message']})
+                        self.interim_history = copy.deepcopy(self.history.copy())
+
                 
                 # Ambient noise
                 self.ambient_noise = conversation_config.get("ambient_noise", False)
@@ -1348,7 +1353,7 @@ class TaskManager(BaseManager):
                         self.buffered_output_queue = asyncio.Queue()
                     meta_info["format"] = "pcm"
                     if 'message_category' in meta_info and meta_info['message_category'] == "agent_welcome_message":
-                        self.history.append({'role': 'assistant', 'content':meta_info['text']})
+                        #making sure agent welcome message is a part of history
                         if audio_chunk is None:
                             logger.info(f"File doesn't exist in S3. Hence we're synthesizing it from synthesizer")
                             meta_info['cached'] = False
