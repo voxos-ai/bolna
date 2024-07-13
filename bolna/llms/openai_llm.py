@@ -281,6 +281,7 @@ class OpenAiLLM(BaseLLM):
             method = func_dict['method']
             param = func_dict['param']
             api_token = func_dict['api_token']
+            model_args['messages'] = message
             api_call_return = {
                 "url": url, 
                 "method":method.lower(), 
