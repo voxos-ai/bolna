@@ -207,6 +207,7 @@ class TaskManager(BaseManager):
         self.hangup_task = None
         
         if task_id == 0:
+            
             self.background_check_task = None
             self.hangup_task = None
             self.output_chunk_size = 16384 if self.sampling_rate == 24000 else 4096 #0.5 second chunk size for calls
@@ -214,6 +215,9 @@ class TaskManager(BaseManager):
             self.nitro = True 
             conversation_config = task.get("task_config", {})
             logger.info(f"Conversation config {conversation_config}")
+
+            self.call_transfer_number = conversation_config.get("call_transfer_number", None)
+            logger.info(f"Will transfer call to {self.call_transfer_number}")
             self.kwargs["process_interim_results"] = "true" if conversation_config.get("optimize_latency", False) is True else "false"
             logger.info(f"Processing interim results {self.kwargs['process_interim_results'] }")
             # Routes
@@ -281,7 +285,7 @@ class TaskManager(BaseManager):
                         self.filenames = get_file_names_in_directory(self.backchanneling_audios)
                         logger.info(f"Backchanneling audio location {self.backchanneling_audios}")
                     except Exception as e:
-                        logger.error(f"Something went wrong an putting should backchannel to false")
+                        logger.error(f"Something went wrong an putting should backchannel to false {e}")
                         self.should_backchannel = False
                 else:
                     logger.info(f"Not setting up backchanneling")
@@ -513,6 +517,8 @@ class TaskManager(BaseManager):
         if self.task_config["task_type"] == "webhook" or agent_type in ["openai_assistant", "llamaindex_rag_agent"]:
             return
         self.is_local = local
+        today = datetime.now().strftime("%A, %B %d, %Y")
+
         
         if "prompt" in self.task_config["tools_config"]["llm_agent"]:
             #This will be tre when we have extraction or maybe never
@@ -544,7 +550,7 @@ class TaskManager(BaseManager):
             
             self.system_prompt = {
                 'role': "system",
-                'content': f"{enriched_prompt}\n{notes}\n{DATE_PROMPT}"
+                'content': f"{enriched_prompt}\n{notes}\n{DATE_PROMPT.format(today)}"
             }
         else:
             self.system_prompt = {
@@ -556,6 +562,10 @@ class TaskManager(BaseManager):
             self.history = [] if len(self.history) == 0 else self.history
         else:
             self.history = [self.system_prompt] if len(self.history) == 0 else [self.system_prompt] + self.history
+
+        #If history is empty and agent welcome message is not empty add it to history
+        if len(self.history) == 1 and len(self.kwargs['agent_welcome_message']) != 0:
+            self.history.append({'role': 'assistant', 'content':self.kwargs['agent_welcome_message']})
 
         self.interim_history = copy.deepcopy(self.history)
 
@@ -683,8 +693,9 @@ class TaskManager(BaseManager):
         logger.info(f" TASK CONFIG  {self.task_config['task_type']}")
         if self.task_config["task_type"] == "webhook":
             logger.info(f"Input patrameters {self.input_parameters}")
-            logger.info(f"DOING THE POST REQUEST TO WEBHOOK {self.input_parameters['extraction_details']}")
-            self.webhook_response = await self.tools["webhook_agent"].execute(self.input_parameters['extraction_details'])
+            extraction_details = self.input_parameters.get('extraction_details', {})
+            logger.info(f"DOING THE POST REQUEST TO WEBHOOK {extraction_details}")
+            self.webhook_response = await self.tools["webhook_agent"].execute(extraction_details)
             logger.info(f"Response from the server {self.webhook_response}")
         
         else:
@@ -827,14 +838,20 @@ class TaskManager(BaseManager):
     
     async def __execute_function_call(self, url, method, param, api_token, model_args, meta_info, next_step, called_fun, **resp):
         if called_fun == "transfer_call":
+            logger.info(f"Transfer call function called param {param}")
             call_sid = self.tools["input"].get_call_sid()
             user_id, agent_id = self.assistant_id.split("/")
-
+            self.history = copy.deepcopy(model_args["messages"])
             if url is None:
                 url = os.getenv("CALL_TRANSFER_WEBHOOK_URL")
-                payload = {'call_sid': call_sid, "agent_id": agent_id, "user_id": user_id }
+                payload = {'call_sid': call_sid, "agent_id": agent_id, "user_id": user_id, "call_transfer_number": self.call_transfer_number}
             else:
                 payload = {'call_sid': call_sid, "agent_id": agent_id }
+            
+            if param is not None:
+                logger.info(f"Gotten response {resp}")
+                payload = {**payload, **resp}
+
             async with aiohttp.ClientSession() as session:
                 logger.info(f"Sending the payload to stop the conversation {payload} url {url}")
                 async with session.post(url, json = payload) as response:
@@ -877,7 +894,9 @@ class TaskManager(BaseManager):
                             entry['content'] += llm_response
                             break
                     
-                self.interim_history = copy.deepcopy(messages)
+                    self.interim_history = copy.deepcopy(messages)
+                #Assuming that callee was silent
+                self.history = copy.deepcopy(self.interim_history)
             else:
                 logger.info(f"There was no function call {messages}")
                 messages.append({"role": "assistant", "content": llm_response})
@@ -1527,16 +1546,16 @@ class TaskManager(BaseManager):
                     if duration > 0:
                         logger.info(f"##### Sleeping for {duration} to maintain quueue on our side {self.sampling_rate}")
                         await asyncio.sleep(duration - 0.030) #30 milliseconds less
-
-                self.last_transmitted_timesatamp = time.time()
+                if message['meta_info']['sequence_id'] != -1: #Making sure we only track the conversation's last transmitted timesatamp
+                    self.last_transmitted_timesatamp = time.time()
                 logger.info(f"##### Updating Last transmitted timestamp to {self.last_transmitted_timesatamp}")
                 
         except Exception as e:
             traceback.print_exc()
             logger.error(f'Error in processing message output')
 
-    
     async def __check_for_completion(self):
+        logger.info(f"Starting task to check for completion")
         while True:
             await asyncio.sleep(2)
             if self.last_transmitted_timesatamp == 0:
@@ -1656,8 +1675,11 @@ class TaskManager(BaseManager):
                 if not self.turn_based_conversation or self.enforce_streaming:
                     logger.info(f"Setting up other servers")
                     self.first_message_task = asyncio.create_task(self.__first_message())
-                    if not self.use_llm_to_determine_hangup :
-                        self.hangup_task = asyncio.create_task(self.__check_for_completion())
+                    #if not self.use_llm_to_determine_hangup :
+                    # By default we will hang up after x amount of silence
+                    # We still need to
+                    self.hangup_task = asyncio.create_task(self.__check_for_completion())
+                    
                     if self.should_backchannel:
                         self.backchanneling_task = asyncio.create_task(self.__check_for_backchanneling())
                     if self.ambient_noise:

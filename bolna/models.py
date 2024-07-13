@@ -182,14 +182,20 @@ class CalendarModel(BaseModel):
     email: str
     time: str
 
+class ToolDescription(BaseModel):
+    name: str
+    description: str
+    parameters: Dict
+
 class APIParams(BaseModel):
-    url: str
+    url: Optional[str] = None
     method: Optional[str] = "POST"
     api_token: Optional[str] = None
     param: Optional[str] = None #Payload for the URL
 
+
 class ToolModel(BaseModel):
-    tools:  Optional[str] = None #Goes in as a prompt
+    tools:  Optional[Union[str, List[ToolDescription]]] = None
     tools_params: Dict[str, APIParams]
 
 class ToolsConfig(BaseModel):
@@ -221,6 +227,11 @@ class ConversationConfig(BaseModel):
     ambient_noise_track: Optional[str] = "convention_hall"
     call_terminate: Optional[int] = 90
     use_fillers: Optional[bool] = False
+    call_transfer_number: Optional[str] = ""
+
+    @validator('hangup_after_silence', pre=True, always=True)
+    def set_hangup_after_silence(cls, v):
+        return v if v is not None else 10  # Set default value if None is passed
 
 
 class Task(BaseModel):

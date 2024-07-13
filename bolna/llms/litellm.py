@@ -27,17 +27,6 @@ class LiteLLM(BaseLLM):
         if self.api_version:
             self.model_args["api_version"] = self.api_version
 
-        # if "top_k" in kwargs:
-        #     self.model_args["top_k"] = kwargs["top_k"]
-        # if "top_p" in kwargs:
-        #     self.model_args["top_p"] = kwargs["top_p"]
-        # if "stop" in kwargs:
-        #     self.model_args["stop"] = kwargs["stop"]
-        # if "presence_penalty" in kwargs:
-        #     self.model_args["presence_penalty"] = kwargs["presence_penalty"]
-        # if "frequency_penalty" in kwargs:
-        #     self.model_args["frequency_penalty"] = kwargs["frequency_penalty"]
-
         if len(kwargs) != 0:
             if "base_url" in kwargs:
                 self.model_args["api_base"] = kwargs["base_url"]
