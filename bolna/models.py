@@ -67,10 +67,7 @@ class StylettsConfig(BaseModel):
     diffusion_steps: int = 5
     embedding_scale: float = 1
 
-class AzureConfig(BaseModel):
-    voice: str
-    model: str
-    language: str
+
 
 class Transcriber(BaseModel):
     model: Optional[str] = "nova-2"
@@ -95,7 +92,7 @@ class Transcriber(BaseModel):
 
 class Synthesizer(BaseModel):
     provider: str
-    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig, MeloConfig, StylettsConfig, DeepgramConfig, AzureConfig] = Field(union_mode='smart')
+    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig, MeloConfig, StylettsConfig, DeepgramConfig] = Field(union_mode='smart')
     stream: bool = False
     buffer_size: Optional[int] = 40  # 40 characters in a buffer
     audio_format: Optional[str] = "pcm"
@@ -103,7 +100,7 @@ class Synthesizer(BaseModel):
 
     @validator("provider")
     def validate_model(cls, value):
-        return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai", "deepgram", "melotts", "styletts", "azuretts"])
+        return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai", "deepgram", "melotts", "styletts"])
 
 
 class IOModel(BaseModel):
@@ -134,9 +131,9 @@ class OpenaiAssistants(BaseModel):
     assistant_id: str = None
 
 class LLM(BaseModel):
-    model: Optional[str] = "gpt-3.5-turbo"
+    model: Optional[str] = "gpt-3.5-turbo-16k"
     max_tokens: Optional[int] = 100
-    agent_flow_type: Optional[str] = "streaming"
+    agent_flow_type: str = "streaming" #It can be openai_asssitant, streaming, agent_dag
     family: Optional[str] = "openai"
     temperature: Optional[float] = 0.1
     request_json: Optional[bool] = False
@@ -151,14 +148,32 @@ class LLM(BaseModel):
     routes: Optional[Routes] = None
     extraction_details: Optional[str] = None
     summarization_details: Optional[str] = None
-    backend: Optional[str] = "bolna"
-    extra_config: Optional[OpenaiAssistants] = None
 
+class LLM_AGENT(BaseModel):
+    agent_type: str #can be streaming, openai_assistant, dag_based, etc 
+    extra_config: Union[OpenaiAssistants, LLM]
 
 class MessagingModel(BaseModel):
     provider: str
     template: str
 
+
+class Node(BaseModel):
+    type: str
+    llm: LLM
+    exit_criteria: str
+    exit_response: Optional[str] = None
+    exit_prompt: Optional[str] = None
+    is_root: Optional[bool] = False
+
+class Edge(BaseModel):
+    start_node: Node
+    end_node: Node
+    condition: Optional[tuple] = None #extracted value from previous step and it's value
+
+class LLM_AGENT_GRAPH(BaseModel):
+    nodes: List[Node]
+    edges: List[Edge]
 
 # Need to redefine it
 class CalendarModel(BaseModel):
@@ -184,7 +199,7 @@ class ToolModel(BaseModel):
     tools_params: Dict[str, APIParams]
 
 class ToolsConfig(BaseModel):
-    llm_agent: Optional[LLM] = None
+    llm_agent: Optional[Union[LLM_AGENT, LLM]] = None
     synthesizer: Optional[Synthesizer] = None
     transcriber: Optional[Transcriber] = None
     input: Optional[IOModel] = None
@@ -223,7 +238,8 @@ class Task(BaseModel):
     tools_config: ToolsConfig
     toolchain: ToolsChainModel
     task_type: Optional[str] = "conversation"  # extraction, summarization, notification
-    task_config: ConversationConfig = dict()
+    task_config: Optional[ConversationConfig] = dict() #Just keeping it for backwards compatibility
+    conversation_config: ConversationConfig = dict()
     
 class AgentModel(BaseModel):
     agent_name: str
