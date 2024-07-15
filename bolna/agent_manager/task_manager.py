@@ -470,7 +470,7 @@ class TaskManager(BaseManager):
             if agent_type == "streaming":
                 self.tools["llm_agent"] = StreamingContextualAgent(llm)
             #----------------------------------------
-            elif agent_type == "llama_rag":
+            elif agent_type == "llama-index-rag":
                 del llm
                 self.tools["llm_agent"] = LlamaIndexRag(
                     vector_id=self.task_config["tools_config"]["llm_agent"]["vector_id"],
