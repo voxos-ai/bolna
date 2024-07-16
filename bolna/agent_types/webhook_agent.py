@@ -28,7 +28,7 @@ class WebhookAgent(BaseAgent):
                     logger.info("Payload was null")
             return None
         except Exception as e:
-            logger.error(f"Something went wrong with webhook {self.webhook_url}, {payload}")
+            logger.error(f"Something went wrong with webhook {self.webhook_url}, {payload}, {str(e)}")
 
     async def execute(self, payload):
         if not self.webhook_url:
