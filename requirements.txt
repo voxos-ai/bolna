@@ -8,7 +8,7 @@ fastembed==0.2.7
 litellm==1.40.20
 numpy==1.26.1
 openai>=1.10.0
-pydantic==2.5.3
+pydantic==2.8.2
 pydub==0.25.1
 python-dateutil==2.8.2
 python-dotenv==1.0.0
@@ -26,3 +26,8 @@ huggingface-hub
 semantic-router
 sentence_transformers
 optimum[onnxruntime]
+llama-index
+llama-index-vector-stores-lancedb
+lancedb
+torchaudio
+python-multipart

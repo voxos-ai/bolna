@@ -137,7 +137,12 @@ class OpenaiAssistants(BaseModel):
 
 
 class LLM(BaseModel):
+<<<<<<< HEAD
     model: Optional[str] = "gpt-3.5-turbo-16k"
+=======
+    vector_id: Optional[str] = "none"
+    model: Optional[str] = "gpt-3.5-turbo"
+>>>>>>> llama-index-rag
     max_tokens: Optional[int] = 100
     agent_flow_type: str = "streaming" #It can be llamaindex_rag, simple_llm_agent, router_agent, dag_agent, openai_assistant, custom
     family: Optional[str] = "openai"

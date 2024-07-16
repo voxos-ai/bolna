@@ -25,8 +25,13 @@ from bolna.helpers.logger_config import configure_logger
 from semantic_router import Route
 from semantic_router.layer import RouteLayer
 from semantic_router.encoders import FastEmbedEncoder
+from concurrent.futures import ThreadPoolExecutor
 
 asyncio.get_event_loop().set_debug(True)
+
+# this is exp.. can we change
+# asyncio.get_event_loop().set_default_executor(ThreadPoolExecutor(20))
+
 logger = configure_logger(__name__)
 
 
@@ -474,13 +479,23 @@ class TaskManager(BaseManager):
 
     def __setup_tasks(self, llm = None):
         if self.task_config["task_type"] == "conversation":
-            agent_type = self.task_config["tools_config"]["llm_agent"].get("agent_type","simple_llm_agent")
-            if agent_type == "simple_llm_agent":
-                    self.tools["llm_agent"] = StreamingContextualAgent(llm)
-                # elif self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] in ("preprocessed", "formulaic"):
-                #     preprocessed = self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "preprocessed"
-                #     self.tools["llm_agent"] = GraphBasedConversationAgent(llm, context_data=self.context_data,
-                #                                                         prompts=self.prompts, preprocessed=preprocessed)
+            agent_type = self.task_config["tools_config"]["llm_agent"].get("agent_type", self.task_config["tools_config"]["llm_agent"]["agent_flow_type"])
+            if agent_type == "streaming":
+                self.tools["llm_agent"] = StreamingContextualAgent(llm)
+            #----------------------------------------
+            elif agent_type == "llama-index-rag":
+                del llm
+                self.tools["llm_agent"] = LlamaIndexRag(
+                    vector_id=self.task_config["tools_config"]["llm_agent"]["vector_id"],
+                    temperature = self.task_config["tools_config"]["llm_agent"]["temperature"],
+                    model = self.task_config["tools_config"]["llm_agent"]["model"],
+                    buffer = 40,
+                    max_tokens = self.task_config["tools_config"]["llm_agent"]["max_tokens"]
+                )
+                logger.info("Llama-index rag agent is created")
+                #TODO:
+                #1. add other parameter
+            #-----------------------------------------
             elif agent_type == "openai_assistant":
                 logger.info("setting up backend as openai_assistants")
                 self.tools["llm_agent"] = OpenAIAssistantAgent(**self.task_config["tools_config"]["llm_agent"]['extra_config'])
