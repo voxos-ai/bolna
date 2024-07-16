@@ -60,5 +60,4 @@ If there were any proper nouns, or number or date or time involved explicitly ma
 
 FILLER_PROMPT = "Please, do not start your response with fillers like Got it, Noted.\nAbstain from using any greetings like hey, hello at the start of your conversation"
 
-today = datetime.now().strftime("%A, %B %d, %Y")
-DATE_PROMPT = f"### Date\n Today\'s Date is {today}"
+DATE_PROMPT = "### Date\n Today\'s Date is {}"

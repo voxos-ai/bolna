@@ -56,6 +56,9 @@ class TaskManager(BaseManager):
         if task['tools_config'].get('api_tools', None) is not None:
             logger.info(f"API TOOLS is present {task['tools_config']['api_tools']}")
             self.kwargs['api_tools'] = task['tools_config']['api_tools']
+        if task['tools_config']["llm_agent"]['extra_config'].get('assistant_id', None) is not None:
+            self.kwargs['assistant_id'] = task['tools_config']["llm_agent"]['extra_config']['assistant_id']
+            logger.info(f"Assistant id for agent is {self.kwargs['assistant_id']}")
 
         if self.__has_extra_config():
             self.kwargs['assistant_id'] = task['tools_config']["llm_agent"]['extra_config']['assistant_id']
@@ -170,12 +173,14 @@ class TaskManager(BaseManager):
         #self.stream = not turn_based_conversation #Currently we are allowing only realtime conversation based usecases. Hence it'll always be true unless connected through dashboard
         self.is_local = False
         self.llm_config = None
-        if self.task_config["tools_config"]["llm_agent"] is not None:
-            self.llm_config = {
-                "model": self.task_config["tools_config"]["llm_agent"]["model"],
-                "max_tokens": self.task_config["tools_config"]["llm_agent"]["max_tokens"],
-                "provider": self.task_config["tools_config"]["llm_agent"]["provider"]
-            }
+        
+        if not self.__is_openai_assistant_agent():
+            if self.task_config["tools_config"]["llm_agent"] is not None:
+                self.llm_config = {
+                    "model": self.task_config["tools_config"]["llm_agent"]["model"],
+                    "max_tokens": self.task_config["tools_config"]["llm_agent"]["max_tokens"],
+                    "provider": self.task_config["tools_config"]["llm_agent"]["provider"]
+                }
         
         # Output stuff
         self.output_task = None
@@ -193,16 +198,21 @@ class TaskManager(BaseManager):
         self.__setup_transcriber()
         # setting synthesizer
         self.__setup_synthesizer(self.llm_config)
+
         # setting llm
-        llm = self.__setup_llm(self.llm_config)
-        #Setup tasks
-        self.__setup_tasks(llm)
-        
+        if self.llm_config is not None:
+            llm = self.__setup_llm(self.llm_config)
+            #Setup tasks
+            self.__setup_tasks(llm)
+        else:
+            self.__setup_tasks()
+
         #setup request logs
         self.request_logs = []
         self.hangup_task = None
         
         if task_id == 0:
+            
             self.background_check_task = None
             self.hangup_task = None
             self.output_chunk_size = 16384 if self.sampling_rate == 24000 else 4096 #0.5 second chunk size for calls
@@ -210,6 +220,9 @@ class TaskManager(BaseManager):
             self.nitro = True 
             conversation_config = task.get("task_config", {})
             logger.info(f"Conversation config {conversation_config}")
+
+            self.call_transfer_number = conversation_config.get("call_transfer_number", None)
+            logger.info(f"Will transfer call to {self.call_transfer_number}")
             self.kwargs["process_interim_results"] = "true" if conversation_config.get("optimize_latency", False) is True else "false"
             logger.info(f"Processing interim results {self.kwargs['process_interim_results'] }")
             # Routes
@@ -277,7 +290,7 @@ class TaskManager(BaseManager):
                         self.filenames = get_file_names_in_directory(self.backchanneling_audios)
                         logger.info(f"Backchanneling audio location {self.backchanneling_audios}")
                     except Exception as e:
-                        logger.error(f"Something went wrong an putting should backchannel to false")
+                        logger.error(f"Something went wrong an putting should backchannel to false {e}")
                         self.should_backchannel = False
                 else:
                     logger.info(f"Not setting up backchanneling")
@@ -450,7 +463,7 @@ class TaskManager(BaseManager):
                 self.task_config["tools_config"]["synthesizer"]["stream"] = True if self.enforce_streaming else False #Hardcode stream to be False as we don't want to get blocked by a __listen_synthesizer co-routine
         
             self.tools["synthesizer"] = synthesizer_class(**self.task_config["tools_config"]["synthesizer"], **provider_config, **self.kwargs, caching = caching)
-            if self.task_config["tools_config"]["llm_agent"] is not None:
+            if self.task_config["tools_config"]["llm_agent"] is not None and llm_config is not None:
                 llm_config["buffer_size"] = self.task_config["tools_config"]["synthesizer"].get('buffer_size')
 
     def __setup_llm(self, llm_config):
@@ -464,7 +477,7 @@ class TaskManager(BaseManager):
             else:
                 raise Exception(f'LLM {self.task_config["tools_config"]["llm_agent"]["provider"]} not supported')
 
-    def __setup_tasks(self, llm):
+    def __setup_tasks(self, llm = None):
         if self.task_config["task_type"] == "conversation":
             agent_type = self.task_config["tools_config"]["llm_agent"].get("agent_type", self.task_config["tools_config"]["llm_agent"]["agent_flow_type"])
             if agent_type == "streaming":
@@ -485,12 +498,10 @@ class TaskManager(BaseManager):
             #-----------------------------------------
             elif agent_type == "openai_assistant":
                 logger.info("setting up backend as openai_assistants")
-                self.tools["llm_agent"] = OpenAIAssistantAgent(llm)
-            elif agent_type in ("preprocessed", "formulaic"):
-                preprocessed = self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "preprocessed"
-                logger.info(f"LLM TYPE {type(llm)}")
-                self.tools["llm_agent"] = GraphBasedConversationAgent(llm, context_data=self.context_data,
-                                                                      prompts=self.prompts, preprocessed=preprocessed)
+                self.tools["llm_agent"] = OpenAIAssistantAgent(**self.task_config["tools_config"]["llm_agent"]['extra_config'])
+            else:
+                raise(f"{agent_type} Agent type is not created yet")
+
         elif self.task_config["task_type"] == "extraction":
             logger.info("Setting up extraction agent")
             self.tools["llm_agent"] = ExtractionContextualAgent(llm, prompt=self.system_prompt)
@@ -517,9 +528,12 @@ class TaskManager(BaseManager):
     ########################
     async def load_prompt(self, assistant_name, task_id, local, **kwargs):
         logger.info("prompt and config setup started")
-        if self.task_config["task_type"] == "webhook" or self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "openai_assistant":
+        agent_type = self.task_config["tools_config"]["llm_agent"].get("agent_type", "simple_llm_agent")
+        if self.task_config["task_type"] == "webhook" or agent_type in ["openai_assistant", "llamaindex_rag_agent"]:
             return
         self.is_local = local
+        today = datetime.now().strftime("%A, %B %d, %Y")
+
         
         if "prompt" in self.task_config["tools_config"]["llm_agent"]:
             #This will be tre when we have extraction or maybe never
@@ -533,7 +547,7 @@ class TaskManager(BaseManager):
                 prompt_responses = await get_prompt_responses(assistant_id=self.assistant_id, local=self.is_local)
             current_task = "task_{}".format(task_id + 1)
             self.prompts = self.__prefill_prompts(self.task_config, prompt_responses.get(current_task, None), self.task_config['task_type'])
-            if self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "preprocessed":
+            if self._is_preprocessed_flow():
                 self.tools["llm_agent"].load_prompts_and_create_graph(self.prompts)
 
         if "system_prompt" in self.prompts:
@@ -551,7 +565,7 @@ class TaskManager(BaseManager):
             
             self.system_prompt = {
                 'role': "system",
-                'content': f"{enriched_prompt}\n{notes}\n{DATE_PROMPT}"
+                'content': f"{enriched_prompt}\n{notes}\n{DATE_PROMPT.format(today)}"
             }
         else:
             self.system_prompt = {
@@ -563,6 +577,10 @@ class TaskManager(BaseManager):
             self.history = [] if len(self.history) == 0 else self.history
         else:
             self.history = [self.system_prompt] if len(self.history) == 0 else [self.system_prompt] + self.history
+
+        #If history is empty and agent welcome message is not empty add it to history
+        if len(self.history) == 1 and len(self.kwargs['agent_welcome_message']) != 0:
+            self.history.append({'role': 'assistant', 'content':self.kwargs['agent_welcome_message']})
 
         self.interim_history = copy.deepcopy(self.history)
 
@@ -661,11 +679,14 @@ class TaskManager(BaseManager):
     def _is_conversation_task(self):
         return self.task_config["task_type"] == "conversation"
 
+    def __is_openai_assistant_agent(self):
+        return self.task_config["tools_config"]["llm_agent"].get("agent_type", None) == "openai_assistant"
+
     def _is_preprocessed_flow(self):
-        return self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "preprocessed"
+        return "agent_flow_type" in self.task_config["tools_config"]["llm_agent"] and self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "preprocessed"
 
     def _is_formulaic_flow(self):
-        return self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "formulaic"
+        return "agent_flow_type" in self.task_config["tools_config"]["llm_agent"] and self.task_config["tools_config"]["llm_agent"]['agent_flow_type']  == "formulaic"
 
     def _get_next_step(self, sequence, origin):
         try:
@@ -687,8 +708,9 @@ class TaskManager(BaseManager):
         logger.info(f" TASK CONFIG  {self.task_config['task_type']}")
         if self.task_config["task_type"] == "webhook":
             logger.info(f"Input patrameters {self.input_parameters}")
-            logger.info(f"DOING THE POST REQUEST TO WEBHOOK {self.input_parameters['extraction_details']}")
-            self.webhook_response = await self.tools["webhook_agent"].execute(self.input_parameters['extraction_details'])
+            extraction_details = self.input_parameters.get('extraction_details', {})
+            logger.info(f"DOING THE POST REQUEST TO WEBHOOK {extraction_details}")
+            self.webhook_response = await self.tools["webhook_agent"].execute(extraction_details)
             logger.info(f"Response from the server {self.webhook_response}")
         
         else:
@@ -831,14 +853,20 @@ class TaskManager(BaseManager):
     
     async def __execute_function_call(self, url, method, param, api_token, model_args, meta_info, next_step, called_fun, **resp):
         if called_fun == "transfer_call":
+            logger.info(f"Transfer call function called param {param}")
             call_sid = self.tools["input"].get_call_sid()
             user_id, agent_id = self.assistant_id.split("/")
-
+            self.history = copy.deepcopy(model_args["messages"])
             if url is None:
                 url = os.getenv("CALL_TRANSFER_WEBHOOK_URL")
-                payload = {'call_sid': call_sid, "agent_id": agent_id, "user_id": user_id }
+                payload = {'call_sid': call_sid, "agent_id": agent_id, "user_id": user_id, "call_transfer_number": self.call_transfer_number}
             else:
                 payload = {'call_sid': call_sid, "agent_id": agent_id }
+            
+            if param is not None:
+                logger.info(f"Gotten response {resp}")
+                payload = {**payload, **resp}
+
             async with aiohttp.ClientSession() as session:
                 logger.info(f"Sending the payload to stop the conversation {payload} url {url}")
                 async with session.post(url, json = payload) as response:
@@ -881,7 +909,9 @@ class TaskManager(BaseManager):
                             entry['content'] += llm_response
                             break
                     
-                self.interim_history = copy.deepcopy(messages)
+                    self.interim_history = copy.deepcopy(messages)
+                #Assuming that callee was silent
+                self.history = copy.deepcopy(self.interim_history)
             else:
                 logger.info(f"There was no function call {messages}")
                 messages.append({"role": "assistant", "content": llm_response})
@@ -931,7 +961,7 @@ class TaskManager(BaseManager):
                 messages.append({"role": "assistant", "content": llm_response})
                 self.history = copy.deepcopy(messages)
                 await self._handle_llm_output(next_step, llm_response, should_bypass_synth, meta_info)
-                convert_to_request_log(message = llm_response, meta_info= meta_info, component="llm", direction="response", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
+                convert_to_request_log(message = llm_response, meta_info= meta_info, component="llm", direction="response", model=self.tools["llm_agent"].get_model(), run_id= self.run_id)
         
         if self.stream and llm_response != PRE_FUNCTION_CALL_MESSAGE:
             logger.info(f"Storing {llm_response} into history should_trigger_function_call {should_trigger_function_call}")
@@ -985,8 +1015,7 @@ class TaskManager(BaseManager):
             logger.info(f"Message {messages} history {self.history}")
             messages.append({'role': 'user', 'content': message['data']})
             ### TODO CHECK IF THIS IS EVEN REQUIRED
-            convert_to_request_log(message=format_messages(messages, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
-
+            convert_to_request_log(message=format_messages(messages, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model= self.tools["llm_agent"].get_model(), run_id= self.run_id)
             await self.__do_llm_generation(messages, meta_info, next_step, should_bypass_synth)
             # TODO : Write a better check for completion prompt 
             if self.use_llm_to_determine_hangup and not self.turn_based_conversation:
@@ -1532,16 +1561,16 @@ class TaskManager(BaseManager):
                     if duration > 0:
                         logger.info(f"##### Sleeping for {duration} to maintain quueue on our side {self.sampling_rate}")
                         await asyncio.sleep(duration - 0.030) #30 milliseconds less
-
-                self.last_transmitted_timesatamp = time.time()
+                if message['meta_info']['sequence_id'] != -1: #Making sure we only track the conversation's last transmitted timesatamp
+                    self.last_transmitted_timesatamp = time.time()
                 logger.info(f"##### Updating Last transmitted timestamp to {self.last_transmitted_timesatamp}")
                 
         except Exception as e:
             traceback.print_exc()
             logger.error(f'Error in processing message output')
 
-    
     async def __check_for_completion(self):
+        logger.info(f"Starting task to check for completion")
         while True:
             await asyncio.sleep(2)
             if self.last_transmitted_timesatamp == 0:
@@ -1661,8 +1690,11 @@ class TaskManager(BaseManager):
                 if not self.turn_based_conversation or self.enforce_streaming:
                     logger.info(f"Setting up other servers")
                     self.first_message_task = asyncio.create_task(self.__first_message())
-                    if not self.use_llm_to_determine_hangup :
-                        self.hangup_task = asyncio.create_task(self.__check_for_completion())
+                    #if not self.use_llm_to_determine_hangup :
+                    # By default we will hang up after x amount of silence
+                    # We still need to
+                    self.hangup_task = asyncio.create_task(self.__check_for_completion())
+                    
                     if self.should_backchannel:
                         self.backchanneling_task = asyncio.create_task(self.__check_for_backchanneling())
                     if self.ambient_noise:
