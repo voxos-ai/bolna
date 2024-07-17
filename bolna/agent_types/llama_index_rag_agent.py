@@ -132,9 +132,11 @@ class LlamaIndexRag(BaseAgent):
         latency = -1
         start_time = time.time()
 
-        token_generator = await asyncio.to_thread(self.agent.stream_chat, message.content, history)
-        
-        async for token in token_generator.response_gen:
+        # llamaindex provides astream_chat, no need for to_thread as we are running this over cloud!
+        #token_generator = await asyncio.to_thread(self.agent.stream_chat, message.content, history) 
+        token_generator = await self.agent.astream_chat(message.content, history)
+
+        async for token in token_generator.async_response_gen():
             if latency < 0:
                 latency = time.time() - start_time
             buffer += " " + token
