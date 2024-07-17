@@ -482,6 +482,15 @@ class TaskManager(BaseManager):
                 logger.info("Llama-index rag agent is created")
                 #TODO:
                 #1. add other parameter
+            elif agent_type == "llama_rag_func":
+                del llm
+                self.tools["llm_agent"] = LlamaIndexAttachRag(
+                    vector_id=self.task_config["tools_config"]["llm_agent"]["vector_id"],
+                    temperature = self.task_config["tools_config"]["llm_agent"]["temperature"],
+                    model = self.task_config["tools_config"]["llm_agent"]["model"],
+                    buffer = 40,
+                    max_tokens = self.task_config["tools_config"]["llm_agent"]["max_tokens"]
+                )
             #-----------------------------------------
             elif agent_type == "openai_assistant":
                 logger.info("setting up backend as openai_assistants")
