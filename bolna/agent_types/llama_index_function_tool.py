@@ -60,9 +60,10 @@ class LlamaIndexAttachRag(BaseAgent):
         self.model = model
         self.buffer = buffer
         self.max_tokens = max_tokens
-        self.id_rag = "index-a6b1e962-19fe-4b12-9ca5-f1f7e76d12c2"
-        self.index = "29212322-fb8d-49fe-9baa-90598b311f67"
-        self.url = f'http://127.0.0.1:8000/rag-retrive/{self.id_rag}/{self.index}'
+        # self.id_rag = "index-a6b1e962-19fe-4b12-9ca5-f1f7e76d12c2"
+        # self.index = "29212322-fb8d-49fe-9baa-90598b311f67"
+        self.id_rag = rag_id
+        self.url = f'http://127.0.0.1:8000/rag-retrive/{self.id_rag}/{self.vector_id}'
         self.OPENAI_KEY = os.getenv('OPENAI_API_KEY')
 
         self._setup_llm()

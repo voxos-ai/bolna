@@ -135,6 +135,7 @@ class OpenaiAssistants(BaseModel):
 
 class LLM(BaseModel):
     vector_id: Optional[str] = "none"
+    rag_id: Optional[str] = "none"
     model: Optional[str] = "gpt-3.5-turbo"
     max_tokens: Optional[int] = 100
     agent_flow_type: Optional[str] = "streaming"

@@ -485,6 +485,7 @@ class TaskManager(BaseManager):
             elif agent_type == "llama_rag_func":
                 del llm
                 self.tools["llm_agent"] = LlamaIndexAttachRag(
+                    rag_id=self.task_config["tools_config"]["llm_agent"]["rag_id"],
                     vector_id=self.task_config["tools_config"]["llm_agent"]["vector_id"],
                     temperature = self.task_config["tools_config"]["llm_agent"]["temperature"],
                     model = self.task_config["tools_config"]["llm_agent"]["model"],
