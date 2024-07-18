@@ -1,6 +1,0 @@
-LanceDBVectorStore line no 461:
-fix:
-old:
- _logger.info(f"query_type : ", query_type)
-new: 
- _logger.info(f"query_type : {query_type}")
