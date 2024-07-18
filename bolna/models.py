@@ -69,6 +69,11 @@ class StylettsConfig(BaseModel):
     diffusion_steps: int = 5
     embedding_scale: float = 1
 
+class AzureConfig(BaseModel):
+    voice: str
+    model: str
+    language: str
+
 
 
 class Transcriber(BaseModel):
@@ -132,14 +137,15 @@ class OpenaiAssistants(BaseModel):
     name: Optional[str] = None
     assistant_id: str = None
     max_tokens: Optional[int] =100
-    temperature: Optional[int] = 0.2
+    temperature: Optional[float] = 0.2
     buffer_size: Optional[int] = 100
+    provider: Optional[str] = "openai"
 
 
 class LLM(BaseModel):
     model: Optional[str] = "gpt-3.5-turbo-16k"
     max_tokens: Optional[int] = 100
-    agent_flow_type: str = "streaming" #It can be llamaindex_rag, simple_llm_agent, router_agent, dag_agent, openai_assistant, custom
+    agent_flow_type: Optional[str] = "streaming" #It is used for backwards compatibility  
     family: Optional[str] = "openai"
     temperature: Optional[float] = 0.1
     request_json: Optional[bool] = False
@@ -175,13 +181,19 @@ class LLM_AGENT_GRAPH(BaseModel):
     nodes: List[Node]
     edges: List[Edge]
 
-class ROUTER_AGENT(BaseModel):
-    route_agent_map: Dict[str, LLM]
+class AGENT_ROUTE_CONFIG(BaseModel):
+    utterances: List[str]
+    threshold: Optional[float] = 0.85
+
+class MultiAgent(BaseModel):
+    agent_map: Dict[str, Union[LLM, OpenaiAssistants]]
+    agent_routing_config: Dict[str, AGENT_ROUTE_CONFIG]
+    default_agent: str
 
 class LLM_AGENT(BaseModel):
     agent_flow_type: str
     agent_type: str #can be llamaindex_rag, simple_llm_agent, router_agent, dag_agent, openai_assistant, custom, etc 
-    extra_config: Union[OpenaiAssistants, LLM_AGENT_GRAPH, ROUTER_AGENT, LLM]
+    extra_config: Union[OpenaiAssistants, LLM_AGENT_GRAPH, MultiAgent, LLM]
 
 
 class MessagingModel(BaseModel):
