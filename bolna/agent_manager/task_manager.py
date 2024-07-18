@@ -55,7 +55,7 @@ class TaskManager(BaseManager):
             self.kwargs['assistant_id'] = task['tools_config']["llm_agent"]['extra_config']['assistant_id']
             logger.info(f"Assistant id for agent is {self.kwargs['assistant_id']}")
 
-        if self.__has_extra_config():
+        if self.__is_openai_assistant():
             self.kwargs['assistant_id'] = task['tools_config']["llm_agent"]['extra_config']['assistant_id']
             logger.info(f"Assistant id for agent is {self.kwargs['assistant_id']}")
 
@@ -171,10 +171,13 @@ class TaskManager(BaseManager):
         
         if not self.__is_openai_assistant_agent():
             if self.task_config["tools_config"]["llm_agent"] is not None:
+                agent_type = self.task_config["tools_config"]["llm_agent"].get("agent_type", None)
+                llm_config = self.task_config["tools_config"]["llm_agent"] if not agent_type else self.task_config["tools_config"]["llm_agent"]['extra_config']
+                self.llm_agent_config = llm_config.copy()
                 self.llm_config = {
-                    "model": self.task_config["tools_config"]["llm_agent"]["model"],
-                    "max_tokens": self.task_config["tools_config"]["llm_agent"]["max_tokens"],
-                    "provider": self.task_config["tools_config"]["llm_agent"]["provider"]
+                    "model": llm_config['model'],
+                    "max_tokens": llm_config['max_tokens'],
+                    "provider": llm_config['provider'],
                 }
         
         # Output stuff
@@ -317,6 +320,12 @@ class TaskManager(BaseManager):
             return False
         extra_config = self.task_config['tools_config']["llm_agent"].get("extra_config", None)
         return False if extra_config is None else True
+    
+    def __is_openai_assistant(self):
+        if self.task_config["task_type"] == "webhook":
+            return False
+        agent_type = self.task_config['tools_config']["llm_agent"].get("agent_type", self.task_config['tools_config']["llm_agent"].get("agent_flow_type"))
+        return agent_type == "openai_assistant"
 
     def __setup_routes(self, routes):
         embedding_model = routes.get("embedding_model", os.getenv("ROUTE_EMBEDDING_MODEL"))
@@ -463,24 +472,20 @@ class TaskManager(BaseManager):
 
     def __setup_llm(self, llm_config):
         if self.task_config["tools_config"]["llm_agent"] is not None:
-            logger.info(f'### PROVIDER {self.task_config["tools_config"]["llm_agent"]["provider"] }')
-            if self.task_config["tools_config"]["llm_agent"]["provider"] in SUPPORTED_LLM_PROVIDERS.keys():
-                llm_class = SUPPORTED_LLM_PROVIDERS.get(self.task_config["tools_config"]["llm_agent"]["provider"])
+            logger.info(f'### PROVIDER {self.llm_agent_config["provider"] }')
+            if self.llm_agent_config["provider"] in SUPPORTED_LLM_PROVIDERS.keys():
+                llm_class = SUPPORTED_LLM_PROVIDERS.get(self.llm_agent_config["provider"])
                 logger.info(f"LLM CONFIG {llm_config}")
                 llm = llm_class(**llm_config, **self.kwargs)
                 return llm
             else:
-                raise Exception(f'LLM {self.task_config["tools_config"]["llm_agent"]["provider"]} not supported')
+                raise Exception(f'LLM {self.llm_agent_config["provider"]} not supported')
 
     def __setup_tasks(self, llm = None):
         if self.task_config["task_type"] == "conversation":
-            agent_type = self.task_config["tools_config"]["llm_agent"].get("agent_type","simple_llm_agent")
+            agent_type = self.llm_agent_config.get("agent_type","simple_llm_agent")
             if agent_type == "simple_llm_agent":
                     self.tools["llm_agent"] = StreamingContextualAgent(llm)
-                # elif self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] in ("preprocessed", "formulaic"):
-                #     preprocessed = self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "preprocessed"
-                #     self.tools["llm_agent"] = GraphBasedConversationAgent(llm, context_data=self.context_data,
-                #                                                         prompts=self.prompts, preprocessed=preprocessed)
             elif agent_type == "openai_assistant":
                 logger.info("setting up backend as openai_assistants")
                 self.tools["llm_agent"] = OpenAIAssistantAgent(**self.task_config["tools_config"]["llm_agent"]['extra_config'])
@@ -519,21 +524,13 @@ class TaskManager(BaseManager):
         self.is_local = local
         today = datetime.now().strftime("%A, %B %d, %Y")
 
-        
-        if "prompt" in self.task_config["tools_config"]["llm_agent"]:
-            #This will be tre when we have extraction or maybe never
-            self.prompts = {
-                "system_prompt": f'{self.task_config["tools_config"]["llm_agent"]["prompt"]} \n### Date\n Today\'s Date is {today}'
-            }
-            logger.info(f"Prompt given in llm_agent and hence storing the prompt")
-        else:
-            prompt_responses = kwargs.get('prompt_responses', None)
-            if not prompt_responses:
-                prompt_responses = await get_prompt_responses(assistant_id=self.assistant_id, local=self.is_local)
-            current_task = "task_{}".format(task_id + 1)
-            self.prompts = self.__prefill_prompts(self.task_config, prompt_responses.get(current_task, None), self.task_config['task_type'])
-            if self._is_preprocessed_flow():
-                self.tools["llm_agent"].load_prompts_and_create_graph(self.prompts)
+        prompt_responses = kwargs.get('prompt_responses', None)
+        if not prompt_responses:
+            prompt_responses = await get_prompt_responses(assistant_id=self.assistant_id, local=self.is_local)
+        current_task = "task_{}".format(task_id + 1)
+        self.prompts = self.__prefill_prompts(self.task_config, prompt_responses.get(current_task, None), self.task_config['task_type'])
+        if self._is_preprocessed_flow():
+            self.tools["llm_agent"].load_prompts_and_create_graph(self.prompts)
 
         if "system_prompt" in self.prompts:
             # This isn't a graph based agent
@@ -786,7 +783,7 @@ class TaskManager(BaseManager):
             messages.append({'role': 'user', 'content': message['data']})
             logger.info(f"Starting LLM Agent {messages}")
             #Expose get current classification_response method from the agent class and use it for the response log
-            convert_to_request_log(message = format_messages(messages, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["model"], is_cached= True, run_id= self.run_id)
+            convert_to_request_log(message = format_messages(messages, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.llm_agent_config["model"], is_cached= True, run_id= self.run_id)
             async for next_state in self.tools['llm_agent'].generate(messages, label_flow=self.label_flow):
                 if next_state == "<end_of_conversation>":
                     meta_info["end_of_conversation"] = True
@@ -873,7 +870,7 @@ class TaskManager(BaseManager):
             logger.info("##### User spoke while LLM was generating response")
         else:
             self.llm_response_generated = True
-            convert_to_request_log(message=llm_response, meta_info= meta_info, component="llm", direction="response", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
+            convert_to_request_log(message=llm_response, meta_info= meta_info, component="llm", direction="response", model=self.llm_agent_config["model"], run_id= self.run_id)
             if should_trigger_function_call:
                 #Now, we need to consider 2 things here
                 #1. There was silence between function call and now
@@ -975,8 +972,8 @@ class TaskManager(BaseManager):
                 logger.info(f"Route {route} has a vector cache")
                 relevant_utterance = self.vector_caches[route].get(message['data'])
                 cache_response = self.route_responses_dict[route][relevant_utterance]
-                convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
-                convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="response", model=self.task_config["tools_config"]["llm_agent"]["model"], is_cached= True, run_id= self.run_id)
+                convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="request", model=self.llm_agent_config["model"], run_id= self.run_id)
+                convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="response", model=self.llm_agent_config["model"], is_cached= True, run_id= self.run_id)
                 messages = copy.deepcopy(self.history)
                 messages += [{'role': 'user', 'content': message['data']},{'role': 'assistant', 'content': cache_response}]
                 self.interim_history = copy.deepcopy(messages)
@@ -1010,7 +1007,7 @@ class TaskManager(BaseManager):
                         {'role': 'system', 'content': self.check_for_completion_prompt},
                         {'role': 'user', 'content': format_messages(self.history, use_system_prompt= True)}]
                 logger.info(f"##### Answer from the LLM {answer}")
-                convert_to_request_log(message=format_messages(prompt, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
+                convert_to_request_log(message=format_messages(prompt, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.llm_agent_config["model"], run_id= self.run_id)
                 convert_to_request_log(message=answer, meta_info= meta_info, component="llm", direction="response", model= self.check_for_completion_llm, run_id= self.run_id)
                 
                 if should_hangup:
