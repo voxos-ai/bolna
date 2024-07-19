@@ -140,6 +140,7 @@ class OpenaiAssistants(BaseModel):
     temperature: Optional[float] = 0.2
     buffer_size: Optional[int] = 100
     provider: Optional[str] = "openai"
+    model: Optional[str] = "gpt-3.5-turbo"
 
 
 class LLM(BaseModel):
