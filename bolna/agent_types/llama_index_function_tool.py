@@ -69,6 +69,9 @@ class LlamaIndexAttachRag(BaseAgent):
         self._setup_llm()
         self._setup_vector_store()
         self._setup_agent()
+        self._bool = False
+
+        
     
     
 
@@ -82,6 +85,8 @@ class LlamaIndexAttachRag(BaseAgent):
         )
     def _retrive_function(self,query):
         "this frunction grap extra imformation from the knowledge base"
+        logger.info(f"function is called")
+        self._bool = True
         headers = {
             'accept': 'application/json',
         }
@@ -93,6 +98,7 @@ class LlamaIndexAttachRag(BaseAgent):
             params=params,
             headers=headers,
         )
+        logger.info(f"{response.text}")
         return response.text
     def _setup_vector_store(self):
         """Set up the vector store and index."""
@@ -104,7 +110,7 @@ class LlamaIndexAttachRag(BaseAgent):
 
     def _setup_agent(self):
         """Set up the OpenAI agent with the query engine tool."""
-        tool = FunctionTool.from_defaults(fn=self._retrive_function)
+        tool = FunctionTool.from_defaults(fn=self._retrive_function,name="retrive_paper",description="it provide imformation about the research paper (Methods, Analysis & Insights from Multimodal LLM Pre-training)")
         self.agent = OpenAIAgent.from_tools(tools=[tool], verbose=True)
         logger.info("LLAMA INDEX AGENT IS CREATED")
 
@@ -146,9 +152,13 @@ class LlamaIndexAttachRag(BaseAgent):
         buffer = ""
         latency = -1
         start_time = time.time()
+         
 
         token_generator = await asyncio.to_thread(self.agent.stream_chat, message.content, history)
+        token = self.agent.stream_chat(message.content, history)
         
+        if self._bool:
+             yield "PLESE WAIT WE GONNA RETRIVE IMFORMATION FROM SOURCE", True, latency, False
         for token in token_generator.response_gen:
             if latency < 0:
                 latency = time.time() - start_time
@@ -161,3 +171,4 @@ class LlamaIndexAttachRag(BaseAgent):
         if buffer:
             logger.info(f"LLM BUFFER FLUSH BUFFER OUTPUT: {buffer}")
             yield buffer.strip(), True, latency, False
+        self._bool = False
