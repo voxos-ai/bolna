@@ -10,6 +10,7 @@ import uuid
 import copy
 from datetime import datetime
 
+import openai
 import aiohttp
 
 from bolna.constants import ACCIDENTAL_INTERRUPTION_PHRASES, FILLER_DICT, PRE_FUNCTION_CALL_MESSAGE
@@ -61,8 +62,9 @@ class TaskManager(BaseManager):
             logger.info(f"Assistant id for agent is {self.kwargs['assistant_id']}")
 
         if self.__has_extra_config():
-            self.kwargs['assistant_id'] = task['tools_config']["llm_agent"]['extra_config']['assistant_id']
-            logger.info(f"Assistant id for agent is {self.kwargs['assistant_id']}")
+            pass
+            #self.kwargs['assistant_id'] = task['tools_config']["llm_agent"]['extra_config']['assistant_id']
+            #logger.info(f"Assistant id for agent is {self.kwargs['assistant_id']}")
 
         logger.info(f"doing task {task}")
         self.task_id = task_id
@@ -480,22 +482,39 @@ class TaskManager(BaseManager):
     def __setup_tasks(self, llm = None):
         if self.task_config["task_type"] == "conversation":
             agent_type = self.task_config["tools_config"]["llm_agent"].get("agent_type", self.task_config["tools_config"]["llm_agent"]["agent_flow_type"])
+            print(agent_type)
+            # agent_type = self.task_config["tools_config"]["llm_agent"]["agent_flow_type"]
             if agent_type == "streaming":
                 self.tools["llm_agent"] = StreamingContextualAgent(llm)
+            
+            
             #----------------------------------------
             elif agent_type == "llama-index-rag":
-                del llm
+                logger.info("#### Setting up llama-index-rag agent ####")
+                extra_config = self.task_config["tools_config"]["llm_agent"].get("extra_config", {})
+                vector_store_config = extra_config.get("vector_store", {})
+                
                 self.tools["llm_agent"] = LlamaIndexRag(
-                    vector_id=self.task_config["tools_config"]["llm_agent"]["vector_id"],
-                    temperature = self.task_config["tools_config"]["llm_agent"]["temperature"],
-                    model = self.task_config["tools_config"]["llm_agent"]["model"],
-                    buffer = 40,
-                    max_tokens = self.task_config["tools_config"]["llm_agent"]["max_tokens"]
+                    vector_id=vector_store_config.get("vector_id"),
+                    temperature=extra_config.get("temperature", 0.1),
+                    model=extra_config.get("model", "gpt-3.5-turbo-16k"),
+                    buffer=40,
+                    max_tokens=100,  # You might want to make this configurable
+                    provider_config=vector_store_config
                 )
                 logger.info("Llama-index rag agent is created")
-                #TODO:
-                #1. add other parameter
+
+                # Set OpenAI API key if provided
+                # if "OPENAI_API_KEY" in os.environ:
+                #     openai.api_key = os.environ["OPENAI_API_KEY"]
+                    
+                logger.info(f"Agent type {agent_type} is set up")
             #-----------------------------------------
+
+
+
+
+
             elif agent_type == "openai_assistant":
                 logger.info("setting up backend as openai_assistants")
                 self.tools["llm_agent"] = OpenAIAssistantAgent(**self.task_config["tools_config"]["llm_agent"]['extra_config'])
@@ -519,7 +538,6 @@ class TaskManager(BaseManager):
 
             logger.info(f"Webhook URL {webhook_url}")
             self.tools["webhook_agent"] = WebhookAgent(webhook_url=webhook_url)
-
 
         logger.info("prompt and config setup completed")
         

@@ -23,3 +23,5 @@ COLLECTION_NAME="movies_records"
 
 db = mongo_client[DB_NAME]
 collection = db[COLLECTION_NAME]
+print(type(db))
+print(type(collection))

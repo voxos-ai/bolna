@@ -94,7 +94,7 @@ class RAGEngine:
         return response
 
 def main():
-    OPENAI_API_KEY = "sk-proj-4rIMM181RdsUwbitrvPGT3BlbkFJLys9qgmNhoaEqPt9aVCV"
+    OPENAI_API_KEY = "***"
     os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
 
     config = MongoDBConfig(

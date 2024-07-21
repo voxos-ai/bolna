@@ -22,13 +22,8 @@ twilio_client = Client(twilio_account_sid, twilio_auth_token)
 
 
 def populate_ngrok_tunnels():
-<<<<<<< HEAD
     response = requests.get("http://localhost:4040/api/tunnels")  # ngrok interface
     app_callback_url, websocket_url = None, None
-=======
-    response = requests.get("http://ngrok:4040/api/tunnels")  # ngrok interface
-    telephony_url, bolna_url = None, None
->>>>>>> ad7d2aa6669c169c5b2dc9eea58e419abbe46f62
 
     if response.status_code == 200:
         data = response.json()

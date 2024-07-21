@@ -7,9 +7,8 @@ from pydantic import BaseModel
 from llama_index.core import SimpleDirectoryReader
 from llama_index.core.node_parser import SimpleNodeParser
 
-# Import your base classes and MongoDB implementation
-from base import DatabaseConnector, VectorSearchEngine
-from mongodb_rag import MongoDBConnector
+from bolna.rag.base import DatabaseConnector, VectorSearchEngine
+from bolna.rag.mongodb_rag import MongoDBConnector
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -35,10 +34,10 @@ class DatabaseConfig(BaseModel):
 
 class ProviderConfig(BaseModel):
     provider: str
-    provider_config: Dict[str, DatabaseConfig]  # DatabaseConfig nested here
+    provider_config: DatabaseConfig  # DatabaseConfig nested here
 
 class RAGConfig(BaseModel):
-    provider: ProviderConfig
+    providers: ProviderConfig
     openai_api_key: str
 
 class QueryRequest(BaseModel):
@@ -52,13 +51,12 @@ async def setup_rag(config: RAGConfig):
     logger.info("Setting up RAG system...")
     os.environ["OPENAI_API_KEY"] = config.openai_api_key
 
-    provider = config.provider
-    if provider.provider.lower() == "mongodb":
-        db_config = provider.provider_config.get("mongodb")
-        if db_config:
-            db_connector = MongoDBConnector(db_config)  # Make sure you're passing the right config
-        else:
-            raise HTTPException(status_code=400, detail="MongoDB configuration is required.")
+    providers = config.providers  # Corrected this line
+    if providers.provider.lower() == "mongodb":
+        db_config = providers.provider_config
+        db_connector = MongoDBConnector(db_config)
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported provider")
 
     db_connector.connect()
     doc_count = db_connector.collection.count_documents({})

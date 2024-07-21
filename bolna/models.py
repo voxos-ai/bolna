@@ -135,6 +135,22 @@ class OpenaiAssistants(BaseModel):
     temperature: Optional[int] = 0.2
     buffer_size: Optional[int] = 100
 
+class MongoDBProviderConfig(BaseModel):
+    connection_string: str
+    db_name: str
+    collection_name: str
+    index_name: str
+    llm_model: str
+    embedding_model: str
+    embedding_dimensions: int
+
+class VectorStore(BaseModel):
+    provider: str
+    provider_config: MongoDBProviderConfig
+    vector_id: str
+
+class ExtraConfig(BaseModel):
+    vector_store : VectorStore
 
 class LLM(BaseModel):
     vector_id: Optional[str] = "none"
@@ -157,6 +173,7 @@ class LLM(BaseModel):
     extraction_details: Optional[str] = None
     summarization_details: Optional[str] = None
     prompt: Optional[str] = None
+    extra_config : Optional[ExtraConfig] = None
 
 class Node(BaseModel):
     id: str
