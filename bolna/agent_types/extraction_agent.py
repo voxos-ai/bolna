@@ -12,6 +12,9 @@ class ExtractionContextualAgent(BaseAgent):
         self.is_inference_on = False
         self.has_intro_been_sent = False
 
+    def get_model(self):
+        return self.llm.get_model()
+    
     async def generate(self, history):
         logger.info("extracting json from the previous conversation data")
         json_data = await self.llm.generate(history, request_json=True)
