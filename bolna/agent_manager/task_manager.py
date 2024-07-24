@@ -828,9 +828,12 @@ class TaskManager(BaseManager):
     
     async def __execute_function_call(self, url, method, param, api_token, model_args, meta_info, next_step, called_fun, **resp):
         self.toggle_blank_filler_message = False
+
+        # only for testing
         for i in range(10):
             logger.info(f"sleep for {i} sec")
             await asyncio.sleep(1)
+        
         if called_fun == "transfer_call":
             logger.info(f"Transfer call function called param {param}")
             call_sid = self.tools["input"].get_call_sid()
