@@ -146,7 +146,6 @@ class OpenaiAssistants(BaseModel):
 class LLM(BaseModel):
     model: Optional[str] = "gpt-3.5-turbo-16k"
     max_tokens: Optional[int] = 100
-    agent_flow_type: Optional[str] = "streaming" #It is used for backwards compatibility  
     family: Optional[str] = "openai"
     temperature: Optional[float] = 0.1
     request_json: Optional[bool] = False
@@ -158,11 +157,13 @@ class LLM(BaseModel):
     presence_penalty: Optional[float] = 0.0
     provider: Optional[str] = "openai"
     base_url: Optional[str] = None
+
+
+class SIMPLE_LLM_AGENT(LLM):
+    agent_flow_type: Optional[str] = "streaming" #It is used for backwards compatibility  
     routes: Optional[Routes] = None 
-    route_details: Optional[Routes] = None #Just to reduce confusion
     extraction_details: Optional[str] = None
     summarization_details: Optional[str] = None
-    prompt: Optional[str] = None
 
 class Node(BaseModel):
     id: str
@@ -190,10 +191,13 @@ class MultiAgent(BaseModel):
     agent_map: Dict[str, Union[LLM, OpenaiAssistants]]
     agent_routing_config: Dict[str, AGENT_ROUTE_CONFIG]
     default_agent: str
+    embedding_model: Optional[str] = "Snowflake/snowflake-arctic-embed-l"
 
 class LLM_AGENT(BaseModel):
     agent_flow_type: str
     agent_type: str #can be llamaindex_rag, simple_llm_agent, router_agent, dag_agent, openai_assistant, custom, etc 
+    #extra_config: Union[OpenaiAssistants, LLM_AGENT_GRAPH, MultiAgent, LLM, SIMPLE_LLM_AGENT]
+    guardrails: Optional[Routes] = None #Just to reduce confusion
     extra_config: Union[OpenaiAssistants, LLM_AGENT_GRAPH, MultiAgent, LLM]
 
 
@@ -225,7 +229,7 @@ class ToolModel(BaseModel):
     tools_params: Dict[str, APIParams]
 
 class ToolsConfig(BaseModel):
-    llm_agent: Optional[Union[LLM_AGENT, LLM]] = None
+    llm_agent: Optional[Union[LLM_AGENT, SIMPLE_LLM_AGENT]] = None
     synthesizer: Optional[Synthesizer] = None
     transcriber: Optional[Transcriber] = None
     input: Optional[IOModel] = None
