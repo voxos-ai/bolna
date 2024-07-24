@@ -209,7 +209,11 @@ class TaskManager(BaseManager):
         self.request_logs = []
         self.hangup_task = None
         
-        #Setup conversation config
+        # basically take care about the filler which is sent
+        self.time_blank_filler_message = task["task_config"]["time_blank_filler_message"]
+        self.toggle_blank_filler_message = task["task_config"]["toggle_blank_filler_message"]
+        self.blank_filler_message = task["task_config"]["blank_filler_message"]
+
         if task_id == 0:
             
             self.background_check_task = None
@@ -915,6 +919,13 @@ class TaskManager(BaseManager):
         await self._handle_llm_output(next_step, filler, should_bypass_synth, new_meta_info, is_filler = True)
     
     async def __execute_function_call(self, url, method, param, api_token, model_args, meta_info, next_step, called_fun, **resp):
+        self.toggle_blank_filler_message = False
+
+        # only for testing
+        for i in range(10):
+            logger.info(f"sleep for {i} sec")
+            await asyncio.sleep(1)
+        
         if called_fun == "transfer_call":
             logger.info(f"Transfer call function called param {param}")
             call_sid = self.tools["input"].get_call_sid()
@@ -942,8 +953,10 @@ class TaskManager(BaseManager):
         model_args["messages"].append({"role":"system","content":content})
         logger.info(f"Logging function call parameters ")
         convert_to_request_log(format_messages(model_args['messages'], True), meta_info, self.llm_config['model'], "llm", direction = "request", is_cached= False, run_id = self.run_id)
+        self.toggle_blank_filler_message = True
         if called_fun != "transfer_call":
             await self.__do_llm_generation(model_args["messages"], meta_info, next_step, should_trigger_function_call = True)
+        
             
             
     def __store_into_history(self, meta_info, messages, llm_response, should_trigger_function_call = False):
@@ -1610,8 +1623,13 @@ class TaskManager(BaseManager):
                 
                 if "is_final_chunk_of_entire_response" in message['meta_info'] and message['meta_info']['is_final_chunk_of_entire_response']:
                     self.started_transmitting_audio = False
-                    logger.info("##### End of synthesizer stream and ")     
-                    self.asked_if_user_is_still_there = False   
+                    logger.info("##### End of synthesizer stream and ")
+                    
+                    #If we're sending the message to check if user is still here, don't set asked_if_user_is_still_there to True
+                    if message['meta_info']['text'] != self.blank_filler_message:
+                        self.asked_if_user_is_still_there = False     
+                    
+                    # self.asked_if_user_is_still_there = False   
                     num_chunks = 0
                     self.turn_id +=1
                     if not self.first_message_passed:
@@ -1654,15 +1672,17 @@ class TaskManager(BaseManager):
                 logger.info(f"{time_since_last_spoken_AI_word} seconds since last spoken time stamp and hence cutting the phone call and last transmitted timestampt ws {self.last_transmitted_timesatamp} and time since last spoken human word {self.time_since_last_spoken_human_word}")
                 await self.__process_end_of_conversation()
                 break
-            elif time_since_last_spoken_AI_word > 6 and not self.asked_if_user_is_still_there and self.time_since_last_spoken_human_word < self.last_transmitted_timesatamp :
+            elif time_since_last_spoken_AI_word > self.time_blank_filler_message and not self.asked_if_user_is_still_there and self.time_since_last_spoken_human_word < self.last_transmitted_timesatamp :
                 logger.info(f"Asking if the user is still there")
                 self.asked_if_user_is_still_there = True
-                if self.should_record:
-                    meta_info={'io': 'default', "request_id": str(uuid.uuid4()), "cached": False, "sequence_id": -1, 'format': 'wav'}
-                    await self._synthesize(create_ws_data_packet("Hey, are you still there?", meta_info= meta_info))
-                else:
-                    meta_info={'io': self.tools["output"].get_provider(), "request_id": str(uuid.uuid4()), "cached": False, "sequence_id": -1, 'format': 'pcm'}
-                    await self._synthesize(create_ws_data_packet("Hey, are you still there?", meta_info= meta_info))
+                
+                if self.toggle_blank_filler_message:
+                    if self.should_record:
+                        meta_info={'io': 'default', "request_id": str(uuid.uuid4()), "cached": False, "sequence_id": -1, 'format': 'wav'}
+                        await self._synthesize(create_ws_data_packet(self.blank_filler_message, meta_info= meta_info))
+                    else:
+                        meta_info={'io': self.tools["output"].get_provider(), "request_id": str(uuid.uuid4()), "cached": False, "sequence_id": -1, 'format': 'pcm'}
+                        await self._synthesize(create_ws_data_packet(self.blank_filler_message, meta_info= meta_info))
                 
                 #Just in case we need to clear messages sent before 
                 await self.tools["output"].handle_interruption()
