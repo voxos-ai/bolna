@@ -214,6 +214,11 @@ class ConversationConfig(BaseModel):
     use_fillers: Optional[bool] = False
     call_transfer_number: Optional[str] = ""
 
+    
+    time_blank_filler_message:Optional[int] = 6
+    blank_filler_message:Optional[str] = "Hey, are you still there"
+    toggle_blank_filler_message:Optional[bool] = True
+
     @validator('hangup_after_silence', pre=True, always=True)
     def set_hangup_after_silence(cls, v):
         return v if v is not None else 10  # Set default value if None is passed
