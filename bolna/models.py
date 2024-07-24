@@ -69,7 +69,10 @@ class StylettsConfig(BaseModel):
     diffusion_steps: int = 5
     embedding_scale: float = 1
 
-
+class AzureConfig(BaseModel):
+    voice: str
+    model: str
+    language: str
 
 class Transcriber(BaseModel):
     model: Optional[str] = "nova-2"
@@ -136,24 +139,25 @@ class OpenaiAssistants(BaseModel):
     buffer_size: Optional[int] = 100
 
 class MongoDBProviderConfig(BaseModel):
-    connection_string: str
-    db_name: str
-    collection_name: str
-    index_name: str
-    llm_model: str
-    embedding_model: str
-    embedding_dimensions: int
+    connection_string: Optional[str] = None
+    db_name: Optional[str] = None
+    collection_name: Optional[str] = None
+    index_name: Optional[str] = None
+    llm_model: Optional[str] = None
+    embedding_model: Optional[str] = None
+    embedding_dimensions: Optional[str] = None
+
+class LanceDBProviderConfig(BaseModel):
+    vector_id: str
 
 class VectorStore(BaseModel):
     provider: str
-    provider_config: MongoDBProviderConfig
-    vector_id: str
+    provider_config: Union[LanceDBProviderConfig, MongoDBProviderConfig]
 
 class ExtraConfig(BaseModel):
     vector_store : VectorStore
 
 class LLM(BaseModel):
-    vector_id: Optional[str] = "none"
     model: Optional[str] = "gpt-3.5-turbo"
     max_tokens: Optional[int] = 100
     agent_flow_type: str = "streaming" #It can be llamaindex_rag, simple_llm_agent, router_agent, dag_agent, openai_assistant, custom

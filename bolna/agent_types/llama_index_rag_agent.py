@@ -1,8 +1,10 @@
 import os
 import time
 import asyncio
+import logging
 from typing import List, Tuple, Generator, AsyncGenerator
-import dotenv
+
+from dotenv import load_dotenv, find_dotenv
 
 from llama_index.core import VectorStoreIndex, StorageContext
 from llama_index.core.llms import ChatMessage
@@ -19,7 +21,8 @@ from bolna.rag.base import DatabaseConnector
 
 from bolna.rag.mongodb_rag import MongoDBConfig, MongoDBConnector, RAGEngine as MongoDBRAGEngine
 
-dotenv.load_dotenv()
+
+load_dotenv(find_dotenv(), override=True)
 logger = configure_logger(__name__)
 
 class LlamaIndexRag(BaseAgent):
@@ -62,6 +65,8 @@ class LlamaIndexRag(BaseAgent):
         self.max_tokens = max_tokens
         self.provider_config = provider_config
         self.OPENAI_KEY = os.getenv('OPENAI_API_KEY')
+        # self.LANCE_DB = "/Users/vipul/Nova/Work/Bolna/LlamaIndex-MutiRAG/DataBase/dev"
+        self.LANCE_DB = os.getenv(LANCEDB_DIR)
         self.provider = None
         self.query_engine = None
 
@@ -81,29 +86,28 @@ class LlamaIndexRag(BaseAgent):
     def _setup_provider(self):
         """Based on the relevant provider config, set up the provider."""
 
-        if self.provider_config:
-            provider_name = self.provider_config.get('provider')
-            if provider_name == 'mongodb':
-                config = MongoDBConfig(**self.provider_config['provider_config'])
-                connector = MongoDBConnector(config)
-                connector.connect()
-                connector.verify_data()
-                self.provider = MongoDBRAGEngine(connector)
-                self.provider.setup()
-                logger.info(f"{provider_name.capitalize()} RAG engine initialized")
-            # Add more providers here as elif statements
-            else:
-                logger.warning(f"Unsupported provider: {provider_name}. Falling back to LanceDB.")
-                self._setup_lancedb()
+        provider_name = self.provider_config.get('provider')
+        logging.info(f"Provider Name : {provider_name}")
+
+        if provider_name == 'mongodb':
+            logging.info(f"Setting up {provider_name} RAG")
+            config = MongoDBConfig(**self.provider_config['provider_config'])
+            connector = MongoDBConnector(config)
+            connector.connect()
+            connector.verify_data()
+            self.provider = MongoDBRAGEngine(connector)
+            self.provider.setup()
+            logger.info(f"{provider_name.capitalize()} RAG engine initialized")
+        # Add more providers here as elif statements
         else:
-            self._setup_lancedb()
-            
-    def _setup_lancedb(self):
-        self.vector_store = LanceDBVectorStore(uri=lance_db, table_name=self.vector_id)
-        storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
-        self.vector_index = VectorStoreIndex([], storage_context=storage_context)
-        self.query_engine = self.vector_index.as_query_engine()
-        logger.info("LanceDB vector store initialized")
+            logging.info(f"LanceDB RAG")
+            logging.info(f"URI : LanceDB {self.LANCE_DB}")
+            self.vector_store = LanceDBVectorStore(uri=self.LANCE_DB , table_name=self.provider_config['provider_config'].get('vector_id'))
+            logging.info(f"Table params : {self.provider_config['provider_config'].get('vector_id')}")
+            storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
+            self.vector_index = VectorStoreIndex([], storage_context=storage_context)
+            self.query_engine = self.vector_index.as_query_engine()
+            logger.info("LanceDB vector store initialized")
 
     # def _setup_vector_store(self):
     #     """Set up the vector store and index."""

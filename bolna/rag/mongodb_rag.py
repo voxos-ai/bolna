@@ -93,33 +93,33 @@ class RAGEngine:
 
         return response
 
-def main():
-    OPENAI_API_KEY = "***"
-    os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+# def main():
+#     OPENAI_API_KEY = "***"
+#     os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
 
-    config = MongoDBConfig(
-        connection_string="mongodb+srv://vipul:qqgr4bwAYl5pZSU9@testing-rag.nqaknom.mongodb.net/",
-        db_name="movies",
-        collection_name="movies_records",
-        index_name="vector_index",
-    )
+#     config = MongoDBConfig(
+#         connection_string="**",
+#         db_name="**",
+#         collection_name="**",
+#         index_name="**",
+#     )
 
-    try:
-        db_connector = MongoDBConnector(config)
-        db_connector.connect()
-        db_connector.verify_data()
+#     try:
+#         db_connector = MongoDBConnector(config)
+#         db_connector.connect()
+#         db_connector.verify_data()
 
-        rag_engine = RAGEngine(db_connector)
-        rag_engine.setup()
+#         rag_engine = RAGEngine(db_connector)
+#         rag_engine.setup()
 
-        query = "Any romantic movie for me? you can give anything you want?"
-        rag_engine.query(query)
+#         query = "Any romantic movie for me? you can give anything you want?"
+#         rag_engine.query(query)
 
-    except Exception as e:
-        logger.error(f"An error occurred: {e}")
-    finally:
-        if 'db_connector' in locals():
-            db_connector.disconnect()
+#     except Exception as e:
+#         logger.error(f"An error occurred: {e}")
+#     finally:
+#         if 'db_connector' in locals():
+#             db_connector.disconnect()
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()
