@@ -135,8 +135,10 @@ class OpenaiAssistants(BaseModel):
     name: Optional[str] = None
     assistant_id: str = None
     max_tokens: Optional[int] =100
-    temperature: Optional[int] = 0.2
+    temperature: Optional[float] = 0.2
     buffer_size: Optional[int] = 100
+    provider: Optional[str] = "openai"
+    model: Optional[str] = "gpt-3.5-turbo"
 
 class MongoDBProviderConfig(BaseModel):
     connection_string: Optional[str] = None
@@ -160,7 +162,6 @@ class ExtraConfig(BaseModel):
 class LLM(BaseModel):
     model: Optional[str] = "gpt-3.5-turbo"
     max_tokens: Optional[int] = 100
-    agent_flow_type: str = "streaming" #It can be llamaindex_rag, simple_llm_agent, router_agent, dag_agent, openai_assistant, custom
     family: Optional[str] = "openai"
     temperature: Optional[float] = 0.1
     request_json: Optional[bool] = False
@@ -172,12 +173,13 @@ class LLM(BaseModel):
     presence_penalty: Optional[float] = 0.0
     provider: Optional[str] = "openai"
     base_url: Optional[str] = None
+
+
+class SIMPLE_LLM_AGENT(LLM):
+    agent_flow_type: Optional[str] = "streaming" #It is used for backwards compatibility  
     routes: Optional[Routes] = None 
-    route_details: Optional[Routes] = None #Just to reduce confusion
     extraction_details: Optional[str] = None
     summarization_details: Optional[str] = None
-    prompt: Optional[str] = None
-    extra_config : Optional[ExtraConfig] = None
 
 class Node(BaseModel):
     id: str
@@ -197,13 +199,22 @@ class LLM_AGENT_GRAPH(BaseModel):
     nodes: List[Node]
     edges: List[Edge]
 
-class ROUTER_AGENT(BaseModel):
-    route_agent_map: Dict[str, LLM]
+class AGENT_ROUTE_CONFIG(BaseModel):
+    utterances: List[str]
+    threshold: Optional[float] = 0.85
+
+class MultiAgent(BaseModel):
+    agent_map: Dict[str, Union[LLM, OpenaiAssistants]]
+    agent_routing_config: Dict[str, AGENT_ROUTE_CONFIG]
+    default_agent: str
+    embedding_model: Optional[str] = "Snowflake/snowflake-arctic-embed-l"
 
 class LLM_AGENT(BaseModel):
     agent_flow_type: str
     agent_type: str #can be llamaindex_rag, simple_llm_agent, router_agent, dag_agent, openai_assistant, custom, etc 
-    extra_config: Union[OpenaiAssistants, LLM_AGENT_GRAPH, ROUTER_AGENT, LLM]
+    #extra_config: Union[OpenaiAssistants, LLM_AGENT_GRAPH, MultiAgent, LLM, SIMPLE_LLM_AGENT]
+    guardrails: Optional[Routes] = None #Just to reduce confusion
+    extra_config: Union[OpenaiAssistants, LLM_AGENT_GRAPH, MultiAgent, LLM]
 
 
 class MessagingModel(BaseModel):
@@ -234,7 +245,7 @@ class ToolModel(BaseModel):
     tools_params: Dict[str, APIParams]
 
 class ToolsConfig(BaseModel):
-    llm_agent: Optional[Union[LLM_AGENT, LLM]] = None
+    llm_agent: Optional[Union[LLM_AGENT, SIMPLE_LLM_AGENT]] = None
     synthesizer: Optional[Synthesizer] = None
     transcriber: Optional[Transcriber] = None
     input: Optional[IOModel] = None
@@ -263,6 +274,11 @@ class ConversationConfig(BaseModel):
     call_terminate: Optional[int] = 90
     use_fillers: Optional[bool] = False
     call_transfer_number: Optional[str] = ""
+
+    
+    time_blank_filler_message:Optional[int] = 6
+    blank_filler_message:Optional[str] = "Hey, are you still there"
+    toggle_blank_filler_message:Optional[bool] = True
 
     @validator('hangup_after_silence', pre=True, always=True)
     def set_hangup_after_silence(cls, v):

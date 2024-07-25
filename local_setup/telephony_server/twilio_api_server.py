@@ -24,6 +24,7 @@ twilio_client = Client(twilio_account_sid, twilio_auth_token)
 def populate_ngrok_tunnels():
     response = requests.get("http://localhost:4040/api/tunnels")  # ngrok interface
     app_callback_url, websocket_url = None, None
+    telephony_url, bolna_url = None, None
 
     if response.status_code == 200:
         data = response.json()
@@ -62,7 +63,7 @@ async def make_call(request: Request):
                 from_=twilio_phone_number,
                 url=f"{telephony_host}/twilio_connect?bolna_host={bolna_host}&agent_id={agent_id}",
                 method="POST",
-                record=True
+                record=False
             )
         except Exception as e:
             print(f'make_call exception: {str(e)}')
