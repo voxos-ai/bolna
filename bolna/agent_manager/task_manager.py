@@ -47,7 +47,6 @@ class TaskManager(BaseManager):
         self.average_transcriber_latency = 0.0
         self.task_config = task
 
-        logger.info(f"API TOOLS IN TOOLS CONFIG {task['tools_config'].get('api_tools')}")
         if task['tools_config'].get('api_tools', None) is not None:
             logger.info(f"API TOOLS is present {task['tools_config']['api_tools']}")
             self.kwargs['api_tools'] = task['tools_config']['api_tools']
@@ -181,10 +180,12 @@ class TaskManager(BaseManager):
                     self.llm_config_map[agent]['agent_type'] = "knowledgebase_agent"
 
         elif not self.__is_openai_assistant():
+            logger.info(f"NOT OPEN AI ASSISTANT")
             if self.task_config["tools_config"]["llm_agent"] is not None:
                 agent_type = self.task_config["tools_config"]["llm_agent"].get("agent_type", None)
                 llm_config = self.task_config["tools_config"]["llm_agent"] if not agent_type else self.task_config["tools_config"]["llm_agent"]['extra_config']
                 self.llm_agent_config = llm_config.copy()
+                logger.info(f"SETTING FOLLOW UP TASK DETAILS")
                 self.llm_config = {
                     "model": llm_config['model'],
                     "max_tokens": llm_config['max_tokens'],
@@ -334,37 +335,38 @@ class TaskManager(BaseManager):
             # setting synthesizer
             self.__setup_synthesizer(self.llm_config)
 
-            # setting llm
-            if self.llm_config is not None:
-                llm = self.__setup_llm(self.llm_config)
-                #Setup tasks
+        # setting llm
+        if self.llm_config is not None:
+            logger.info(f"LLM CONFIG IS NONE {self.task_config['task_type']}")
+            llm = self.__setup_llm(self.llm_config)
+            #Setup tasks
+            agent_params = {
+                'llm': llm,
+                'agent_type': self.llm_agent_config.get("agent_type","simple_llm_agent")
+            }                    
+            self.__setup_tasks(**agent_params)
+
+        elif self.__is_multiagent():
+            # Setup task for multiagent conversation
+            for agent in self.task_config["tools_config"]["llm_agent"]['extra_config']['agent_map']:
+                if 'routes' in  self.llm_config_map[agent]:
+                    del self.llm_config_map[agent]['routes'] #Remove routes from here as it'll create conflict ahead
+                llm = self.__setup_llm(self.llm_config_map[agent])
+                agent_type = self.llm_config_map[agent].get("agent_type","simple_llm_agent")
+                logger.info(f"Getting response for {llm} and agent type {agent_type} and {agent}")
                 agent_params = {
                     'llm': llm,
-                    'agent_type': self.llm_agent_config.get("agent_type","simple_llm_agent")
-                }                    
-                self.__setup_tasks(**agent_params)
+                    'agent_type': agent_type
+                }
+                if agent_type == "openai_assistant":
+                    agent_params['assistant_config'] = self.llm_config_map[agent]
+                llm_agent = self.__setup_tasks(**agent_params)
+                self.llm_agent_map[agent] = llm_agent
+        elif self.__is_openai_assistant():
+            # if self.task_config['tools_config']["llm_agent"].get("agent_type", None) is None:
+            #     assistant_config = {"assistant_id": self.task_config['tools_config']["llm_agent"]['assistant_id']}
+            self.__setup_tasks(agent_type = "openai_assistant", assistant_config= task['tools_config']["llm_agent"]['extra_config'])
 
-            elif self.__is_multiagent():
-                # Setup task for multiagent conversation
-                for agent in self.task_config["tools_config"]["llm_agent"]['extra_config']['agent_map']:
-                    if 'routes' in  self.llm_config_map[agent]:
-                        del self.llm_config_map[agent]['routes'] #Remove routes from here as it'll create conflict ahead
-                    llm = self.__setup_llm(self.llm_config_map[agent])
-                    agent_type = self.llm_config_map[agent].get("agent_type","simple_llm_agent")
-                    logger.info(f"Getting response for {llm} and agent type {agent_type} and {agent}")
-                    agent_params = {
-                        'llm': llm,
-                        'agent_type': agent_type
-                    }
-                    if agent_type == "openai_assistant":
-                        agent_params['assistant_config'] = self.llm_config_map[agent]
-                    llm_agent = self.__setup_tasks(**agent_params)
-                    self.llm_agent_map[agent] = llm_agent
-            elif self.__is_openai_assistant():
-                # if self.task_config['tools_config']["llm_agent"].get("agent_type", None) is None:
-                #     assistant_config = {"assistant_id": self.task_config['tools_config']["llm_agent"]['assistant_id']}
-                self.__setup_tasks(agent_type = "openai_assistant", assistant_config= task['tools_config']["llm_agent"]['extra_config'])
-    
     def __is_openai_assistant(self):
         if self.task_config["task_type"] == "webhook":
             return False
