@@ -10,6 +10,7 @@ import uuid
 import copy
 from datetime import datetime
 
+import openai
 import aiohttp
 
 from bolna.constants import ACCIDENTAL_INTERRUPTION_PHRASES, FILLER_DICT, PRE_FUNCTION_CALL_MESSAGE
@@ -25,8 +26,13 @@ from bolna.helpers.logger_config import configure_logger
 from semantic_router import Route
 from semantic_router.layer import RouteLayer
 from semantic_router.encoders import FastEmbedEncoder
+from concurrent.futures import ThreadPoolExecutor
 
 asyncio.get_event_loop().set_debug(True)
+
+# this is exp.. can we change
+# asyncio.get_event_loop().set_default_executor(ThreadPoolExecutor(20))
+
 logger = configure_logger(__name__)
 
 
@@ -53,6 +59,11 @@ class TaskManager(BaseManager):
         if task['tools_config']["llm_agent"]['extra_config'].get('assistant_id', None) is not None:
             self.kwargs['assistant_id'] = task['tools_config']["llm_agent"]['extra_config']['assistant_id']
             logger.info(f"Assistant id for agent is {self.kwargs['assistant_id']}")
+
+        if self.__has_extra_config():
+            pass
+            #self.kwargs['assistant_id'] = task['tools_config']["llm_agent"]['extra_config']['assistant_id']
+            #logger.info(f"Assistant id for agent is {self.kwargs['assistant_id']}")
 
         if self.__is_openai_assistant():
             self.kwargs['assistant_id'] = task['tools_config']["llm_agent"]['extra_config']['assistant_id']
@@ -550,10 +561,21 @@ class TaskManager(BaseManager):
     def __setup_tasks(self, llm = None, agent_type = None, assistant_config= None):
         if self.task_config["task_type"] == "conversation" and not self.__is_multiagent():
             self.tools["llm_agent"] = self.__get_agent_object(llm, agent_type, assistant_config)
-
+            if agent_type == "llama-index-rag":
+                logger.info("#### Setting up llama-index-rag agent ####")
+                extra_config = self.task_config["tools_config"]["llm_agent"].get("extra_config", {})
+                vector_store_config = extra_config.get("vector_store", {})
+                self.tools["llm_agent"] = LlamaIndexRag(
+                    vector_id=vector_store_config.get("vector_id"),
+                    temperature=extra_config.get("temperature", 0.1),
+                    model=extra_config.get("model", "gpt-3.5-turbo-16k"),
+                    buffer=40,
+                    max_tokens=100,  # You might want to make this configurable
+                    provider_config=vector_store_config
+                )
+                logger.info("Llama-index rag agent is created")
         elif self.__is_multiagent():
             return self.__get_agent_object(llm, agent_type, assistant_config)
-
         elif self.task_config["task_type"] == "extraction":
             logger.info("Setting up extraction agent")
             self.tools["llm_agent"] = ExtractionContextualAgent(llm, prompt=self.system_prompt)
@@ -563,16 +585,12 @@ class TaskManager(BaseManager):
             self.tools["llm_agent"] = SummarizationContextualAgent(llm, prompt=self.system_prompt)
             self.summarized_data = None
         elif self.task_config["task_type"] == "webhook":
-
             if "webhookURL" in self.task_config["tools_config"]["api_tools"]:
               webhook_url = self.task_config["tools_config"]["api_tools"]["webhookURL"]
             else:
               webhook_url = self.task_config["tools_config"]["api_tools"]["tools_params"]["webhook"]["url"]
-
             logger.info(f"Webhook URL {webhook_url}")
             self.tools["webhook_agent"] = WebhookAgent(webhook_url=webhook_url)
-
-
         logger.info("prompt and config setup completed")
         
     ########################

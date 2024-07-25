@@ -74,8 +74,6 @@ class AzureConfig(BaseModel):
     model: str
     language: str
 
-
-
 class Transcriber(BaseModel):
     model: Optional[str] = "nova-2"
     language: Optional[str] = None
@@ -142,9 +140,27 @@ class OpenaiAssistants(BaseModel):
     provider: Optional[str] = "openai"
     model: Optional[str] = "gpt-3.5-turbo"
 
+class MongoDBProviderConfig(BaseModel):
+    connection_string: Optional[str] = None
+    db_name: Optional[str] = None
+    collection_name: Optional[str] = None
+    index_name: Optional[str] = None
+    llm_model: Optional[str] = None
+    embedding_model: Optional[str] = None
+    embedding_dimensions: Optional[str] = None
+
+class LanceDBProviderConfig(BaseModel):
+    vector_id: str
+
+class VectorStore(BaseModel):
+    provider: str
+    provider_config: Union[LanceDBProviderConfig, MongoDBProviderConfig]
+
+class ExtraConfig(BaseModel):
+    vector_store : VectorStore
 
 class LLM(BaseModel):
-    model: Optional[str] = "gpt-3.5-turbo-16k"
+    model: Optional[str] = "gpt-3.5-turbo"
     max_tokens: Optional[int] = 100
     family: Optional[str] = "openai"
     temperature: Optional[float] = 0.1
