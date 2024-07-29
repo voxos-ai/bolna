@@ -160,7 +160,7 @@ class BodhiTranscriber(BaseTranscriber):
                 # save the audio cursor here
                 self.audio_cursor = self.num_frames * self.audio_frame_duration
                 audio_chunk = ws_data_packet.get('data')
-                if self.provider in ["twilio", "exotel", "plivo"]:
+                if self.provider in ["twilio", "exotel"]:
                     logger.info(f"It is a telephony provider")
                     audio_chunk = ulaw2lin(audio_chunk, 2)
 
