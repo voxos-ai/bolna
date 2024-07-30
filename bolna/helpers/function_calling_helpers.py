@@ -2,19 +2,22 @@ import json
 
 import aiohttp
 from bolna.helpers.logger_config import configure_logger
+from bolna.helpers.utils import convert_to_request_log
 
 logger = configure_logger(__name__)
 
-async def trigger_api(url, method, param, api_token, **kwargs):
+async def trigger_api(url, method, param, api_token, meta_info, run_id, **kwargs):
     try:
         code = compile(param % kwargs, "<string>", "exec")
         exec(code, globals(), kwargs)
         req = param % kwargs
         logger.info(f"Params {param % kwargs} \n {type(req)} \n {param} \n {kwargs} \n\n {req}")
-
+        
         headers = {'Content-Type': 'application/json'}
         if api_token:
             headers['Authorization'] = api_token
+
+        convert_to_request_log(req, meta_info , None, "function_call", direction = "request", is_cached= False, run_id = run_id)
 
         async with aiohttp.ClientSession() as session:
             if method.lower() == "get":
