@@ -98,7 +98,3 @@ ratelimiter==1.2.0.post0
 huggingface-hub==0.23.2
 semantic-router==0.0.46
 supabase==2.3.3
-
-# Version Control (keep at the end)
-pip-compile==6.0.0
-pip-tools==6.13.0
