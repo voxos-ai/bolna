@@ -969,16 +969,14 @@ class TaskManager(BaseManager):
                     return
                 
         response = await trigger_api(url= url, method=method.lower(), param= param, api_token= api_token, **resp)
-        content = FUNCTION_CALL_PROMPT.format(called_fun, url, method, str(response))
+        content = FUNCTION_CALL_PROMPT.format(called_fun, method, str(response))
         model_args["messages"].append({"role":"system","content":content})
         logger.info(f"Logging function call parameters ")
         convert_to_request_log(format_messages(model_args['messages'], True), meta_info, self.llm_config['model'], "llm", direction = "request", is_cached= False, run_id = self.run_id)
         self.toggle_blank_filler_message = True
         if called_fun != "transfer_call":
             await self.__do_llm_generation(model_args["messages"], meta_info, next_step, should_trigger_function_call = True)
-        
-            
-            
+
     def __store_into_history(self, meta_info, messages, llm_response, should_trigger_function_call = False):
         if self.current_request_id in self.llm_rejected_request_ids:
             logger.info("##### User spoke while LLM was generating response")

@@ -30,6 +30,6 @@ async def trigger_api(url, method, param, api_token, **kwargs):
                     logger.info(f"Response from the server: {response_text}")
                     return response_text
     except Exception as e:
-        message = f"There was an error calling the API: {e}"
+        message = f"ERROR CALLING API: There was an error calling the API: {e}"
         logger.error(message)
         return message
