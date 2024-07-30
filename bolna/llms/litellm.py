@@ -89,7 +89,6 @@ class LiteLLM(BaseLLM):
         try:
             completion = await litellm.acompletion(**model_args)
             text = completion.choices[0].message.content
-            logger.error(completion)
         except Exception as e:
             logger.error(f'Error generating response {e}')
         return text
