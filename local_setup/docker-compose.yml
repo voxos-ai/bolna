@@ -17,6 +17,20 @@ services:
       - $HOME/.aws/credentials:/root/.aws/credentials:ro
       - $HOME/.aws/config:/root/.aws/config:ro
 
+  ingestion-app:
+    image: ingestion-app:latest
+    build:
+      context: .
+      dockerfile: dockerfiles/ingestion_server.Dockerfile
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+      - ngrok
+      - bolna-app
+    env_file:
+      - .env
+
   # redis service used as a persistent storage
   redis:
     image: redis:latest

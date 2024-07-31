@@ -1,6 +1,6 @@
 region: us
 version: '2'
-authtoken: <your-auth-token>
+authtoken: 2idcq5RCgwCkpZpSTiHKxX7RV41_5Sux1mFFCUmgCihBVfab6
 tunnels:
   twilio-app:
     addr: twilio-app:8001
@@ -11,3 +11,7 @@ tunnels:
   bolna-app:
     addr: bolna-app:5001
     proto: http
+  ingestion-app:
+    addr: ingestion-app:8000
+    proto: http
+
