@@ -48,24 +48,14 @@ curl --location 'http://192.168.1.10:5001/agent' \
                         "audio_format": "pcm"
                     },
                     "llm_agent": {
-                        "max_tokens": 100.0,
-                        "presence_penalty": 0.0,
-                        "summarization_details": null,
-                        "base_url": null,
-                        "extraction_details": null,
-                        "top_p": 0.9,
+                        "model": "openai/cognitivecomputations/dolphin-2.9-llama3-8b",
+                        "max_tokens": 123,
                         "agent_flow_type": "streaming",
-                        "request_json": false,
-                        "routes": null,
-                        "min_p": 0.1,
-                        "frequency_penalty": 0.0,
-                        "stop": null,
-                        "provider": "openai",
-                        "top_k": 0.0,
-                        "temperature": 0.2,
-                        "model": "gpt-3.5-turbo",
-                        "family": "openai",
-                        "extra_config": null
+                        "use_fallback": true,
+                        "family": "ollama",
+                        "temperature": 0.1,
+                        "request_json": true,
+                        "provider":"vllm"
                     },
                     "transcriber": {
                         "encoding": "linear16",
