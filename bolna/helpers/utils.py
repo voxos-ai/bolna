@@ -432,7 +432,9 @@ async def write_request_logs(message, run_id):
         component_details = [message_data, None, None, None, message.get('latency', None), False, message.get('is_final', False)]
     elif message["component"] == "synthesizer":
         component_details = [message_data, None, None, len(message_data), message.get('latency', None), message['cached'], None, message['engine']]
-
+    elif message["component"] == "function_call":
+        component_details =  [message_data, None, None, None, message.get('latency', None), None, None, None]
+     
     row = row + component_details
 
     header = "Time,Component,Direction,Leg ID,Sequence ID,Model,Data,Input Tokens,Output Tokens,Characters,Latency,Cached,Final Transcript,Engine\n"
@@ -534,6 +536,9 @@ def convert_to_request_log(message, meta_info, model, component = "transcriber",
         log['latency'] = meta_info.get('transcriber_latency', None) if direction == "response" else None
         if 'is_final' in meta_info and meta_info['is_final']:
             log['is_final'] = True
+    if component == "function_call":
+        logger.info(f"Logging {message} {log['data']}")
+        log['latency'] = None
     else:
         log['is_final'] = False #This is logged only for users to know final transcript from the transcriber
     log['engine'] = engine
