@@ -7,7 +7,6 @@ RUN apt-get -y install portaudio19-dev
 RUN git clone https://github.com/bolna-ai/streaming-whisper-server.git
 WORKDIR streaming-whisper-server
 RUN pip install -e .
-RUN pip install git+https://github.com/SYSTRAN/faster-whisper.git
 RUN pip install transformers
 
 RUN ct2-transformers-converter --model openai/whisper-small --copy_files preprocessor_config.json --output_dir ./Server/ASR/whisper_small --quantization float16
