@@ -1,100 +1,28 @@
-# Web Framework and API
-fastapi==0.108.0
-uvicorn==0.22.0
-starlette==0.32.0.post1
-
-# Data Validation and Settings Management
-pydantic==2.8.2
-python-dotenv==1.0.0
-
-# Async Libraries
-aiohttp==3.9.1
 aiobotocore==2.9.0
 aiofiles==23.2.1
-aiocsv==1.3.1
-aiodynamo==23.10.1
-aiohttp-retry==2.8.3
-aioitertools==0.11.0
-aiormq==6.8.0
-aiosignal==1.3.1
-
-# Database and Storage
-redis==5.0.1
-pymongo==4.8.0
-lancedb==0.10.2
-SQLAlchemy==2.0.31
-
-# Machine Learning and NLP
-numpy==1.26.1
-scipy==1.11.4
-scikit-learn==1.5.1
-torch==2.1.2
-torchaudio==2.1.2
-transformers==4.39.3
-sentence-transformers==3.0.1
-fastembed==0.2.7
-onnxruntime==1.18.1
-nltk==3.8.1
-
-# LLM and Related Libraries
-openai>=1.10.0
-litellm==1.40.20
-llama-index==0.10.57
-llama-index-vector-stores-lancedb==0.1.7
-llama-index-vector-stores-mongodb==0.1.8
-cohere==5.3.2
-
-# Text Processing
-tiktoken>=0.6.0
-tokenizers==0.15.2
-
-# Audio Processing
+aiohttp==3.9.1
 azure-cognitiveservices-speech==1.38.0
-pydub==0.25.1
-soundfile==0.12.1
-
-# Date and Time Handling
-python-dateutil==2.8.2
-pytz==2024.1
-
-# HTTP and Networking
-requests==2.31.0
-httpx==0.25.2
-websockets==10.4
-
-# File Handling and Parsing
-python-multipart==0.0.6
-Pillow==10.4.0
-pypdf==4.3.1
-
-# API Clients
-twilio==8.9.0
 daily-python==0.9.1
-slack_sdk==3.31.0
-stripe==8.0.0
-
-# Task Queue and Job Processing
-celery==5.3.6
-taskiq==0.11.0
-
-# Logging and Monitoring
-loguru==0.7.2
-sentry-sdk==2.9.0
-
-# Development and Testing
-uvloop==0.19.0
-pytest==7.4.0
-
-# Data Processing and Analysis
-pandas==2.2.2
-pyarrow==15.0.0
-
-# Utilities
+fastapi==0.108.0
+fastembed==0.2.7
+litellm==1.40.20
+numpy==1.26.1
+openai>=1.10.0
+pydantic==2.5.3
+pydub==0.25.1
 python-dateutil==2.8.2
-tenacity==8.5.0
-ratelimiter==1.2.0.post0
-
-# Optional Dependencies (uncomment if needed)
-huggingface-hub==0.23.2
-semantic-router==0.0.46
-supabase==2.3.3
+python-dotenv==1.0.0
+redis==5.0.1
+requests==2.31.0
+tiktoken>=0.6.0
+twilio==8.9.0
+uvicorn==0.22.0
+websockets==10.4
+onnxruntime>=1.16.3
+scipy==1.11.4
+uvloop==0.19.0
+tokenizers
+huggingface-hub
+semantic-router
+sentence_transformers
+optimum[onnxruntime]
