@@ -10,6 +10,7 @@ import uuid
 import copy
 from datetime import datetime
 
+import openai
 import aiohttp
 
 from bolna.constants import ACCIDENTAL_INTERRUPTION_PHRASES, FILLER_DICT, PRE_FUNCTION_CALL_MESSAGE
@@ -19,14 +20,19 @@ from .base_manager import BaseManager
 from bolna.agent_types import *
 from bolna.providers import *
 from bolna.prompts import *
-from bolna.helpers.utils import calculate_audio_duration, create_ws_data_packet, get_file_names_in_directory, get_raw_audio_bytes, is_valid_md5, \
-    get_required_input_types, format_messages, get_prompt_responses, resample, save_audio_file_to_s3, update_prompt_with_context, get_md5_hash, clean_json_string, wav_bytes_to_pcm, convert_to_request_log, yield_chunks_from_memory
+from bolna.helpers.utils import calculate_audio_duration, create_ws_data_packet, get_file_names_in_directory, get_raw_audio_bytes, get_route_info, is_valid_md5, \
+    get_required_input_types, format_messages, get_prompt_responses, resample, run_in_seperate_thread, save_audio_file_to_s3, update_prompt_with_context, get_md5_hash, clean_json_string, wav_bytes_to_pcm, convert_to_request_log, yield_chunks_from_memory
 from bolna.helpers.logger_config import configure_logger
 from semantic_router import Route
 from semantic_router.layer import RouteLayer
 from semantic_router.encoders import FastEmbedEncoder
+from concurrent.futures import ThreadPoolExecutor
 
 asyncio.get_event_loop().set_debug(True)
+
+# this is exp.. can we change
+# asyncio.get_event_loop().set_default_executor(ThreadPoolExecutor(20))
+
 logger = configure_logger(__name__)
 
 
@@ -47,12 +53,19 @@ class TaskManager(BaseManager):
         self.average_transcriber_latency = 0.0
         self.task_config = task
 
-        logger.info(f"API TOOLS IN TOOLS CONFIG {task['tools_config'].get('api_tools')}")
         if task['tools_config'].get('api_tools', None) is not None:
             logger.info(f"API TOOLS is present {task['tools_config']['api_tools']}")
             self.kwargs['api_tools'] = task['tools_config']['api_tools']
+        if task['tools_config']["llm_agent"]['extra_config'].get('assistant_id', None) is not None:
+            self.kwargs['assistant_id'] = task['tools_config']["llm_agent"]['extra_config']['assistant_id']
+            logger.info(f"Assistant id for agent is {self.kwargs['assistant_id']}")
 
         if self.__has_extra_config():
+            pass
+            #self.kwargs['assistant_id'] = task['tools_config']["llm_agent"]['extra_config']['assistant_id']
+            #logger.info(f"Assistant id for agent is {self.kwargs['assistant_id']}")
+
+        if self.__is_openai_assistant():
             self.kwargs['assistant_id'] = task['tools_config']["llm_agent"]['extra_config']['assistant_id']
             logger.info(f"Assistant id for agent is {self.kwargs['assistant_id']}")
 
@@ -165,12 +178,31 @@ class TaskManager(BaseManager):
         #self.stream = not turn_based_conversation #Currently we are allowing only realtime conversation based usecases. Hence it'll always be true unless connected through dashboard
         self.is_local = False
         self.llm_config = None
-        if self.task_config["tools_config"]["llm_agent"] is not None:
-            self.llm_config = {
-                "model": self.task_config["tools_config"]["llm_agent"]["model"],
-                "max_tokens": self.task_config["tools_config"]["llm_agent"]["max_tokens"],
-                "provider": self.task_config["tools_config"]["llm_agent"]["provider"]
-            }
+        self.llm_config_map = {}
+        self.llm_agent_map = {}
+        if self.__is_multiagent():
+            logger.info(f"Gotta write the code for this shit as well")
+            for agent, config in self.task_config["tools_config"]["llm_agent"]['extra_config']['agent_map'].items():
+                self.llm_config_map[agent] = config.copy()
+                self.llm_config_map[agent]['buffer_size'] = self.task_config["tools_config"]["synthesizer"]['buffer_size']
+                if 'assistant_id' in config:
+                    self.llm_config_map[agent]['agent_type'] = "openai_assistant"
+                elif 'vectorstore_id' in config:
+                    self.llm_config_map[agent]['agent_type'] = "knowledgebase_agent"
+
+        elif not self.__is_openai_assistant():
+            logger.info(f"NOT OPEN AI ASSISTANT")
+            if self.task_config["tools_config"]["llm_agent"] is not None:
+                agent_type = self.task_config["tools_config"]["llm_agent"].get("agent_type", None)
+                llm_config = self.task_config["tools_config"]["llm_agent"] if not agent_type else self.task_config["tools_config"]["llm_agent"]['extra_config']
+                self.llm_agent_config = llm_config.copy()
+                logger.info(f"SETTING FOLLOW UP TASK DETAILS")
+                self.llm_config = {
+                    "model": llm_config['model'],
+                    "max_tokens": llm_config['max_tokens'],
+                    "provider": llm_config['provider'],
+                }
+
         
         # Output stuff
         self.output_task = None
@@ -184,19 +216,16 @@ class TaskManager(BaseManager):
         self.curr_sequence_id = 0
         self.sequence_ids = {-1} #-1 is used for data that needs to be passed and is developed by task manager like backchannleing etc.
         
-        # setting transcriber
-        self.__setup_transcriber()
-        # setting synthesizer
-        self.__setup_synthesizer(self.llm_config)
-        # setting llm
-        llm = self.__setup_llm(self.llm_config)
-        #Setup tasks
-        self.__setup_tasks(llm)
-        
+
         #setup request logs
         self.request_logs = []
         self.hangup_task = None
         
+        # basically take care about the filler which is sent
+        self.time_blank_filler_message = task["task_config"]["time_blank_filler_message"]
+        self.toggle_blank_filler_message = task["task_config"]["toggle_blank_filler_message"]
+        self.blank_filler_message = task["task_config"]["blank_filler_message"]
+
         if task_id == 0:
             
             self.background_check_task = None
@@ -211,24 +240,38 @@ class TaskManager(BaseManager):
             logger.info(f"Will transfer call to {self.call_transfer_number}")
             self.kwargs["process_interim_results"] = "true" if conversation_config.get("optimize_latency", False) is True else "false"
             logger.info(f"Processing interim results {self.kwargs['process_interim_results'] }")
-            # Routes
-            self.routes = task['tools_config']['llm_agent'].get("routes", None)
+            
+            # Routes aka guardrails
+            
+            self.guardrails = task['tools_config']['llm_agent'].get("routes", (task['tools_config']['llm_agent']['extra_config'].get("guardrails", None)))
             self.route_layer = None
-            if self.routes:
+            if self.guardrails:
                 start_time = time.time()
-                routes_meta = self.kwargs.get('routes', None)
+                if self.__is_multiagent():
+                    guardrails_meta = self.kwargs.get('routes', None)
+                    guardrails_meta = guardrails_meta['guardrails']
+                else:
+                    guardrails_meta = self.kwargs.get('routes', None)
+
                 if self.kwargs['routes']:
-                    self.route_encoder = routes_meta["route_encoder"]
-                    self.vector_caches = routes_meta["vector_caches"]
-                    self.route_responses_dict = routes_meta["route_responses_dict"]
-                    self.route_layer = routes_meta["route_layer"]
+                    self.route_encoder = guardrails_meta["route_encoder"]
+                    self.vector_caches = guardrails_meta["vector_caches"]
+                    self.route_responses_dict = guardrails_meta["route_responses_dict"]
+                    self.route_layer = guardrails_meta["route_layer"]
                     logger.info(f"Time to setup routes from warrmed up cache {time.time() - start_time}")
                 else:
-                    self.__setup_routes(self.routes)
+                    # This is blocking and hence we should be setting up routes earlier and passing it 
+                    self.__setup_routes(self.guardrails)
                     logger.info(f"Time to setup routes {time.time() - start_time}")
+            
+            if self.__is_multiagent():
+                guardrails_meta = self.kwargs.pop('routes', None)
+                self.agent_routing = guardrails_meta['agent_routing_config']['route_layer']
+                self.default_agent = task['tools_config']['llm_agent']['extra_config']['default_agent']
+                logger.info(f"Inisialised with default agent {self.default_agent}, agent_routing {self.agent_routing}")
 
 
-        # for long pauses and rushing
+            # for long pauses and rushing
             if conversation_config is not None:
                 self.minimum_wait_duration = self.task_config["tools_config"]["transcriber"]["endpointing"]
                 logger.info(f"minimum wait duration {self.minimum_wait_duration}")
@@ -302,12 +345,54 @@ class TaskManager(BaseManager):
                     logger.info("Not using fillers to decrease latency")
                 else:
                     self.filler_preset_directory = f"{os.getenv('FILLERS_PRESETS_DIR')}/{self.synthesizer_voice.lower()}"
+            # setting transcriber
+            self.__setup_transcriber()
+            # setting synthesizer
+            self.__setup_synthesizer(self.llm_config)
 
-    def __has_extra_config(self):
+        # setting llm
+        if self.llm_config is not None:
+            logger.info(f"LLM CONFIG IS NONE {self.task_config['task_type']}")
+            llm = self.__setup_llm(self.llm_config)
+            #Setup tasks
+            agent_params = {
+                'llm': llm,
+                'agent_type': self.llm_agent_config.get("agent_type","simple_llm_agent")
+            }                    
+            self.__setup_tasks(**agent_params)
+
+        elif self.__is_multiagent():
+            # Setup task for multiagent conversation
+            for agent in self.task_config["tools_config"]["llm_agent"]['extra_config']['agent_map']:
+                if 'routes' in  self.llm_config_map[agent]:
+                    del self.llm_config_map[agent]['routes'] #Remove routes from here as it'll create conflict ahead
+                llm = self.__setup_llm(self.llm_config_map[agent])
+                agent_type = self.llm_config_map[agent].get("agent_type","simple_llm_agent")
+                logger.info(f"Getting response for {llm} and agent type {agent_type} and {agent}")
+                agent_params = {
+                    'llm': llm,
+                    'agent_type': agent_type
+                }
+                if agent_type == "openai_assistant":
+                    agent_params['assistant_config'] = self.llm_config_map[agent]
+                llm_agent = self.__setup_tasks(**agent_params)
+                self.llm_agent_map[agent] = llm_agent
+        elif self.__is_openai_assistant():
+            # if self.task_config['tools_config']["llm_agent"].get("agent_type", None) is None:
+            #     assistant_config = {"assistant_id": self.task_config['tools_config']["llm_agent"]['assistant_id']}
+            self.__setup_tasks(agent_type = "openai_assistant", assistant_config= task['tools_config']["llm_agent"]['extra_config'])
+
+    def __is_openai_assistant(self):
         if self.task_config["task_type"] == "webhook":
             return False
-        extra_config = self.task_config['tools_config']["llm_agent"].get("extra_config", None)
-        return False if extra_config is None else True
+        agent_type = self.task_config['tools_config']["llm_agent"].get("agent_type", self.task_config['tools_config']["llm_agent"].get("agent_flow_type"))
+        return agent_type == "openai_assistant"
+
+    def __is_multiagent(self):
+        if self.task_config["task_type"] == "webhook":
+            return False
+        agent_type = self.task_config['tools_config']["llm_agent"].get("agent_type", None)
+        return agent_type == "multiagent"
 
     def __setup_routes(self, routes):
         embedding_model = routes.get("embedding_model", os.getenv("ROUTE_EMBEDDING_MODEL"))
@@ -430,7 +515,7 @@ class TaskManager(BaseManager):
         except Exception as e:
             logger.error(f"Something went wrong with starting transcriber {e}")
 
-    def __setup_synthesizer(self, llm_config):
+    def __setup_synthesizer(self, llm_config = None):
         logger.info(f"Synthesizer config: {self.task_config['tools_config']['synthesizer']}")
         if self._is_conversation_task():
             self.kwargs["use_turbo"] = self.task_config["tools_config"]["transcriber"]["language"] == "en"
@@ -449,33 +534,48 @@ class TaskManager(BaseManager):
                 self.task_config["tools_config"]["synthesizer"]["stream"] = True if self.enforce_streaming else False #Hardcode stream to be False as we don't want to get blocked by a __listen_synthesizer co-routine
         
             self.tools["synthesizer"] = synthesizer_class(**self.task_config["tools_config"]["synthesizer"], **provider_config, **self.kwargs, caching = caching)
-            if self.task_config["tools_config"]["llm_agent"] is not None:
+            if self.task_config["tools_config"]["llm_agent"] is not None and llm_config is not None:
                 llm_config["buffer_size"] = self.task_config["tools_config"]["synthesizer"].get('buffer_size')
 
     def __setup_llm(self, llm_config):
         if self.task_config["tools_config"]["llm_agent"] is not None:
-            logger.info(f'### PROVIDER {self.task_config["tools_config"]["llm_agent"]["provider"] }')
-            if self.task_config["tools_config"]["llm_agent"]["provider"] in SUPPORTED_LLM_PROVIDERS.keys():
-                llm_class = SUPPORTED_LLM_PROVIDERS.get(self.task_config["tools_config"]["llm_agent"]["provider"])
+            logger.info(f'### PROVIDER {llm_config["provider"] }')
+            if llm_config["provider"] in SUPPORTED_LLM_PROVIDERS.keys():
+                llm_class = SUPPORTED_LLM_PROVIDERS.get(llm_config["provider"])
                 logger.info(f"LLM CONFIG {llm_config}")
                 llm = llm_class(**llm_config, **self.kwargs)
                 return llm
             else:
-                raise Exception(f'LLM {self.task_config["tools_config"]["llm_agent"]["provider"]} not supported')
+                raise Exception(f'LLM {self.llm_agent_config["provider"]} not supported')
 
-    def __setup_tasks(self, llm):
-        if self.task_config["task_type"] == "conversation":
-            agent_type = self.task_config["tools_config"]["llm_agent"].get("agent_type", self.task_config["tools_config"]["llm_agent"]["agent_flow_type"])
-            if agent_type == "streaming":
-                self.tools["llm_agent"] = StreamingContextualAgent(llm)
-            elif agent_type == "openai_assistant":
-                logger.info("setting up backend as openai_assistants")
-                self.tools["llm_agent"] = OpenAIAssistantAgent(llm)
-            elif agent_type in ("preprocessed", "formulaic"):
-                preprocessed = self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "preprocessed"
-                logger.info(f"LLM TYPE {type(llm)}")
-                self.tools["llm_agent"] = GraphBasedConversationAgent(llm, context_data=self.context_data,
-                                                                      prompts=self.prompts, preprocessed=preprocessed)
+    def __get_agent_object(self, llm, agent_type, assistant_config = None ):
+        if agent_type == "simple_llm_agent":
+            llm_agent = StreamingContextualAgent(llm)
+        elif agent_type == "openai_assistant":
+            logger.info(f"setting up backend as openai_assistants {assistant_config}")
+            llm_agent = OpenAIAssistantAgent(**assistant_config)
+        else:
+           raise(f"{agent_type} Agent type is not created yet")
+        return llm_agent
+        
+    def __setup_tasks(self, llm = None, agent_type = None, assistant_config= None):
+        if self.task_config["task_type"] == "conversation" and not self.__is_multiagent():
+            self.tools["llm_agent"] = self.__get_agent_object(llm, agent_type, assistant_config)
+            if agent_type == "llama-index-rag":
+                logger.info("#### Setting up llama-index-rag agent ####")
+                extra_config = self.task_config["tools_config"]["llm_agent"].get("extra_config", {})
+                vector_store_config = extra_config.get("vector_store", {})
+                self.tools["llm_agent"] = LlamaIndexRag(
+                    vector_id=vector_store_config.get("vector_id"),
+                    temperature=extra_config.get("temperature", 0.1),
+                    model=extra_config.get("model", "gpt-3.5-turbo-16k"),
+                    buffer=40,
+                    max_tokens=100,  # You might want to make this configurable
+                    provider_config=vector_store_config
+                )
+                logger.info("Llama-index rag agent is created")
+        elif self.__is_multiagent():
+            return self.__get_agent_object(llm, agent_type, assistant_config)
         elif self.task_config["task_type"] == "extraction":
             logger.info("Setting up extraction agent")
             self.tools["llm_agent"] = ExtractionContextualAgent(llm, prompt=self.system_prompt)
@@ -485,66 +585,80 @@ class TaskManager(BaseManager):
             self.tools["llm_agent"] = SummarizationContextualAgent(llm, prompt=self.system_prompt)
             self.summarized_data = None
         elif self.task_config["task_type"] == "webhook":
-
             if "webhookURL" in self.task_config["tools_config"]["api_tools"]:
               webhook_url = self.task_config["tools_config"]["api_tools"]["webhookURL"]
             else:
               webhook_url = self.task_config["tools_config"]["api_tools"]["tools_params"]["webhook"]["url"]
-
             logger.info(f"Webhook URL {webhook_url}")
             self.tools["webhook_agent"] = WebhookAgent(webhook_url=webhook_url)
-
-
         logger.info("prompt and config setup completed")
         
     ########################
     # Helper methods
     ########################
+    def __get_final_prompt(self, prompt, today):
+        enriched_prompt = prompt
+        if self.context_data is not None:
+            enriched_prompt = update_prompt_with_context(enriched_prompt, self.context_data)
+        notes = "### Note:\n"  
+        if self._is_conversation_task() and self.use_fillers:
+            notes += f"1.{FILLER_PROMPT}\n"
+        return f"{enriched_prompt}\n{notes}\n{DATE_PROMPT.format(today)}"
+            
     async def load_prompt(self, assistant_name, task_id, local, **kwargs):
         logger.info("prompt and config setup started")
-        if self.task_config["task_type"] == "webhook" or self.task_config["tools_config"]["llm_agent"]["agent_flow_type"] == "openai_assistant":
+        agent_type = self.task_config["tools_config"]["llm_agent"].get("agent_type", "simple_llm_agent")
+        if self.task_config["task_type"] == "webhook" or agent_type in ["openai_assistant", "llamaindex_rag_agent"]:
             return
         self.is_local = local
         today = datetime.now().strftime("%A, %B %d, %Y")
 
+        prompt_responses = kwargs.get('prompt_responses', None)
+        if not prompt_responses:
+            prompt_responses = await get_prompt_responses(assistant_id=self.assistant_id, local=self.is_local)
         
-        if "prompt" in self.task_config["tools_config"]["llm_agent"]:
-            #This will be tre when we have extraction or maybe never
-            self.prompts = {
-                "system_prompt": f'{self.task_config["tools_config"]["llm_agent"]["prompt"]} \n### Date\n Today\'s Date is {today}'
-            }
-            logger.info(f"Prompt given in llm_agent and hence storing the prompt")
+        logger.info(f"GOT prompt responses {prompt_responses}")
+        current_task = "task_{}".format(task_id + 1)
+        if self.__is_multiagent():
+            logger.info(f"Getting {current_task} from prompt responses of type {type(prompt_responses)}, prompt responses key {prompt_responses.keys()}")
+            prompts = prompt_responses.get(current_task, None)
+            self.prompt_map = {}
+            for agent in self.task_config["tools_config"]["llm_agent"]['extra_config']['agent_map']:
+                prompt = prompts[agent]['system_prompt']
+                prompt = self.__prefill_prompts(self.task_config, prompt, self.task_config['task_type'])
+                prompt = self.__get_final_prompt(prompt, today)
+                if agent == self.task_config["tools_config"]["llm_agent"]['extra_config']['default_agent']:
+                    self.system_prompt = {
+                        'role': 'system',
+                        'content': prompt
+                    }
+                self.prompt_map[agent] = prompt
+            logger.info(f"Initialised prompt dict {self.prompt_map}, Set default prompt {self.system_prompt}")
         else:
-            prompt_responses = kwargs.get('prompt_responses', None)
-            if not prompt_responses:
-                prompt_responses = await get_prompt_responses(assistant_id=self.assistant_id, local=self.is_local)
-            current_task = "task_{}".format(task_id + 1)
             self.prompts = self.__prefill_prompts(self.task_config, prompt_responses.get(current_task, None), self.task_config['task_type'])
-            if self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "preprocessed":
-                self.tools["llm_agent"].load_prompts_and_create_graph(self.prompts)
 
-        if "system_prompt" in self.prompts:
-            # This isn't a graph based agent
-            enriched_prompt = self.prompts["system_prompt"]
-            logger.info("There's a system prompt")
-            if self.context_data is not None:
-                enriched_prompt = update_prompt_with_context(self.prompts["system_prompt"], self.context_data)
-                self.prompts["system_prompt"] = enriched_prompt
+            if "system_prompt" in self.prompts:
+                # This isn't a graph based agent
+                enriched_prompt = self.prompts["system_prompt"]
+                logger.info("There's a system prompt")
+                if self.context_data is not None:
+                    enriched_prompt = update_prompt_with_context(self.prompts["system_prompt"], self.context_data)
+                    self.prompts["system_prompt"] = enriched_prompt
 
-            notes = "### Note:\n"
-            
-            if self._is_conversation_task() and self.use_fillers:
-                notes += f"1.{FILLER_PROMPT}\n"
-            
-            self.system_prompt = {
-                'role': "system",
-                'content': f"{enriched_prompt}\n{notes}\n{DATE_PROMPT.format(today)}"
-            }
-        else:
-            self.system_prompt = {
-                'role': "system",
-                'content': ""
-            }
+                notes = "### Note:\n"
+                
+                if self._is_conversation_task() and self.use_fillers:
+                    notes += f"1.{FILLER_PROMPT}\n"
+                
+                self.system_prompt = {
+                    'role': "system",
+                    'content': f"{enriched_prompt}\n{notes}\n{DATE_PROMPT.format(today)}"
+                }
+            else:
+                self.system_prompt = {
+                    'role': "system",
+                    'content': ""
+                }
         
         if len(self.system_prompt['content']) == 0:
             self.history = [] if len(self.history) == 0 else self.history
@@ -652,11 +766,14 @@ class TaskManager(BaseManager):
     def _is_conversation_task(self):
         return self.task_config["task_type"] == "conversation"
 
+    def __is_openai_assistant_agent(self):
+        return self.task_config["tools_config"]["llm_agent"].get("agent_type", None) == "openai_assistant"
+
     def _is_preprocessed_flow(self):
-        return self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "preprocessed"
+        return "agent_flow_type" in self.task_config["tools_config"]["llm_agent"] and self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "preprocessed"
 
     def _is_formulaic_flow(self):
-        return self.task_config["tools_config"]["llm_agent"]['agent_flow_type'] == "formulaic"
+        return "agent_flow_type" in self.task_config["tools_config"]["llm_agent"] and self.task_config["tools_config"]["llm_agent"]['agent_flow_type']  == "formulaic"
 
     def _get_next_step(self, sequence, origin):
         try:
@@ -771,7 +888,7 @@ class TaskManager(BaseManager):
             messages.append({'role': 'user', 'content': message['data']})
             logger.info(f"Starting LLM Agent {messages}")
             #Expose get current classification_response method from the agent class and use it for the response log
-            convert_to_request_log(message = format_messages(messages, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["model"], is_cached= True, run_id= self.run_id)
+            convert_to_request_log(message = format_messages(messages, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.llm_agent_config["model"], is_cached= True, run_id= self.run_id)
             async for next_state in self.tools['llm_agent'].generate(messages, label_flow=self.label_flow):
                 if next_state == "<end_of_conversation>":
                     meta_info["end_of_conversation"] = True
@@ -813,7 +930,7 @@ class TaskManager(BaseManager):
         sequence, meta_info = self._extract_sequence_and_meta(message)
         next_step = self._get_next_step(sequence, "llm")
         start_time = time.perf_counter()
-        filler_class = self.filler_classifier.classify(message['data'])
+        filler_class = await asyncio.to_thread(self.filler_classifier.classify(message['data']))
         logger.info(f"doing the classification task in {time.perf_counter() - start_time}")
         new_meta_info = copy.deepcopy(meta_info)
         self.current_filler = filler_class
@@ -822,6 +939,13 @@ class TaskManager(BaseManager):
         await self._handle_llm_output(next_step, filler, should_bypass_synth, new_meta_info, is_filler = True)
     
     async def __execute_function_call(self, url, method, param, api_token, model_args, meta_info, next_step, called_fun, **resp):
+        self.toggle_blank_filler_message = False
+
+        # only for testing
+        for i in range(10):
+            logger.info(f"sleep for {i} sec")
+            await asyncio.sleep(1)
+        
         if called_fun == "transfer_call":
             logger.info(f"Transfer call function called param {param}")
             call_sid = self.tools["input"].get_call_sid()
@@ -843,7 +967,7 @@ class TaskManager(BaseManager):
                     response_text = await response.text()
                     logger.info(f"Response from the server after call transfer: {response_text}")
                     return
-                
+        
         response = await trigger_api(url= url, method=method.lower(), param= param, api_token= api_token, meta_info = meta_info, run_id = self.run_id, **resp)
         content = FUNCTION_CALL_PROMPT.format(called_fun, method, str(response))
         model_args["messages"].append({"role":"system","content":content})
@@ -854,14 +978,13 @@ class TaskManager(BaseManager):
         self.toggle_blank_filler_message = True
         if called_fun != "transfer_call":
             await self.__do_llm_generation(model_args["messages"], meta_info, next_step, should_trigger_function_call = True)
-            
-            
+
     def __store_into_history(self, meta_info, messages, llm_response, should_trigger_function_call = False):
         if self.current_request_id in self.llm_rejected_request_ids:
             logger.info("##### User spoke while LLM was generating response")
         else:
             self.llm_response_generated = True
-            convert_to_request_log(message=llm_response, meta_info= meta_info, component="llm", direction="response", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
+            convert_to_request_log(message=llm_response, meta_info= meta_info, component="llm", direction="response", model=self.llm_agent_config["model"], run_id= self.run_id)
             if should_trigger_function_call:
                 #Now, we need to consider 2 things here
                 #1. There was silence between function call and now
@@ -934,12 +1057,12 @@ class TaskManager(BaseManager):
                 messages.append({"role": "assistant", "content": llm_response})
                 self.history = copy.deepcopy(messages)
                 await self._handle_llm_output(next_step, llm_response, should_bypass_synth, meta_info)
-                convert_to_request_log(message = llm_response, meta_info= meta_info, component="llm", direction="response", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
+                convert_to_request_log(message = llm_response, meta_info= meta_info, component="llm", direction="response", model=self.tools["llm_agent"].get_model(), run_id= self.run_id)
         
         if self.stream and llm_response != PRE_FUNCTION_CALL_MESSAGE:
             logger.info(f"Storing {llm_response} into history should_trigger_function_call {should_trigger_function_call}")
             self.__store_into_history(meta_info, messages, llm_response, should_trigger_function_call= should_trigger_function_call)
-                    
+    
     async def _process_conversation_task(self, message, sequence, meta_info):
         next_step = None
         
@@ -950,8 +1073,20 @@ class TaskManager(BaseManager):
         next_step = self._get_next_step(sequence, "llm")
         meta_info['llm_start_time'] = time.time()
         route = None
-        if self.route_layer is not None:
-            route = self.route_layer(message['data']).name
+        
+        if self.__is_multiagent():
+            tasks = [asyncio.create_task(run_in_seperate_thread(lambda: get_route_info(message['data'], self.agent_routing)))]
+            if self.route_layer is not None:
+                tasks.append(run_in_seperate_thread(lambda: get_route_info(message['data'], self.route_layer)))
+            tasks_op = await asyncio.gather(*tasks)
+            current_agent = tasks_op[0]
+            if self.route_layer is not None:
+                route = tasks_op[1]
+
+            logger.info(f"Current agent {current_agent}")
+            self.tools['llm_agent'] = self.llm_agent_map[current_agent]
+        elif self.route_layer is not None:
+            route = await asyncio.to_thread(self.route_layer(message['data']).name)
             logger.info(f"Got route name {route}")
         
         if route is not None:
@@ -963,8 +1098,8 @@ class TaskManager(BaseManager):
                 logger.info(f"Route {route} has a vector cache")
                 relevant_utterance = self.vector_caches[route].get(message['data'])
                 cache_response = self.route_responses_dict[route][relevant_utterance]
-                convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
-                convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="response", model=self.task_config["tools_config"]["llm_agent"]["model"], is_cached= True, run_id= self.run_id)
+                convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="request", model=self.llm_agent_config["model"], run_id= self.run_id)
+                convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="response", model=self.llm_agent_config["model"], is_cached= True, run_id= self.run_id)
                 messages = copy.deepcopy(self.history)
                 messages += [{'role': 'user', 'content': message['data']},{'role': 'assistant', 'content': cache_response}]
                 self.interim_history = copy.deepcopy(messages)
@@ -988,8 +1123,7 @@ class TaskManager(BaseManager):
             logger.info(f"Message {messages} history {self.history}")
             messages.append({'role': 'user', 'content': message['data']})
             ### TODO CHECK IF THIS IS EVEN REQUIRED
-            convert_to_request_log(message=format_messages(messages, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
-
+            convert_to_request_log(message=format_messages(messages, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model= self.tools["llm_agent"].get_model(), run_id= self.run_id)
             await self.__do_llm_generation(messages, meta_info, next_step, should_bypass_synth)
             # TODO : Write a better check for completion prompt 
             if self.use_llm_to_determine_hangup and not self.turn_based_conversation:
@@ -999,7 +1133,7 @@ class TaskManager(BaseManager):
                         {'role': 'system', 'content': self.check_for_completion_prompt},
                         {'role': 'user', 'content': format_messages(self.history, use_system_prompt= True)}]
                 logger.info(f"##### Answer from the LLM {answer}")
-                convert_to_request_log(message=format_messages(prompt, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.task_config["tools_config"]["llm_agent"]["model"], run_id= self.run_id)
+                convert_to_request_log(message=format_messages(prompt, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.llm_agent_config["model"], run_id= self.run_id)
                 convert_to_request_log(message=answer, meta_info= meta_info, component="llm", direction="response", model= self.check_for_completion_llm, run_id= self.run_id)
                 
                 if should_hangup:
@@ -1047,9 +1181,6 @@ class TaskManager(BaseManager):
                         await asyncio.sleep(self.consider_next_transcript_after - time.time())
                     logger.info(f"Running preprocessedf task")
                     await self._process_conversation_preprocessed_task(message, sequence, meta_info)
-
-                elif self._is_formulaic_flow():
-                    await self._process_conversation_formulaic_task(message, sequence, meta_info)
                 else:
                     await self._process_conversation_task(message, sequence, meta_info)
             else:
@@ -1512,8 +1643,13 @@ class TaskManager(BaseManager):
                 
                 if "is_final_chunk_of_entire_response" in message['meta_info'] and message['meta_info']['is_final_chunk_of_entire_response']:
                     self.started_transmitting_audio = False
-                    logger.info("##### End of synthesizer stream and ")     
-                    self.asked_if_user_is_still_there = False   
+                    logger.info("##### End of synthesizer stream and ")
+                    
+                    #If we're sending the message to check if user is still here, don't set asked_if_user_is_still_there to True
+                    if message['meta_info']['text'] != self.blank_filler_message:
+                        self.asked_if_user_is_still_there = False     
+                    
+                    # self.asked_if_user_is_still_there = False   
                     num_chunks = 0
                     self.turn_id +=1
                     if not self.first_message_passed:
@@ -1556,15 +1692,17 @@ class TaskManager(BaseManager):
                 logger.info(f"{time_since_last_spoken_AI_word} seconds since last spoken time stamp and hence cutting the phone call and last transmitted timestampt ws {self.last_transmitted_timesatamp} and time since last spoken human word {self.time_since_last_spoken_human_word}")
                 await self.__process_end_of_conversation()
                 break
-            elif time_since_last_spoken_AI_word > 6 and not self.asked_if_user_is_still_there and self.time_since_last_spoken_human_word < self.last_transmitted_timesatamp :
+            elif time_since_last_spoken_AI_word > self.time_blank_filler_message and not self.asked_if_user_is_still_there and self.time_since_last_spoken_human_word < self.last_transmitted_timesatamp :
                 logger.info(f"Asking if the user is still there")
                 self.asked_if_user_is_still_there = True
-                if self.should_record:
-                    meta_info={'io': 'default', "request_id": str(uuid.uuid4()), "cached": False, "sequence_id": -1, 'format': 'wav'}
-                    await self._synthesize(create_ws_data_packet("Hey, are you still there?", meta_info= meta_info))
-                else:
-                    meta_info={'io': self.tools["output"].get_provider(), "request_id": str(uuid.uuid4()), "cached": False, "sequence_id": -1, 'format': 'pcm'}
-                    await self._synthesize(create_ws_data_packet("Hey, are you still there?", meta_info= meta_info))
+                
+                if self.toggle_blank_filler_message:
+                    if self.should_record:
+                        meta_info={'io': 'default', "request_id": str(uuid.uuid4()), "cached": False, "sequence_id": -1, 'format': 'wav'}
+                        await self._synthesize(create_ws_data_packet(self.blank_filler_message, meta_info= meta_info))
+                    else:
+                        meta_info={'io': self.tools["output"].get_provider(), "request_id": str(uuid.uuid4()), "cached": False, "sequence_id": -1, 'format': 'pcm'}
+                        await self._synthesize(create_ws_data_packet(self.blank_filler_message, meta_info= meta_info))
                 
                 #Just in case we need to clear messages sent before 
                 await self.tools["output"].handle_interruption()

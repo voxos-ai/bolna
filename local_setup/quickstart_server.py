@@ -2,7 +2,7 @@ import os
 import asyncio
 import uuid
 import traceback
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 import redis.asyncio as redis
 from dotenv import load_dotenv
@@ -12,7 +12,11 @@ from bolna.helpers.logger_config import configure_logger
 from bolna.models import *
 from bolna.llms import LiteLLM
 from bolna.agent_manager.assistant_manager import AssistantManager
-
+from bolna.helpers.data_ingestion_pipe import create_table, ingestion_task, ingestion_tasks, IngestionPipeline, IngestionTask, TaskStatus
+import tempfile
+import threading
+from typing import Dict
+import os 
 load_dotenv()
 logger = configure_logger(__name__)
 
@@ -30,11 +34,53 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
+logger.info(f"PROCESS ID {os.getpid()}")
 
 class CreateAgentPayload(BaseModel):
     agent_config: AgentModel
     agent_prompts: Optional[Dict[str, Dict[str, str]]]
 
+ingestion_pipeline = IngestionPipeline()
+@app.post("/ingestion-pipeline")
+async def start_ingestion(table_id:str,file:UploadFile):
+    if file.content_type in ["application/pdf","application/x-pdf"]:
+        task_id = str(uuid.uuid4())
+
+        logger.info(f"added new task: {task_id}")
+        temp_file = tempfile.NamedTemporaryFile()
+        temp_file.write(await file.read())
+        prev = temp_file.name
+        file_name = f"/tmp/{task_id}.pdf"
+        os.rename(prev,file_name)
+
+
+        task = IngestionTask(file_name)
+        await ingestion_pipeline.task_queue.put(task)
+        while task._status != TaskStatus.ERROR:
+            await asyncio.sleep(0.3)
+            logger.info(f"TASK: {task_id} status: {task._status}")
+            if task._status == TaskStatus.SUCCESS:
+                break
+        
+
+        
+        # if table_id != "None":
+        #     table = table_id
+        # else:
+        #     table = str(uuid.uuid4())
+        
+        # thread = threading.Thread(target=create_table,args=(table,file_name))
+        # thread.start()
+        # while thread.is_alive():
+        #     await asyncio.sleep(0.3)
+
+
+        os.rename(file_name,prev)
+
+
+        return {"status":task._status,"message":task._message,"table_id":task._table_id}
+    
+    return {"status":TaskStatus.ERROR,"message":"only accept the pdf types for know","task_id":None}
 
 @app.post("/agent")
 async def create_agent(agent_data: CreateAgentPayload):
