@@ -353,10 +353,10 @@ class DeepgramTranscriber(BaseTranscriber):
             async with self.deepgram_connect() as deepgram_ws:
                 if self.stream:
                     self.sender_task = asyncio.create_task(self.sender_stream(deepgram_ws))
-                    self.heartbeat_task = asyncio.create_task(self.send_heartbeat(deepgram_ws)) # deepgram requires heartbeat signals in certain duration.
+                    self.heartbeat_task = asyncio.create_task(self.send_heartbeat(deepgram_ws))
                     async for message in self.receiver(deepgram_ws):
                         if self.connection_on:
-                            await self.push_to_transcriber_queue(message) # sending the chunks from the twilio to the transcriber.
+                            await self.push_to_transcriber_queue(message)
                         else:
                             logger.info("closing the deepgram connection")
                             await self._close(deepgram_ws, data={"type": "CloseStream"})
