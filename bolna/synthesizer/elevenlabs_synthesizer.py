@@ -18,14 +18,14 @@ logger = configure_logger(__name__)
 
 
 class ElevenlabsSynthesizer(BaseSynthesizer):
-    def __init__(self, voice, voice_id, model="eleven_multilingual_v1", audio_format="mp3", sampling_rate="16000",
+    def __init__(self, voice, voice_id, model="eleven_turbo_v2_5", audio_format="mp3", sampling_rate="16000",
                  stream=False, buffer_size=400, temperature = 0.9, similarity_boost = 0.5, synthesier_key=None, 
                  caching=True, **kwargs):
         super().__init__(stream)
         self.api_key = os.environ["ELEVENLABS_API_KEY"] if synthesier_key is None else synthesier_key
         self.voice = voice_id
         self.use_turbo = kwargs.get("use_turbo", False)
-        self.model = "eleven_turbo_v2" if self.use_turbo else "eleven_multilingual_v2"
+        self.model = model
         logger.info(f"Using turbo or not {self.model}")
         self.stream = False  # Issue with elevenlabs streaming that we need to always send the text quickly
         self.websocket_connection = None

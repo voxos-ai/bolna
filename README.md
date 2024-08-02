@@ -113,7 +113,7 @@ Once you have the above docker setup and running, you can create agents and init
                         "stream": true,
                         "provider_config": {
                             "voice": "Meera - high quality, emotive",
-                            "model": "eleven_multilingual_v2",
+                            "model": "eleven_turbo_v2_5",
                             "voice_id": "TTa58Hl9lmhnQEvhp1WM"
                         },
                         "buffer_size": 100.0
