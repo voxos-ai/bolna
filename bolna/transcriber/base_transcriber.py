@@ -21,7 +21,7 @@ class BaseTranscriber:
         self.current_request_id = None
 
     def update_meta_info(self):
-        self.meta_info['request_id'] = self.current_request_id if self.current_request_id else None
+        self.meta_info['request_id'] = self.current_request_id if self.current_request_id else None # refer to the generate_request_id function
         self.meta_info['previous_request_id'] = self.previous_request_id
         self.meta_info['origin'] = "transcriber"
 

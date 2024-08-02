@@ -2,6 +2,8 @@ import json
 from typing import Optional, List, Union, Dict
 from pydantic import BaseModel, Field, validator, ValidationError, Json
 from pydantic_core import PydanticCustomError
+
+from bolna.agent_types.base_agent import BaseAgent
 from .providers import *
 
 AGENT_WELCOME_MESSAGE = "This call is being recorded for quality assurance and training. Please speak now."
@@ -95,7 +97,7 @@ class Transcriber(BaseModel):
 
 class Synthesizer(BaseModel):
     provider: str
-    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig, MeloConfig, StylettsConfig, DeepgramConfig, AzureConfig] = Field(union_mode='smart')
+    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig, MeloConfig, StylettsConfig, DeepgramConfig] = Field(union_mode='smart')
     stream: bool = False
     buffer_size: Optional[int] = 40  # 40 characters in a buffer
     audio_format: Optional[str] = "pcm"
@@ -103,12 +105,12 @@ class Synthesizer(BaseModel):
 
     @validator("provider")
     def validate_model(cls, value):
-        return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai", "deepgram", "melotts", "styletts", "azuretts"])
+        return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai", "deepgram", "melotts", "styletts"])
 
 
 class IOModel(BaseModel):
     provider: str
-    format: str
+    format: Optional[str] = "wav"
 
     @validator("provider")
     def validate_provider(cls, value):
@@ -127,16 +129,39 @@ class Route(BaseModel):
 # Routes can be used for FAQs caching, prompt routing, guard rails, agent assist function calling
 class Routes(BaseModel):
     embedding_model: Optional[str] = "Snowflake/snowflake-arctic-embed-l"
-    routes: List[Route]
+    routes: Optional[List[Route]] = []
 
 class OpenaiAssistants(BaseModel):
     name: Optional[str] = None
     assistant_id: str = None
+    max_tokens: Optional[int] =100
+    temperature: Optional[float] = 0.2
+    buffer_size: Optional[int] = 100
+    provider: Optional[str] = "openai"
+    model: Optional[str] = "gpt-3.5-turbo"
+
+class MongoDBProviderConfig(BaseModel):
+    connection_string: Optional[str] = None
+    db_name: Optional[str] = None
+    collection_name: Optional[str] = None
+    index_name: Optional[str] = None
+    llm_model: Optional[str] = None
+    embedding_model: Optional[str] = None
+    embedding_dimensions: Optional[str] = None
+
+class LanceDBProviderConfig(BaseModel):
+    vector_id: str
+
+class VectorStore(BaseModel):
+    provider: str
+    provider_config: Union[LanceDBProviderConfig, MongoDBProviderConfig]
+
+class ExtraConfig(BaseModel):
+    vector_store : VectorStore
 
 class LLM(BaseModel):
     model: Optional[str] = "gpt-3.5-turbo"
     max_tokens: Optional[int] = 100
-    agent_flow_type: Optional[str] = "streaming"
     family: Optional[str] = "openai"
     temperature: Optional[float] = 0.1
     request_json: Optional[bool] = False
@@ -148,17 +173,53 @@ class LLM(BaseModel):
     presence_penalty: Optional[float] = 0.0
     provider: Optional[str] = "openai"
     base_url: Optional[str] = None
-    routes: Optional[Routes] = None
+
+
+class SIMPLE_LLM_AGENT(LLM):
+    agent_flow_type: Optional[str] = "streaming" #It is used for backwards compatibility  
+    routes: Optional[Routes] = None 
     extraction_details: Optional[str] = None
     summarization_details: Optional[str] = None
-    backend: Optional[str] = "bolna"
-    extra_config: Optional[OpenaiAssistants] = None
+
+class Node(BaseModel):
+    id: str
+    type: str #Can be router or conversation for now
+    llm: LLM
+    exit_criteria: str
+    exit_response: Optional[str] = None
+    exit_prompt: Optional[str] = None
+    is_root: Optional[bool] = False
+
+class Edge(BaseModel):
+    start_node: str # Node ID
+    end_node: str
+    condition: Optional[tuple] = None #extracted value from previous step and it's value
+
+class LLM_AGENT_GRAPH(BaseModel):
+    nodes: List[Node]
+    edges: List[Edge]
+
+class AGENT_ROUTE_CONFIG(BaseModel):
+    utterances: List[str]
+    threshold: Optional[float] = 0.85
+
+class MultiAgent(BaseModel):
+    agent_map: Dict[str, Union[LLM, OpenaiAssistants]]
+    agent_routing_config: Dict[str, AGENT_ROUTE_CONFIG]
+    default_agent: str
+    embedding_model: Optional[str] = "Snowflake/snowflake-arctic-embed-l"
+
+class LLM_AGENT(BaseModel):
+    agent_flow_type: str
+    agent_type: str #can be llamaindex_rag, simple_llm_agent, router_agent, dag_agent, openai_assistant, custom, etc 
+    #extra_config: Union[OpenaiAssistants, LLM_AGENT_GRAPH, MultiAgent, LLM, SIMPLE_LLM_AGENT]
+    guardrails: Optional[Routes] = None #Just to reduce confusion
+    extra_config: Union[OpenaiAssistants, LLM_AGENT_GRAPH, MultiAgent, LLM]
 
 
 class MessagingModel(BaseModel):
     provider: str
     template: str
-
 
 # Need to redefine it
 class CalendarModel(BaseModel):
@@ -184,7 +245,7 @@ class ToolModel(BaseModel):
     tools_params: Dict[str, APIParams]
 
 class ToolsConfig(BaseModel):
-    llm_agent: Optional[LLM] = None
+    llm_agent: Optional[Union[LLM_AGENT, SIMPLE_LLM_AGENT]] = None
     synthesizer: Optional[Synthesizer] = None
     transcriber: Optional[Transcriber] = None
     input: Optional[IOModel] = None
@@ -213,6 +274,11 @@ class ConversationConfig(BaseModel):
     call_terminate: Optional[int] = 90
     use_fillers: Optional[bool] = False
     call_transfer_number: Optional[str] = ""
+
+    
+    time_blank_filler_message:Optional[int] = 6
+    blank_filler_message:Optional[str] = "Hey, are you still there"
+    toggle_blank_filler_message:Optional[bool] = True
 
     @validator('hangup_after_silence', pre=True, always=True)
     def set_hangup_after_silence(cls, v):
