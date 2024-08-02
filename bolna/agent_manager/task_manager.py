@@ -967,7 +967,7 @@ class TaskManager(BaseManager):
                     response_text = await response.text()
                     logger.info(f"Response from the server after call transfer: {response_text}")
                     return
-                
+        
         response = await trigger_api(url= url, method=method.lower(), param= param, api_token= api_token, meta_info = meta_info, run_id = self.run_id, **resp)
         content = FUNCTION_CALL_PROMPT.format(called_fun, method, str(response))
         model_args["messages"].append({"role":"system","content":content})
@@ -978,9 +978,7 @@ class TaskManager(BaseManager):
         self.toggle_blank_filler_message = True
         if called_fun != "transfer_call":
             await self.__do_llm_generation(model_args["messages"], meta_info, next_step, should_trigger_function_call = True)
-        
-            
-            
+
     def __store_into_history(self, meta_info, messages, llm_response, should_trigger_function_call = False):
         if self.current_request_id in self.llm_rejected_request_ids:
             logger.info("##### User spoke while LLM was generating response")
