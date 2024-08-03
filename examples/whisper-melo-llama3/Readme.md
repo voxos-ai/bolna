@@ -4,10 +4,10 @@ Introducing our Dockerized solution! Seamlessly merge [Bolna](https://github.com
 
 ### Dockerfiles
 
-- <a href="https://hub.docker.com/r/bolnadev/whisper_server">
+- <a href="https://hub.docker.com/r/bolnadev/whisper_server" target="_blank" rel="noopener noreferrer">
     <img src="https://img.shields.io/docker/v/bolnadev/whisper_server/latest?label=bolnadev%2Fwhisper_server" alt="Whisper ASR Server" />
   </a>
--  <a href="https://hub.docker.com/r/bolnadev/melo_server">
+-  <a href="https://hub.docker.com/r/bolnadev/melo_server" target="_blank" rel="noopener noreferrer">
     <img src="https://img.shields.io/docker/v/bolnadev/melo_server/latest?label=bolnadev%2Fmelo_server" alt="Melo TTS Server" />
   </a>
 
