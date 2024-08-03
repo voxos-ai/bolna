@@ -52,7 +52,7 @@ services:
   
   ### whisper servers ###
   whisper-app:
-    image: whisper-app:latest
+    image: bolnadev/whisper_server:latest
     build:
       context: .
       dockerfile: dockerfiles/whisper_server.Dockerfile
@@ -67,7 +67,7 @@ services:
               capabilities: [gpu]
   ### Melo TTS ###
   melo-app:
-    image: melo-app:latest
+    image: bolnadev/melo_server:latest
     build:
       context: .
       dockerfile: dockerfiles/melo_server.Dockerfile
