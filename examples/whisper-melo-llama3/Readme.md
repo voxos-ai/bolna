@@ -2,7 +2,18 @@
 Introducing our Dockerized solution! Seamlessly merge [Bolna](https://github.com/bolna-ai/bolna) with [Whisper ASR](https://github.com/bolna-ai/streaming-whisper-server) and [Melo TTS](https://github.com/anshjoseph/MiloTTS-Server) for telephone provider we use Twillo and for tunning we use ngrok. This is docker compose by which you can host bolna server Whisper ASR, Melo TTS together in cloud just by clone this repo  and follow these simple steps to deploy ,but before that you have to make sure that you have [docker](https://docs.docker.com/engine/install/) and [docker compose](https://docs.docker.com/compose/install/) and make a .env file refer to .env-sample and also put ngrok auth token in ngrok-config.yml file
 
 
-### Start Serices
+### Dockerfiles
+
+- <a href="https://hub.docker.com/r/bolnadev/whisper_server">
+    <img src="https://img.shields.io/docker/v/bolnadev/whisper_server/latest?label=bolnadev%2Fwhisper_server" alt="Whisper ASR Server" />
+  </a>
+-  <a href="https://hub.docker.com/r/bolnadev/melo_server">
+    <img src="https://img.shields.io/docker/v/bolnadev/melo_server/latest?label=bolnadev%2Fmelo_server" alt="Melo TTS Server" />
+  </a>
+
+
+
+### Start Services
 ```shell
 # build latest `twilio-app` and `bolna-app`
 docker compose build twilio-app bolna-app
