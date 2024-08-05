@@ -78,8 +78,7 @@ async def plivo_connect(request: Request, bolna_host: str = Query(...), agent_id
 
         response = '''
         <Response>
-            <Stream bidirectional="true">{}</Stream>
-            <MultiPartyCall role="customer">mpc_name</MultiPartyCall>    
+            <Stream bidirectional="true" keepCallAlive="true">{}</Stream>
         </Response>
         '''.format(bolna_websocket_url)
 
