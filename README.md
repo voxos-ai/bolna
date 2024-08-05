@@ -225,6 +225,11 @@ In case you wish to extend and add some other Telephony like Vonage, Telnyx, etc
    1. This mainly concerns converting audio from the synthesizer class to a supported audio format and streaming it over the websocket provided by the telephony provider
 4. Lastly, you'll have to write a dedicated server like the example [twilio_api_server.py](https://github.com/bolna-ai/bolna/blob/master/local_setup/telephony_server/twilio_api_server.py) provided in [local_setup](https://github.com/bolna-ai/bolna/blob/master/local_setup/telephony_server) to initiate calls over websockets.
 
+## Open-source v/s Paid
+Though the repository is completely open source, you can connect with us if interested in managed hosted offerings or more customized solutions.
+
+<a href="https://calendly.com/bolna/30min"><img alt="Schedule a meeting" src="https://cdn.cookielaw.org/logos/122ecfc3-4694-42f1-863f-2db42d1b1e68/0bcbbcf4-9b83-4684-ba59-bc913c0d5905/c21bea90-f4f1-43d1-8118-8938bbb27a9d/logo.png" /></a>
+
 
 ## Contributing
 We love all types of contributions: whether big or small helping in improving this community resource.
