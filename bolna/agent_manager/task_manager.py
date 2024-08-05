@@ -561,8 +561,8 @@ class TaskManager(BaseManager):
     def __setup_tasks(self, llm = None, agent_type = None, assistant_config= None):
         if self.task_config["task_type"] == "conversation" and not self.__is_multiagent():
             self.tools["llm_agent"] = self.__get_agent_object(llm, agent_type, assistant_config)
-            if agent_type == "llama-index-rag":
-                logger.info("#### Setting up llama-index-rag agent ####")
+            if agent_type == "knowledgebase_agent":
+                logger.info("#### Setting up knowledgebase_agent agent ####")
                 extra_config = self.task_config["tools_config"]["llm_agent"].get("extra_config", {})
                 vector_store_config = extra_config.get("vector_store", {})
                 self.tools["llm_agent"] = LlamaIndexRag(
@@ -608,7 +608,7 @@ class TaskManager(BaseManager):
     async def load_prompt(self, assistant_name, task_id, local, **kwargs):
         logger.info("prompt and config setup started")
         agent_type = self.task_config["tools_config"]["llm_agent"].get("agent_type", "simple_llm_agent")
-        if self.task_config["task_type"] == "webhook" or agent_type in ["openai_assistant", "llamaindex_rag_agent"]:
+        if self.task_config["task_type"] == "webhook" or agent_type in ["openai_assistant", "knowledgebase_agent"]:
             return
         self.is_local = local
         today = datetime.now().strftime("%A, %B %d, %Y")

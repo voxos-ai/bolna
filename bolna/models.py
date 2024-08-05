@@ -156,8 +156,6 @@ class VectorStore(BaseModel):
     provider: str
     provider_config: Union[LanceDBProviderConfig, MongoDBProviderConfig]
 
-class ExtraConfig(BaseModel):
-    vector_store : VectorStore
 
 class LLM(BaseModel):
     model: Optional[str] = "gpt-3.5-turbo"
@@ -180,6 +178,7 @@ class SIMPLE_LLM_AGENT(LLM):
     routes: Optional[Routes] = None 
     extraction_details: Optional[str] = None
     summarization_details: Optional[str] = None
+
 
 class Node(BaseModel):
     id: str
@@ -209,12 +208,15 @@ class MultiAgent(BaseModel):
     default_agent: str
     embedding_model: Optional[str] = "Snowflake/snowflake-arctic-embed-l"
 
+class KnowledgebaseAgent(LLM):
+    vector_store: VectorStore
+
 class LLM_AGENT(BaseModel):
     agent_flow_type: str
     agent_type: str #can be llamaindex_rag, simple_llm_agent, router_agent, dag_agent, openai_assistant, custom, etc 
     #extra_config: Union[OpenaiAssistants, LLM_AGENT_GRAPH, MultiAgent, LLM, SIMPLE_LLM_AGENT]
     guardrails: Optional[Routes] = None #Just to reduce confusion
-    extra_config: Union[OpenaiAssistants, LLM_AGENT_GRAPH, MultiAgent, LLM]
+    extra_config: Union[OpenaiAssistants, LLM_AGENT_GRAPH, MultiAgent, KnowledgebaseAgent, SIMPLE_LLM_AGENT, LLM]
 
 
 class MessagingModel(BaseModel):
