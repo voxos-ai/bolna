@@ -171,6 +171,7 @@ class LLM(BaseModel):
     presence_penalty: Optional[float] = 0.0
     provider: Optional[str] = "openai"
     base_url: Optional[str] = None
+    extra_config: Optional[ExtraConfig] = None
 
 
 class SIMPLE_LLM_AGENT(LLM):
