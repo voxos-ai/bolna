@@ -62,4 +62,4 @@ FILLER_PROMPT = "Please, do not start your response with fillers like Got it, No
 
 DATE_PROMPT = "### Date\n Today\'s Date is {}"
 
-FUNCTION_CALL_PROMPT = "We did made a function calling for user. We hit the function : {} and send a {} request and it returned us the response as given below: {} \n\n . Understand the above response and convey this response in a context to user. ### Important; If there was an issue with the API call, kindly respond with - Hey, I'm not able to use the system right now, can you please try later?"
+FUNCTION_CALL_PROMPT = "We did made a function calling for user. We hit the function : {} and send a {} request and it returned us the response as given below: {} \n\n . Understand the above response and convey this response in a context to user. ### Important\n1. If there was an issue with the API call, kindly respond with - Hey, I'm not able to use the system right now, can you please try later? \n2. IF YOU CALLED THE FUNCTION BEFORE, PLEASE DO NOT CALL THE SAME FUNCTION AGAIN!"
