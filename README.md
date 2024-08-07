@@ -210,8 +210,8 @@ These are the current supported Telephony Providers:
 
 | Provider | Environment variable to be added in `.env` file                                                                                                                    |
 |----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Twilio   | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`                                                                                                   |
-| Plivo    | `PLIVO_AUTH_ID`, `PLIVO_AUTH_TOKEN`, `PLIVO_PHONE_NUMBER`<br/><br/> *Currently, sending audio packets in chunks isn't possible for Plivo limiting interruption handling |
+| Twilio   | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`|
+| Plivo    | `PLIVO_AUTH_ID`, `PLIVO_AUTH_TOKEN`, `PLIVO_PHONE_NUMBER`|
 
 </details>
 
