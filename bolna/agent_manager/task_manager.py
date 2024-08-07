@@ -506,7 +506,6 @@ class TaskManager(BaseManager):
             return
         self.is_local = local
         today = datetime.now().strftime("%A, %B %d, %Y")
-
         
         if "prompt" in self.task_config["tools_config"]["llm_agent"]:
             #This will be tre when we have extraction or maybe never
