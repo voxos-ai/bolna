@@ -64,7 +64,7 @@ async def rag_retrive(query: str, rag_id: str, index: str) -> list:
     Returns:
         list: A list of documents matching the query.
     """
-    docs = await rag_factory.retrive_query(rag_name=rag_id, index=index, query=query)
+    docs = await rag_factory.retrieve_query(rag_name=rag_id, index=index, query=query)
     send_filter = [{"text": node.text, "score": node.score} for node in docs]
     return send_filter
 

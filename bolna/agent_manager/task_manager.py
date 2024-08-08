@@ -210,6 +210,7 @@ class TaskManager(BaseManager):
                             "max_tokens": self.llm_agent_config['max_tokens'],
                             "provider": self.llm_agent_config['provider'],
                         }
+                    
 
                 logger.info(f"SETTING FOLLOW UP TASK DETAILS {self.llm_agent_config}")
                 
@@ -1001,7 +1002,7 @@ class TaskManager(BaseManager):
             logger.info("##### User spoke while LLM was generating response")
         else:
             self.llm_response_generated = True
-            convert_to_request_log(message=llm_response, meta_info= meta_info, component="llm", direction="response", model=self.llm_agent_config["model"], run_id= self.run_id)
+            convert_to_request_log(message=llm_response, meta_info= meta_info, component="llm", direction="response", model=self.llm_config['model'], run_id= self.run_id)
             if should_trigger_function_call:
                 #Now, we need to consider 2 things here
                 #1. There was silence between function call and now
@@ -1115,8 +1116,8 @@ class TaskManager(BaseManager):
                 logger.info(f"Route {route} has a vector cache")
                 relevant_utterance = self.vector_caches[route].get(message['data'])
                 cache_response = self.route_responses_dict[route][relevant_utterance]
-                convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="request", model=self.llm_agent_config["model"], run_id= self.run_id)
-                convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="response", model=self.llm_agent_config["model"], is_cached= True, run_id= self.run_id)
+                convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="request", model=self.llm_config["model"], run_id= self.run_id)
+                convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="response", model=self.llm_config["model"], is_cached= True, run_id= self.run_id)
                 messages = copy.deepcopy(self.history)
                 messages += [{'role': 'user', 'content': message['data']},{'role': 'assistant', 'content': cache_response}]
                 self.interim_history = copy.deepcopy(messages)
@@ -1150,7 +1151,7 @@ class TaskManager(BaseManager):
                         {'role': 'system', 'content': self.check_for_completion_prompt},
                         {'role': 'user', 'content': format_messages(self.history, use_system_prompt= True)}]
                 logger.info(f"##### Answer from the LLM {answer}")
-                convert_to_request_log(message=format_messages(prompt, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.llm_agent_config["model"], run_id= self.run_id)
+                convert_to_request_log(message=format_messages(prompt, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.llm_config["model"], run_id= self.run_id)
                 convert_to_request_log(message=answer, meta_info= meta_info, component="llm", direction="response", model= self.check_for_completion_llm, run_id= self.run_id)
                 
                 if should_hangup:
