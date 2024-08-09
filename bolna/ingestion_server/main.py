@@ -50,6 +50,20 @@ async def rag_upload_file(file: UploadFile, rag_id: str) -> Dict[str, str]:
     except Exception as e:
         return {"index": None, "status": "ERROR", "message": f"{e}"}
 
+@app.get("/rag-retrive/{rag_id}/{index}")
+async def rag_retrive(query: str, rag_id: str, index: str) -> list:
+    """Retrieve documents based on a query for a specific RAG ID and index.
+    Args:
+        query (str): The query string to search for.
+        rag_id (str): The ID of the RAG to search in.
+        index (str): The index to search in.
+    Returns:
+        list: A list of documents matching the query.
+    """
+    docs = await rag_factory.retrieve_query(rag_name=rag_id, index=index, query=query)
+    send_filter = [{"text": node.text, "score": node.score} for node in docs]
+    return send_filter
+
 @app.post("/make-rag")
 async def make_rag(
     file: UploadFile = File(...),
@@ -95,21 +109,6 @@ async def make_rag(
             "status": "ERROR",
             "message": f"Error creating RAG or ingesting file: {str(e)}"
         }
-
-@app.get("/rag-retrive/{rag_id}/{index}")
-async def rag_retrive(query: str, rag_id: str, index: str) -> list:
-    """Retrieve documents based on a query for a specific RAG ID and index.
-    Args:
-        query (str): The query string to search for.
-        rag_id (str): The ID of the RAG to search in.
-        index (str): The index to search in.
-    Returns:
-        list: A list of documents matching the query.
-    """
-    docs = await rag_factory.retrieve_query(rag_name=rag_id, index=index, query=query)
-    send_filter = [{"text": node.text, "score": node.score} for node in docs]
-    return send_filter
-
 
 if __name__ == "__main__":
     uvicorn.run("main:app", port=8000, host="0.0.0.0", reload=True)
