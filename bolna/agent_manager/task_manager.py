@@ -838,9 +838,12 @@ class TaskManager(BaseManager):
 
             async with aiohttp.ClientSession() as session:
                 logger.info(f"Sending the payload to stop the conversation {payload} url {url}")
+                convert_to_request_log(str(payload), meta_info, None, "function_call", direction="request", is_cached=False,
+                                       run_id=self.run_id)
                 async with session.post(url, json = payload) as response:
                     response_text = await response.text()
                     logger.info(f"Response from the server after call transfer: {response_text}")
+                    convert_to_request_log(str(response_text), meta_info, None, "function_call", direction="response", is_cached=False, run_id=self.run_id)
                     return
                 
         response = await trigger_api(url= url, method=method.lower(), param= param, api_token= api_token, meta_info = meta_info, run_id = self.run_id, **resp)
