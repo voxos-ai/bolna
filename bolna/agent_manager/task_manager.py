@@ -126,6 +126,7 @@ class TaskManager(BaseManager):
 
         # Setup IO SERVICE, TRANSCRIBER, LLM, SYNTHESIZER
         self.llm_task = None
+        self.execute_function_call_task =  None
         self.synthesizer_tasks = []
         self.synthesizer_task = None
 
@@ -600,6 +601,10 @@ class TaskManager(BaseManager):
             self.llm_task.cancel()
             self.llm_task = None
         
+        if self.execute_function_call_task is not None:
+            self.execute_function_call_task.cancel()
+            self.execute_function_call_task = None
+        
         if self.first_message_task is not None:
             logger.info("Cancelling first message task")
             self.first_message_task.cancel()
@@ -856,7 +861,8 @@ class TaskManager(BaseManager):
         self.toggle_blank_filler_message = True
         if called_fun != "transfer_call":
             await self.__do_llm_generation(model_args["messages"], meta_info, next_step, should_trigger_function_call = True)
-            
+
+        self.execute_function_call_task = None
             
     def __store_into_history(self, meta_info, messages, llm_response, should_trigger_function_call = False):
         if self.current_request_id in self.llm_rejected_request_ids:
@@ -904,8 +910,11 @@ class TaskManager(BaseManager):
             data, end_of_llm_stream, latency, trigger_function_call = llm_message
 
             if trigger_function_call:
+                if self.execute_function_call_task is not None:
+                    self.execute_function_call_task.cancel()
+                    
                 logger.info(f"Triggering function call for {data}")
-                self.llm_task = asyncio.create_task(self.__execute_function_call(next_step = next_step, **data))
+                self.execute_function_call_task = asyncio.create_task(self.__execute_function_call(next_step = next_step, **data))
                 return
             
 
