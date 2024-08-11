@@ -213,6 +213,10 @@ class ConversationConfig(BaseModel):
     call_terminate: Optional[int] = 90
     use_fillers: Optional[bool] = False
     call_transfer_number: Optional[str] = ""
+    trigger_user_online_message_after:Optional[int] = 6
+    check_user_online_message:Optional[str] = "Hey, are you still there"
+    check_if_user_online:Optional[bool] = True
+
 
     @validator('hangup_after_silence', pre=True, always=True)
     def set_hangup_after_silence(cls, v):
