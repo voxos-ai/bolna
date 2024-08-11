@@ -1,3 +1,4 @@
+import asyncio
 import os
 from dotenv import load_dotenv
 from openai import AsyncOpenAI, OpenAI
@@ -107,15 +108,19 @@ class OpenAiLLM(BaseLLM):
                     filler = PRE_FUNCTION_CALL_MESSAGE if called_fun != "transfer_call" else TRANSFERING_CALL_FILLER
                     yield filler , True, latency, False
                     self.gave_out_prefunction_call_message = True
+
                 if len(buffer) > 0:
-                    yield buffer, False, latency, False
+                    yield buffer, True, latency, False
                     buffer = ''
                 logger.info(f"Response from LLM {resp}")
+
+                #TODO: Need to remmeber why was this put up and see if this should be removed?
                 if buffer != '':
                     yield buffer, False, latency, False
                     buffer = ''
                 if (text_chunk := chunk.choices[0].delta.function_call.arguments):
                     resp += text_chunk
+                
             elif text_chunk := chunk.choices[0].delta.content:
                 textual_response = True
                 answer += text_chunk    
@@ -140,7 +145,7 @@ class OpenAiLLM(BaseLLM):
             api_token = func_dict['api_token']
             api_call_return = {
                 "url": url, 
-                "method":method.lower(), 
+                "method":None if method is None else method.lower(), 
                 "param": param, 
                 "api_token":api_token, 
                 "model_args": model_args,
@@ -241,7 +246,7 @@ class OpenAiLLM(BaseLLM):
                     i = [i for i in range(len(tools)) if called_fun == tools[i].function.name][0]
                     
                 if not self.gave_out_prefunction_call_message and not textual_response:
-                    filler = PRE_FUNCTION_CALL_MESSAGE if called_fun != "transfer_call" else TRANSFERING_CALL_FILLER
+                    filler = PRE_FUNCTION_CALL_MESSAGE if called_fun != "transfer_call" else TRANSFERING_CALL_FILLER                        
                     yield filler, True, latency, False
                     self.gave_out_prefunction_call_message = True
                 if len(buffer) > 0:
@@ -284,7 +289,7 @@ class OpenAiLLM(BaseLLM):
             model_args['messages'] = message
             api_call_return = {
                 "url": url, 
-                "method":method.lower(), 
+                "method":None if method is None else method.lower(),
                 "param": param, 
                 "api_token":api_token, 
                 "model_args": model_args,

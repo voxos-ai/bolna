@@ -213,8 +213,6 @@ class TaskManager(BaseManager):
             self.check_if_user_online = self.conversation_config.get("check_if_user_online", True)
             self.check_user_online_message = self.conversation_config.get("check_user_online_message", DEFAULT_USER_ONLINE_MESSAGE)
 
-
-
             self.call_transfer_number = self.conversation_config.get("call_transfer_number", None)
             logger.info(f"Will transfer call to {self.call_transfer_number}")
             self.kwargs["process_interim_results"] = "true" if self.conversation_config.get("optimize_latency", False) is True else "false"
@@ -837,7 +835,8 @@ class TaskManager(BaseManager):
         self.check_if_user_online = False 
 
         if called_fun == "transfer_call":
-            logger.info(f"Transfer call function called param {param}")
+            logger.info(f"Transfer call function called param {param}. First sleeping for 2 seconds to make sure we're done speaking the filler")
+            await asyncio.sleep(2) #Sleep for 1 second to ensure that the filler is spoken before transfering call
             call_sid = self.tools["input"].get_call_sid()
             user_id, agent_id = self.assistant_id.split("/")
             self.history = copy.deepcopy(model_args["messages"])
@@ -1582,11 +1581,11 @@ class TaskManager(BaseManager):
                 logger.info(f"{time_since_last_spoken_AI_word} seconds since last spoken time stamp and hence cutting the phone call and last transmitted timestampt ws {self.last_transmitted_timesatamp} and time since last spoken human word {self.time_since_last_spoken_human_word}")
                 await self.__process_end_of_conversation()
                 break
-            elif time_since_last_spoken_AI_word > self.trigger_user_online_message_after and not self.asked_if_user_is_still_there and self.time_since_last_spoken_human_word < self.last_transmitted_timesatamp :
-                logger.info(f"Asking if the user is still there")
-                self.asked_if_user_is_still_there = True
-                
+            elif time_since_last_spoken_AI_word > self.trigger_user_online_message_after and not self.asked_if_user_is_still_there and self.time_since_last_spoken_human_word < self.last_transmitted_timesatamp:
                 if self.check_if_user_online:
+                    logger.info(f"Asking if the user is still there")
+                    self.asked_if_user_is_still_there = True
+
                     if self.should_record:
                         meta_info={'io': 'default', "request_id": str(uuid.uuid4()), "cached": False, "sequence_id": -1, 'format': 'wav'}
                         await self._synthesize(create_ws_data_packet(self.check_user_online_message, meta_info= meta_info))
@@ -1594,8 +1593,8 @@ class TaskManager(BaseManager):
                         meta_info={'io': self.tools["output"].get_provider(), "request_id": str(uuid.uuid4()), "cached": False, "sequence_id": -1, 'format': 'pcm'}
                         await self._synthesize(create_ws_data_packet(self.check_user_online_message, meta_info= meta_info))
                 
-                #Just in case we need to clear messages sent before 
-                await self.tools["output"].handle_interruption()
+                    #Just in case we need to clear messages sent before 
+                    await self.tools["output"].handle_interruption()
             else:
                 logger.info(f"Only {time_since_last_spoken_AI_word} seconds since last spoken time stamp and hence not cutting the phone call")    
     
