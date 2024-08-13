@@ -65,10 +65,10 @@ class LlamaIndexRag(BaseAgent):
         self.max_tokens = max_tokens
         self.provider_config = provider_config
         self.OPENAI_KEY = os.getenv('OPENAI_API_KEY')
-        # self.LANCE_DB = "/Users/vipul/Nova/Work/Bolna/LlamaIndex-MutiRAG/DataBase/dev"
-        self.LANCE_DB = os.getenv(LANCEDB_DIR)
         self.provider = None
         self.query_engine = None
+        self.LANCEDB_DIR = os.getenv('LANCEDB_DIR')
+        logger.info(f"LANCEDB DIR : {self.LANCEDB_DIR}")
 
         self._setup_llm()
         self._setup_provider()
@@ -101,8 +101,7 @@ class LlamaIndexRag(BaseAgent):
         # Add more providers here as elif statements
         else:
             logging.info(f"LanceDB RAG")
-            logging.info(f"URI : LanceDB {self.LANCE_DB}")
-            self.vector_store = LanceDBVectorStore(uri=self.LANCE_DB , table_name=self.provider_config['provider_config'].get('vector_id'))
+            self.vector_store = LanceDBVectorStore(uri=self.LANCEDB_DIR, table_name=self.provider_config['provider_config'].get('vector_id'))
             logging.info(f"Table params : {self.provider_config['provider_config'].get('vector_id')}")
             storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
             self.vector_index = VectorStoreIndex([], storage_context=storage_context)

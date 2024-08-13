@@ -60,10 +60,10 @@ class TaskManager(BaseManager):
             self.kwargs['assistant_id'] = task['tools_config']["llm_agent"]['extra_config']['assistant_id']
             logger.info(f"Assistant id for agent is {self.kwargs['assistant_id']}")
 
-        if self.__has_extra_config():
-            pass
-            #self.kwargs['assistant_id'] = task['tools_config']["llm_agent"]['extra_config']['assistant_id']
-            #logger.info(f"Assistant id for agent is {self.kwargs['assistant_id']}")
+        # if self.__has_extra_config():
+        #     pass
+        #     #self.kwargs['assistant_id'] = task['tools_config']["llm_agent"]['extra_config']['assistant_id']
+        #     #logger.info(f"Assistant id for agent is {self.kwargs['assistant_id']}")
 
         if self.__is_openai_assistant():
             self.kwargs['assistant_id'] = task['tools_config']["llm_agent"]['extra_config']['assistant_id']
@@ -187,21 +187,34 @@ class TaskManager(BaseManager):
                 self.llm_config_map[agent]['buffer_size'] = self.task_config["tools_config"]["synthesizer"]['buffer_size']
                 if 'assistant_id' in config:
                     self.llm_config_map[agent]['agent_type'] = "openai_assistant"
-                elif 'vectorstore_id' in config:
-                    self.llm_config_map[agent]['agent_type'] = "knowledgebase_agent"
 
         elif not self.__is_openai_assistant():
             logger.info(f"NOT OPEN AI ASSISTANT")
-            if self.task_config["tools_config"]["llm_agent"] is not None:
-                agent_type = self.task_config["tools_config"]["llm_agent"].get("agent_type", None)
-                llm_config = self.task_config["tools_config"]["llm_agent"] if not agent_type else self.task_config["tools_config"]["llm_agent"]['extra_config']
-                self.llm_agent_config = llm_config.copy()
-                logger.info(f"SETTING FOLLOW UP TASK DETAILS")
-                self.llm_config = {
-                    "model": llm_config['model'],
-                    "max_tokens": llm_config['max_tokens'],
-                    "provider": llm_config['provider'],
-                }
+            if self.task_config["tools_config"]["llm_agent"] is not None:                
+                if self.__is_knowledgebase_agent():
+                    self.llm_agent_config = self.task_config["tools_config"]["llm_agent"]
+                    self.llm_config = {
+                        "model": self.llm_agent_config['extra_config']['model'],
+                        "max_tokens": self.llm_agent_config['extra_config']['max_tokens'],
+                        "provider": self.llm_agent_config['extra_config']['provider'],
+                    }
+                else:
+                    agent_type = self.task_config["tools_config"]["llm_agent"].get("agent_type", None)
+                    if not agent_type:
+                        self.llm_agent_config = self.task_config["tools_config"]["llm_agent"]
+                    else:
+                        self.llm_agent_config = self.task_config["tools_config"]["llm_agent"]['extra_config']
+                
+                    self.llm_config = {
+                            "model": self.llm_agent_config['model'],
+                            "max_tokens": self.llm_agent_config['max_tokens'],
+                            "provider": self.llm_agent_config['provider'],
+                        }
+                    
+
+                logger.info(f"SETTING FOLLOW UP TASK DETAILS {self.llm_agent_config}")
+                
+                
 
         
         # Output stuff
@@ -268,9 +281,7 @@ class TaskManager(BaseManager):
                 guardrails_meta = self.kwargs.pop('routes', None)
                 self.agent_routing = guardrails_meta['agent_routing_config']['route_layer']
                 self.default_agent = task['tools_config']['llm_agent']['extra_config']['default_agent']
-                logger.info(f"Inisialised with default agent {self.default_agent}, agent_routing {self.agent_routing}")
-
-
+                logger.info(f"Inisialised with default agent {self.default_agent}, agent_routing {self.agent_routing}")                
             # for long pauses and rushing
             if conversation_config is not None:
                 self.minimum_wait_duration = self.task_config["tools_config"]["transcriber"]["endpointing"]
@@ -352,7 +363,7 @@ class TaskManager(BaseManager):
 
         # setting llm
         if self.llm_config is not None:
-            logger.info(f"LLM CONFIG IS NONE {self.task_config['task_type']}")
+            logger.info(f"LLM CONFIG IS NOT NONE {self.task_config['task_type']} llm agent config {self.llm_agent_config}")
             llm = self.__setup_llm(self.llm_config)
             #Setup tasks
             agent_params = {
@@ -393,6 +404,12 @@ class TaskManager(BaseManager):
             return False
         agent_type = self.task_config['tools_config']["llm_agent"].get("agent_type", None)
         return agent_type == "multiagent"
+
+    def __is_knowledgebase_agent(self):
+        if self.task_config["task_type"] == "webhook":
+            return False
+        agent_type = self.task_config['tools_config']["llm_agent"].get("agent_type", None)
+        return agent_type == "knowledgebase_agent"
 
     def __setup_routes(self, routes):
         embedding_model = routes.get("embedding_model", os.getenv("ROUTE_EMBEDDING_MODEL"))
@@ -550,10 +567,24 @@ class TaskManager(BaseManager):
 
     def __get_agent_object(self, llm, agent_type, assistant_config = None ):
         if agent_type == "simple_llm_agent":
+            logger.info(f"Simple llm agent")
             llm_agent = StreamingContextualAgent(llm)
         elif agent_type == "openai_assistant":
             logger.info(f"setting up backend as openai_assistants {assistant_config}")
             llm_agent = OpenAIAssistantAgent(**assistant_config)
+        elif agent_type == "knowledgebase_agent":
+            logger.info("#### Setting up knowledgebase_agent agent ####")
+            extra_config = self.task_config["tools_config"]["llm_agent"].get("extra_config", {})
+            vector_store_config = extra_config.get("vector_store", {})
+            llm_agent = LlamaIndexRag(
+                vector_id=vector_store_config.get("vector_id"),
+                temperature=extra_config.get("temperature", 0.1),
+                model=extra_config.get("model", "gpt-3.5-turbo-16k"),
+                buffer=40,
+                max_tokens=100,  # You might want to make this configurable
+                provider_config=vector_store_config
+            )
+            logger.info("Llama-index rag agent is created")
         else:
            raise(f"{agent_type} Agent type is not created yet")
         return llm_agent
@@ -561,19 +592,6 @@ class TaskManager(BaseManager):
     def __setup_tasks(self, llm = None, agent_type = None, assistant_config= None):
         if self.task_config["task_type"] == "conversation" and not self.__is_multiagent():
             self.tools["llm_agent"] = self.__get_agent_object(llm, agent_type, assistant_config)
-            if agent_type == "llama-index-rag":
-                logger.info("#### Setting up llama-index-rag agent ####")
-                extra_config = self.task_config["tools_config"]["llm_agent"].get("extra_config", {})
-                vector_store_config = extra_config.get("vector_store", {})
-                self.tools["llm_agent"] = LlamaIndexRag(
-                    vector_id=vector_store_config.get("vector_id"),
-                    temperature=extra_config.get("temperature", 0.1),
-                    model=extra_config.get("model", "gpt-3.5-turbo-16k"),
-                    buffer=40,
-                    max_tokens=100,  # You might want to make this configurable
-                    provider_config=vector_store_config
-                )
-                logger.info("Llama-index rag agent is created")
         elif self.__is_multiagent():
             return self.__get_agent_object(llm, agent_type, assistant_config)
         elif self.task_config["task_type"] == "extraction":
@@ -608,7 +626,7 @@ class TaskManager(BaseManager):
     async def load_prompt(self, assistant_name, task_id, local, **kwargs):
         logger.info("prompt and config setup started")
         agent_type = self.task_config["tools_config"]["llm_agent"].get("agent_type", "simple_llm_agent")
-        if self.task_config["task_type"] == "webhook" or agent_type in ["openai_assistant", "llamaindex_rag_agent"]:
+        if self.task_config["task_type"] == "webhook" or agent_type in ["openai_assistant", "knowledgebase_agent"]:
             return
         self.is_local = local
         today = datetime.now().strftime("%A, %B %d, %Y")
@@ -984,7 +1002,7 @@ class TaskManager(BaseManager):
             logger.info("##### User spoke while LLM was generating response")
         else:
             self.llm_response_generated = True
-            convert_to_request_log(message=llm_response, meta_info= meta_info, component="llm", direction="response", model=self.llm_agent_config["model"], run_id= self.run_id)
+            convert_to_request_log(message=llm_response, meta_info= meta_info, component="llm", direction="response", model=self.llm_config['model'], run_id= self.run_id)
             if should_trigger_function_call:
                 #Now, we need to consider 2 things here
                 #1. There was silence between function call and now
@@ -1098,8 +1116,8 @@ class TaskManager(BaseManager):
                 logger.info(f"Route {route} has a vector cache")
                 relevant_utterance = self.vector_caches[route].get(message['data'])
                 cache_response = self.route_responses_dict[route][relevant_utterance]
-                convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="request", model=self.llm_agent_config["model"], run_id= self.run_id)
-                convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="response", model=self.llm_agent_config["model"], is_cached= True, run_id= self.run_id)
+                convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="request", model=self.llm_config["model"], run_id= self.run_id)
+                convert_to_request_log(message = message['data'], meta_info= meta_info, component="llm", direction="response", model=self.llm_config["model"], is_cached= True, run_id= self.run_id)
                 messages = copy.deepcopy(self.history)
                 messages += [{'role': 'user', 'content': message['data']},{'role': 'assistant', 'content': cache_response}]
                 self.interim_history = copy.deepcopy(messages)
@@ -1133,7 +1151,7 @@ class TaskManager(BaseManager):
                         {'role': 'system', 'content': self.check_for_completion_prompt},
                         {'role': 'user', 'content': format_messages(self.history, use_system_prompt= True)}]
                 logger.info(f"##### Answer from the LLM {answer}")
-                convert_to_request_log(message=format_messages(prompt, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.llm_agent_config["model"], run_id= self.run_id)
+                convert_to_request_log(message=format_messages(prompt, use_system_prompt= True), meta_info= meta_info, component="llm", direction="request", model=self.llm_config["model"], run_id= self.run_id)
                 convert_to_request_log(message=answer, meta_info= meta_info, component="llm", direction="response", model= self.check_for_completion_llm, run_id= self.run_id)
                 
                 if should_hangup:

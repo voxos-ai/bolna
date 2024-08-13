@@ -1,13 +1,10 @@
-import time
-import json
-import dotenv
-
-from fastapi import FastAPI, File, UploadFile, Form
-from typing import Dict, Any, Optional, Union
-
+from fastapi import FastAPI, UploadFile
 from bolna.ingestion_server.datachecks import RAGConfig
 from bolna.ingestion_server import RAGFactory
 import uvicorn
+import time
+from typing import Dict
+import dotenv
 
 dotenv.load_dotenv()
 DB: Dict[str, RAGConfig] = {}
@@ -25,8 +22,10 @@ def heartbeat() -> float:
 @app.post("/create-rag")
 def create_rag(request: RAGConfig) -> Dict[str, str]:
     """Create a RAG configuration and return its ID.
+
     Args:
         request (RAGConfig): The RAG configuration to create.
+
     Returns:
         Dict[str, str]: A dictionary containing the created RAG ID.
     """
@@ -38,9 +37,11 @@ def create_rag(request: RAGConfig) -> Dict[str, str]:
 @app.post("/rag-upload-file/{rag_id}")
 async def rag_upload_file(file: UploadFile, rag_id: str) -> Dict[str, str]:
     """Upload a file for a specific RAG ID.
+
     Args:
         file (UploadFile): The file to upload.
         rag_id (str): The ID of the RAG to associate with the file.
+
     Returns:
         Dict[str, str]: A dictionary containing the upload status and index.
     """
