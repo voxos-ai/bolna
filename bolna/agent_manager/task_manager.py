@@ -534,7 +534,7 @@ class TaskManager(BaseManager):
             if self.context_data is not None:
                 enriched_prompt = update_prompt_with_context(self.prompts["system_prompt"], self.context_data)
 
-                if self.context_data['recipient_data'] and self.context_data['recipient_data'].get('call_sid', None):
+                if 'recipient_data' in self.context_data and self.context_data['recipient_data'] and self.context_data['recipient_data'].get('call_sid', None):
                     self.call_sid = self.context_data['recipient_data']['call_sid']
                     enriched_prompt = f'{enriched_prompt}\nPhone call_sid is "{self.call_sid}"\n'
 
