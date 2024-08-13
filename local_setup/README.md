@@ -26,7 +26,7 @@ Once you have the above docker setup and running, you can create agents and init
 <details>
 <summary>Agent Payload</summary><br>
 
-```yaml
+```json
 {
     "agent_config": {
         "agent_name": "Alfred",
@@ -54,7 +54,7 @@ Once you have the above docker setup and running, you can create agents and init
                         "agent_flow_type": "streaming",
                         "provider": "openai",
                         "request_json": true,
-                        "model": "gpt-3.5-turbo-16k",
+                        "model": "gpt-4o",
                         "use_fallback": true
                     },
                     "output": {
@@ -76,7 +76,8 @@ Once you have the above docker setup and running, you can create agents and init
                         "encoding": "linear16",
                         "language": "en",
                         "provider": "deepgram",
-                        "stream": true
+                        "stream": true,
+                        "model" : "nova-2"
                     }
                 },
                 "task_config": {
@@ -99,10 +100,10 @@ Once you have the above docker setup and running, you can create agents and init
 <details>
 <summary>Call Payload</summary><br>
 
-```yaml
+```json
 {
     "agent_id": "4c19700b-227c-4c2d-8bgf-42dfe4b240fc",
-    "recipient_phone_number": "+19876543210",
+    "recipient_phone_number": "+19876543210"
 }
 ```
 </details>

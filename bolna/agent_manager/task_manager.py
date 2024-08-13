@@ -31,6 +31,116 @@ logger = configure_logger(__name__)
 
 
 class TaskManager(BaseManager):
+    """
+    TaskManager class is responsible for managing tasks in the agent_manager module.
+    Args:
+        assistant_name (str): The name of the assistant.
+        task_id (int): The ID of the task.
+        task (dict): The task configuration.
+        ws (WebSocket): The WebSocket connection.
+        input_parameters (dict, optional): The input parameters for the task. Defaults to None.
+        context_data (dict, optional): The context data for the task. Defaults to None.
+        assistant_id (str, optional): The ID of the assistant. Defaults to None.
+        turn_based_conversation (bool, optional): Flag indicating if the conversation is turn-based. Defaults to False.
+        cache (object, optional): The cache object. Defaults to None.
+        input_queue (asyncio.Queue, optional): The input queue for communication between processes. Defaults to None.
+        conversation_history (list, optional): The conversation history. Defaults to None.
+        output_queue (asyncio.Queue, optional): The output queue for communication between processes. Defaults to None.
+        yield_chunks (bool, optional): Flag indicating if the task should yield chunks. Defaults to True.
+        **kwargs: Additional keyword arguments.
+    Attributes:
+        latency_dict (defaultdict): A dictionary to store latency information.
+        kwargs (dict): Additional keyword arguments.
+        llm_latencies (list): A list to store latency values for the LLM (Large Language Model).
+        synthesizer_latencies (list): A list to store latency values for the synthesizer.
+        transcriber_latencies (list): A list to store latency values for the transcriber.
+        average_llm_latency (float): The average latency for the LLM.
+        average_synthesizer_latency (float): The average latency for the synthesizer.
+        average_transcriber_latency (float): The average latency for the transcriber.
+        task_config (dict): The task configuration.
+        task_id (int): The ID of the task.
+        assistant_name (str): The name of the assistant.
+        tools (dict): A dictionary to store tools.
+        websocket (WebSocket): The WebSocket connection.
+        context_data (dict): The context data for the task.
+        turn_based_conversation (bool): Flag indicating if the conversation is turn-based.
+        enforce_streaming (bool): Flag indicating if streaming should be enforced.
+        room_url (str): The URL of the room.
+        callee_silent (bool): Flag indicating if the callee is silent.
+        yield_chunks (bool): Flag indicating if the task should yield chunks.
+        audio_queue (asyncio.Queue): The queue for audio data.
+        llm_queue (asyncio.Queue): The queue for LLM data.
+        synthesizer_queue (asyncio.Queue): The queue for synthesizer data.
+        transcriber_output_queue (asyncio.Queue): The queue for transcriber output data.
+        queues (dict): A dictionary to store communication queues between processes.
+        pipelines (list): The list of pipelines.
+        textual_chat_agent (bool): Flag indicating if the agent is a textual chat agent.
+        assistant_id (str): The ID of the assistant.
+        run_id (str): The ID of the run.
+        mark_set (set): A set to store marks.
+        sampling_rate (int): The sampling rate.
+        conversation_ended (bool): Flag indicating if the conversation has ended.
+        prompts (dict): A dictionary to store prompts.
+        system_prompt (dict): The system prompt.
+        input_parameters (dict): The input parameters for the task.
+        should_record (bool): Flag indicating if recording should be done.
+        conversation_recording (dict): The conversation recording data.
+        default_io (bool): Flag indicating if the default I/O is used.
+        history (list): The conversation history.
+        interim_history (list): The interim conversation history.
+        label_flow (list): The label flow.
+        llm_task (object): The LLM task.
+        execute_function_call_task (object): The execute function call task.
+        synthesizer_tasks (list): The list of synthesizer tasks.
+        synthesizer_task (object): The synthesizer task.
+        current_request_id (str): The ID of the current request.
+        previous_request_id (str): The ID of the previous request.
+        llm_rejected_request_ids (set): A set to store rejected request IDs for the LLM.
+        llm_processed_request_ids (set): A set to store processed request IDs for the LLM.
+        was_long_pause (bool): Flag indicating if there was a long pause.
+        buffers (list): The list of buffers.
+        should_respond (bool): Flag indicating if a response should be sent.
+        last_response_time (float): The timestamp of the last response.
+        is_an_ivr_call (bool): Flag indicating if it is an IVR call.
+        consider_next_transcript_after (float): The timestamp to consider the next transcript after.
+        duration_to_prevent_accidental_interruption (int): The duration to prevent accidental interruption.
+        callee_speaking (bool): Flag indicating if the callee is speaking.
+        callee_speaking_start_time (float): The timestamp when the callee started speaking.
+        llm_response_generated (bool): Flag indicating if an LLM response has been generated.
+        turn_id (int): The ID of the turn.
+        call_sid (str): The SID of the call.
+        stream_sid (str): The SID of the stream.
+        transcriber_duration (int): The duration of the transcriber.
+        synthesizer_characters (int): The number of characters synthesized.
+        ended_by_assistant (bool): Flag indicating if the conversation ended by the assistant.
+        start_time (float): The timestamp when the task started.
+        extracted_data (object): The extracted data.
+        summarized_data (object): The summarized data.
+        stream (bool): Flag indicating if streaming is enabled.
+        is_local (bool): Flag indicating if the task is local.
+        llm_config (dict): The configuration for the LLM.
+        output_task (object): The output task.
+        buffered_output_queue (asyncio.Queue): The queue for buffered output data.
+        cache (object): The cache object.
+        curr_sequence_id (int): The current sequence ID.
+        sequence_ids (set): A set to store sequence IDs.
+        conversation_config (dict): The conversation configuration.
+        background_check_task (object): The background check task.
+        hangup_task (object): The hangup task.
+        output_chunk_size (int): The size of the output chunks.
+        nitro (bool): Flag indicating if Nitro is enabled.
+        trigger_user_online_message_after (int): The duration to trigger the user online message after.
+        check_if_user_online (bool): Flag indicating if the user online status should be checked.
+        check_user_online_message (str): The user online message to check.
+        call_transfer_number (str): The number to transfer the call to.
+        routes (dict): The routes configuration.
+        route_layer (object): The route layer.
+        route_encoder (object): The route encoder.
+        vector_caches (object): The vector caches.
+        route_responses_dict (object): The route responses dictionary.
+        request_logs (list): The list of request logs.
+        hangup_task (object): The hangup task.
+    """
     def __init__(self, assistant_name, task_id, task, ws, input_parameters=None, context_data=None,
                  assistant_id=None, turn_based_conversation=False, cache=None,
                  input_queue=None, conversation_history=None, output_queue=None, yield_chunks=True, **kwargs):

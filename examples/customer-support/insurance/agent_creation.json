@@ -1,0 +1,64 @@
+{
+    "agent_config": {
+        "agent_name": "Alfred",
+        "agent_type": "other",
+        "agent_welcome_message": "Welcome",
+        "tasks": [
+            {
+                "task_type": "conversation",
+                "toolchain": {
+                    "execution": "parallel",
+                    "pipelines": [
+                        [
+                            "transcriber",
+                            "llm",
+                            "synthesizer"
+                        ]
+                    ]
+                },
+                "tools_config": {
+                    "input": {
+                        "format": "pcm",
+                        "provider": "twilio"
+                    },
+                    "llm_agent": {
+                        "agent_flow_type": "streaming",
+                        "provider": "openai",
+                        "request_json": true,
+                        "model": "gpt-3.5-turbo-16k",
+                        "use_fallback": true
+                    },
+                    "output": {
+                        "format": "pcm",
+                        "provider": "twilio"
+                    },
+                    "synthesizer": {
+                        "audio_format": "wav",
+                        "provider": "elevenlabs",
+                        "stream": true,
+                        "provider_config": {
+                            "voice": "Meera - high quality, emotive",
+                            "model": "eleven_multilingual_v2",
+                            "voice_id": "iP95p4xoKVk53GoZ742B"
+                        },
+                        "buffer_size": 100.0
+                    },
+                    "transcriber": {
+                        "encoding": "linear16",
+                        "language": "en",
+                        "provider": "deepgram",
+                        "stream": true
+                    }
+                },
+                "task_config": {
+                    "hangup_after_silence": 30.0
+                }
+            }
+        ]
+    },
+    "agent_prompts": {
+        "task_1": {
+            "system_prompt": "Engage the customer"
+        }
+    }
+}
