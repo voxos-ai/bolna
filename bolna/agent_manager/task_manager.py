@@ -1169,7 +1169,7 @@ class TaskManager(BaseManager):
 
                         if self.nitro:
                             self.time_since_first_interim_result = -1
-                            self.required_delay_before_speaking = max(self.minimum_wait_duration - self.incremental_delay, 0)
+                            self.required_delay_before_speaking = max(self.minimum_wait_duration - self.incremental_delay, 500)
                             logger.info(f"#### Resetting time since first interim result and resetting required delay {self.required_delay_before_speaking}")
                         
                     else:
@@ -1222,7 +1222,8 @@ class TaskManager(BaseManager):
 
                             if not response_started:
                                 response_started = True
-                            elif self.nitro:
+                            
+                            if self.nitro:
                                 self.let_remaining_audio_pass_through = False
                                 self.required_delay_before_speaking += self.incremental_delay
                                 logger.info(f"Increase the incremental delay time {self.required_delay_before_speaking}")
@@ -1497,21 +1498,25 @@ class TaskManager(BaseManager):
         try:
             num_chunks = 0
             while True:
-        
-                if (not self.let_remaining_audio_pass_through) and self.first_message_passed:
+                if ((not self.let_remaining_audio_pass_through) and self.first_message_passed):
                     time_since_first_interim_result = (time.time() *1000)- self.time_since_first_interim_result if self.time_since_first_interim_result != -1 else -1
+                    logger.info(f"##### It's been {time_since_first_interim_result} ms since first  interim result and required time to wait for it is {self.required_delay_before_speaking}. Hence sleeping for 100ms. self.time_since_first_interim_result {self.time_since_first_interim_result}")
                     if  time_since_first_interim_result != -1 and time_since_first_interim_result < self.required_delay_before_speaking:
-                        logger.info(f"##### It's been {time_since_first_interim_result} ms since first  interim result and required time to wait for it is {self.required_delay_before_speaking}. Hence sleeping for 100ms. self.time_since_first_interim_result {self.time_since_first_interim_result}")
                         await asyncio.sleep(0.1) #sleep for 100ms and continue 
                         continue
                     else:
                         logger.info(f"First interim result hasn't been gotten yet and hence sleeping ")
                         await asyncio.sleep(0.1)
                     
-
                     logger.info(f"##### Got to wait {self.required_delay_before_speaking} ms before speaking and alreasy waited {time_since_first_interim_result} since the first interim result")
+                
+                elif self.let_remaining_audio_pass_through:
+                    time_since_first_interim_result = (time.time() *1000)- self.time_since_first_interim_result if self.time_since_first_interim_result != -1 else -1
+                    logger.info(f"##### In elif been {time_since_first_interim_result} ms since first  interim result and required time to wait for it is {self.required_delay_before_speaking}. Hence sleeping for 100ms. self.time_since_first_interim_result {self.time_since_first_interim_result}")
+                    if  time_since_first_interim_result != -1 and time_since_first_interim_result < self.required_delay_before_speaking:
+                        await asyncio.sleep(0.1) #sleep for 100ms and continue 
+                        continue
                 else:
-                    
                     logger.info(f"Started transmitting at {time.time()}")
 
                 message = await self.buffered_output_queue.get()

@@ -102,7 +102,7 @@ class DeepgramTranscriber(BaseTranscriber):
 
         else:
             dg_params['interim_results'] = self.process_interim_results
-            dg_params['utterance_end_ms'] = '1000'
+            dg_params['utterance_end_ms'] = '1000' if int(self.endpointing) < 1000 else str(self.endpointing)
 
         if self.keywords and len(self.keywords.split(",")) > 0:
             dg_params['keywords'] = "&keywords=".join(self.keywords.split(","))
