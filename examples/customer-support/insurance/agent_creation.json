@@ -37,7 +37,7 @@
                         "provider": "elevenlabs",
                         "stream": true,
                         "provider_config": {
-                            "voice": "Meera - high quality, emotive",
+                            "voice": "Random Name",
                             "model": "eleven_multilingual_v2",
                             "voice_id": "iP95p4xoKVk53GoZ742B"
                         },
