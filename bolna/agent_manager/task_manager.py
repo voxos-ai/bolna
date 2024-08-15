@@ -213,8 +213,6 @@ class TaskManager(BaseManager):
             self.check_if_user_online = self.conversation_config.get("check_if_user_online", True)
             self.check_user_online_message = self.conversation_config.get("check_user_online_message", DEFAULT_USER_ONLINE_MESSAGE)
 
-            self.call_transfer_number = self.conversation_config.get("call_transfer_number", None)
-            logger.info(f"Will transfer call to {self.call_transfer_number}")
             self.kwargs["process_interim_results"] = "true" if self.conversation_config.get("optimize_latency", False) is True else "false"
             logger.info(f"Processing interim results {self.kwargs['process_interim_results'] }")
             # Routes
@@ -535,6 +533,11 @@ class TaskManager(BaseManager):
             logger.info("There's a system prompt")
             if self.context_data is not None:
                 enriched_prompt = update_prompt_with_context(self.prompts["system_prompt"], self.context_data)
+
+                if 'recipient_data' in self.context_data and self.context_data['recipient_data'] and self.context_data['recipient_data'].get('call_sid', None):
+                    self.call_sid = self.context_data['recipient_data']['call_sid']
+                    enriched_prompt = f'{enriched_prompt}\nPhone call_sid is "{self.call_sid}"\n'
+
                 self.prompts["system_prompt"] = enriched_prompt
 
             notes = "### Note:\n"
@@ -840,12 +843,21 @@ class TaskManager(BaseManager):
             call_sid = self.tools["input"].get_call_sid()
             user_id, agent_id = self.assistant_id.split("/")
             self.history = copy.deepcopy(model_args["messages"])
+
             if url is None:
                 url = os.getenv("CALL_TRANSFER_WEBHOOK_URL")
-                payload = {'call_sid': call_sid, "agent_id": agent_id, "user_id": user_id, "call_transfer_number": self.call_transfer_number}
+                payload = {'call_sid': call_sid, "agent_id": agent_id, "user_id": user_id}
+
+                try:
+                    json_function_call_params = json.loads(param)
+                    call_transfer_number = json_function_call_params['call_transfer_number']
+                    if call_transfer_number:
+                        payload['call_transfer_number'] = call_transfer_number
+                except Exception as e:
+                    logger.error(f"Error in __execute_function_call {e}")
             else:
-                payload = {'call_sid': call_sid, "agent_id": agent_id }
-            
+                payload = {'call_sid': call_sid, "agent_id": agent_id}
+
             if param is not None:
                 logger.info(f"Gotten response {resp}")
                 payload = {**payload, **resp}
