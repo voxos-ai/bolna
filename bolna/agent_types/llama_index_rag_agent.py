@@ -19,7 +19,8 @@ from bolna.helpers.logger_config import configure_logger
 from bolna.helpers.data_ingestion_pipe import lance_db
 from bolna.rag.base import DatabaseConnector
 
-from bolna.rag.mongodb_rag import MongoDBConfig, MongoDBConnector, RAGEngine as MongoDBRAGEngine
+from bolna.models import *
+from bolna.rag.mongodb_rag import MongoDBConnector, RAGEngine as MongoDBRAGEngine
 
 
 load_dotenv(find_dotenv(), override=True)
@@ -67,8 +68,8 @@ class LlamaIndexRag(BaseAgent):
         self.OPENAI_KEY = os.getenv('OPENAI_API_KEY')
         self.provider = None
         self.query_engine = None
+        
         self.LANCEDB_DIR = os.getenv('LANCEDB_DIR')
-        logger.info(f"LANCEDB DIR : {self.LANCEDB_DIR}")
 
         self._setup_llm()
         self._setup_provider()
@@ -87,67 +88,24 @@ class LlamaIndexRag(BaseAgent):
         """Based on the relevant provider config, set up the provider."""
 
         provider_name = self.provider_config.get('provider')
-        logging.info(f"Provider Name : {provider_name}")
 
         if provider_name == 'mongodb':
             logging.info(f"Setting up {provider_name} RAG")
-            config = MongoDBConfig(**self.provider_config['provider_config'])
+            config = MongoDBProviderConfig(**self.provider_config['provider_config'])
             connector = MongoDBConnector(config)
             connector.connect()
             connector.verify_data()
             self.provider = MongoDBRAGEngine(connector)
             self.provider.setup()
             logger.info(f"{provider_name.capitalize()} RAG engine initialized")
-        # Add more providers here as elif statements
         else:
-            logging.info(f"LanceDB RAG")
+            logging.info(f"Setting up {provider_name} RAG")
             self.vector_store = LanceDBVectorStore(uri=self.LANCEDB_DIR, table_name=self.provider_config['provider_config'].get('vector_id'))
             logging.info(f"Table params : {self.provider_config['provider_config'].get('vector_id')}")
             storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
             self.vector_index = VectorStoreIndex([], storage_context=storage_context)
             self.query_engine = self.vector_index.as_query_engine()
             logger.info("LanceDB vector store initialized")
-
-    # def _setup_vector_store(self):
-    #     """Set up the vector store and index."""
-    #     logger.info(f"LLAMA INDEX VALUES: {(lance_db, self.vector_id)}")
-        
-
-    #     #We want to incorprate the latest functionality of MONGODB in our llama-index-rag agent script : Task 1
-    #     #Lightweight server :  Backlog : Task 2
-    #     #Trying out different set of dbs for making sure that bolna rag agent script (e.g llama-index-rag script) is modular and can be utilized for the various scopes
-    #     # Proxy db : Task 3 -> We want to have a proxy db which can be utilized for any kind of db..
-        
-    #     #Extras : 1. Payload config might be different based on the dbs that we are trying right now...
-    #     #         2. Ansh is doing with the filler improvements :  line number 60 / constants.py
-    #     #         3. 
-        
-
-    #     # check for the provider here
-    #     # logic is : check if the user has provided some provider config and if it is then we will
-    #     # check for the relevant provider using the self.
-
-
-    #     if self.provider_config and self.provider_config.get('provider') == 'mongodb':
-    #         config = self.provider_config['provider_config']
-    #         client = MongoClient(config['connection_string'])
-    #         self.vector_store = MongoDBAtlasVectorSearch(
-    #             client=client,
-    #             db_name=config['db_name'],
-    #             collection_name=config['collection_name'],
-    #             index_name=config['index_name']
-    #         )
-    #         logger.info("MongoDB vector store initialized")
-    #     else:
-    #         self.vector_store = LanceDBVectorStore(uri=lance_db, table_name=self.vector_id)
-    #         logger.info("LanceDB vector store initialized")
-
-    #     storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
-    #     self.vector_index = VectorStoreIndex([], storage_context=storage_context)
-        
-        
-        
-    #     self.query_engine = self.vector_index.as_query_engine()
 
     def _setup_agent(self):
         """Set up the OpenAI agent with the query engine tool."""
@@ -199,6 +157,7 @@ class LlamaIndexRag(BaseAgent):
         message, history = await asyncio.to_thread(self.convert_history, message)
         start_time = time.time()
 
+        # mongodb
         if self.provider:
             # Use provider-specific query method
             response = self.provider.query(message.content)

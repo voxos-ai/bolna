@@ -3,7 +3,6 @@ from typing import Optional, List, Union, Dict
 from pydantic import BaseModel, Field, validator, ValidationError, Json
 from pydantic_core import PydanticCustomError
 
-from bolna.agent_types.base_agent import BaseAgent
 from .providers import *
 
 AGENT_WELCOME_MESSAGE = "This call is being recorded for quality assurance and training. Please speak now."
@@ -145,17 +144,17 @@ class MongoDBProviderConfig(BaseModel):
     db_name: Optional[str] = None
     collection_name: Optional[str] = None
     index_name: Optional[str] = None
-    llm_model: Optional[str] = None
-    embedding_model: Optional[str] = None
-    embedding_dimensions: Optional[str] = None
+    llm_model: Optional[str] = "gpt-3.5-turbo"  
+    embedding_model: Optional[str] = "text-embedding-3-small"
+    embedding_dimensions: Optional[int] = 256
 
 class LanceDBProviderConfig(BaseModel):
     vector_id: str
 
 class VectorStore(BaseModel):
     provider: str
-    provider_config: Union[LanceDBProviderConfig, MongoDBProviderConfig]
-
+    provider_config: MongoDBProviderConfig
+    # provider_config: Union[MongoDBProviderConfig, LanceDBProviderConfig] 
 
 class LLM(BaseModel):
     model: Optional[str] = "gpt-3.5-turbo"
@@ -210,13 +209,15 @@ class MultiAgent(BaseModel):
 
 class KnowledgebaseAgent(LLM):
     vector_store: VectorStore
+    provider: Optional[str] = "openai"
+    model: Optional[str] = "gpt-3.5-turbo"
 
 class LLM_AGENT(BaseModel):
     agent_flow_type: str
     agent_type: str #can be llamaindex_rag, simple_llm_agent, router_agent, dag_agent, openai_assistant, custom, etc 
-    #extra_config: Union[OpenaiAssistants, LLM_AGENT_GRAPH, MultiAgent, LLM, SIMPLE_LLM_AGENT]
     guardrails: Optional[Routes] = None #Just to reduce confusion
-    extra_config: Union[OpenaiAssistants, LLM_AGENT_GRAPH, MultiAgent, KnowledgebaseAgent, SIMPLE_LLM_AGENT, LLM]
+    extra_config: KnowledgebaseAgent
+    #extra_config: Union[OpenaiAssistants, LLM_AGENT_GRAPH, MultiAgent, LLM, SIMPLE_LLM_AGENT, KnowledgebaseAgent]
 
 
 class MessagingModel(BaseModel):

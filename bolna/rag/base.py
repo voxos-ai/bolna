@@ -45,15 +45,3 @@ class VectorSearchEngine:
             raise ValueError("Index not created. Call create_index() first.")
         query_engine = self.index.as_query_engine(similarity_top_k=similarity_top_k)
         return query_engine.query(query_text)
-
-# def run_queries(search_engine, queries):
-#     for query in queries:
-#         response = search_engine.query(query)
-#         print(f"Query: {query}")
-#         print(f"Response: {response}")
-#         print("Source nodes:")
-#         for node in response.source_nodes:
-#             print(f"Score: {node.score}")
-#             print(f"Content: {node.node.get_content()[:200]}...")
-#             print(f"Metadata: {node.node.metadata}")
-#             print()

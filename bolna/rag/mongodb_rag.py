@@ -10,23 +10,15 @@ from llama_index.llms.openai import OpenAI
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.vector_stores.mongodb import MongoDBAtlasVectorSearch
 
+from bolna.models import *
 from bolna.rag.base import DatabaseConnector
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-class MongoDBConfig(BaseModel):
-    connection_string: str
-    db_name: str
-    collection_name: str
-    index_name: str
-    llm_model: Optional[str] = "gpt-3.5-turbo"  # Default LLM model
-    embedding_model: Optional[str] = "text-embedding-3-small"  # Default embedding model
-    embedding_dimensions: Optional[int] = 256  # Default dimensions
-
 class MongoDBConnector(DatabaseConnector):
-    def __init__(self, config: MongoDBConfig):
+    def __init__(self, config: MongoDBProviderConfig):
         super().__init__(config.db_name)
         self.config = config
         self.client = None
@@ -62,7 +54,7 @@ class MongoDBConnector(DatabaseConnector):
             self.client,
             db_name=self.config.db_name,
             collection_name=self.config.collection_name,
-            index_name=self.config.index_name
+            vector_index_name=self.config.index_name
         )
 
 class RAGEngine:
@@ -92,34 +84,3 @@ class RAGEngine:
             #logger.info(f"Source - Score: {node.score}, Content: {node.node.get_content()[:10]}..., Metadata: {node.node.metadata}")
 
         return response
-
-# def main():
-#     OPENAI_API_KEY = "***"
-#     os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
-
-#     config = MongoDBConfig(
-#         connection_string="**",
-#         db_name="**",
-#         collection_name="**",
-#         index_name="**",
-#     )
-
-#     try:
-#         db_connector = MongoDBConnector(config)
-#         db_connector.connect()
-#         db_connector.verify_data()
-
-#         rag_engine = RAGEngine(db_connector)
-#         rag_engine.setup()
-
-#         query = "Any romantic movie for me? you can give anything you want?"
-#         rag_engine.query(query)
-
-#     except Exception as e:
-#         logger.error(f"An error occurred: {e}")
-#     finally:
-#         if 'db_connector' in locals():
-#             db_connector.disconnect()
-
-# if __name__ == "__main__":
-#     main()
