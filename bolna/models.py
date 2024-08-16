@@ -1,12 +1,17 @@
 import json
 from typing import Optional, List, Union, Dict
-from pydantic import BaseModel, Field, validator, ValidationError, Json
+from pydantic import BaseModel, Field, validator, field_validator, ValidationError, Json
 from pydantic_core import PydanticCustomError
 
 from .providers import *
 
 AGENT_WELCOME_MESSAGE = "This call is being recorded for quality assurance and training. Please speak now."
 
+
+# Configure logging
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 def validate_attribute(value, allowed_values):
     if value not in allowed_values:
@@ -153,8 +158,14 @@ class LanceDBProviderConfig(BaseModel):
 
 class VectorStore(BaseModel):
     provider: str
-    provider_config: MongoDBProviderConfig
-    # provider_config: Union[MongoDBProviderConfig, LanceDBProviderConfig] 
+    provider_config: Union[LanceDBProviderConfig, MongoDBProviderConfig]
+
+    @field_validator('provider_config', mode='before')
+    def validate_provider_config(cls, value, info):
+        vector_provider = info.data.get('provider')
+        if vector_provider not in ['mongodb', 'lancedb']:
+            raise ValueError('Unsupported provider for vector_store')
+        return value
 
 class LLM(BaseModel):
     model: Optional[str] = "gpt-3.5-turbo"
@@ -212,12 +223,40 @@ class KnowledgebaseAgent(LLM):
     provider: Optional[str] = "openai"
     model: Optional[str] = "gpt-3.5-turbo"
 
+
 class LLM_AGENT(BaseModel):
     agent_flow_type: str
-    agent_type: str #can be llamaindex_rag, simple_llm_agent, router_agent, dag_agent, openai_assistant, custom, etc 
-    guardrails: Optional[Routes] = None #Just to reduce confusion
-    extra_config: KnowledgebaseAgent
-    #extra_config: Union[OpenaiAssistants, LLM_AGENT_GRAPH, MultiAgent, LLM, SIMPLE_LLM_AGENT, KnowledgebaseAgent]
+    agent_type: str
+    guardrails: Optional[Routes] = None 
+    extra_config: Union[OpenaiAssistants, KnowledgebaseAgent]
+
+    @field_validator('extra_config', mode='before')
+    def validate_extra_config(cls, value, info):
+        agent_type = info.data.get('agent_type')
+        print(f"Agent type: {agent_type}")
+        print(f"Value type: {type(value)}")
+        print(f"Value: {value}")
+        
+        valid_config_types = {
+            'openai_assistant': OpenaiAssistants,
+            'knowledgebase_agent': KnowledgebaseAgent,
+            'llm_agent_graph': LLM_AGENT_GRAPH,
+            'multiagent': MultiAgent,
+            'simple_llm_agent': SIMPLE_LLM_AGENT,
+        }
+        
+        if agent_type not in valid_config_types:
+            raise ValueError(f'Unsupported agent_type: {agent_type}')
+        
+        expected_type = valid_config_types[agent_type]
+        
+        if not isinstance(value, dict):
+            raise ValueError(f"extra_config must be a dict, got {type(value)}")
+        
+        try:
+            return expected_type(**value)
+        except Exception as e:
+            raise ValueError(f"Failed to create {expected_type.__name__} from extra_config: {str(e)}")
 
 
 class MessagingModel(BaseModel):
