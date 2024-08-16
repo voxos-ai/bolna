@@ -228,7 +228,7 @@ class LLM_AGENT(BaseModel):
     agent_flow_type: str
     agent_type: str
     guardrails: Optional[Routes] = None 
-    extra_config: Union[OpenaiAssistants, KnowledgebaseAgent]
+    extra_config: Union[OpenaiAssistants, KnowledgebaseAgent, LLM_AGENT_GRAPH, MultiAgent, SIMPLE_LLM_AGENT]
 
     @field_validator('extra_config', mode='before')
     def validate_extra_config(cls, value, info):
