@@ -57,7 +57,6 @@ FILLER_DICT = {
 }
 
 CHECKING_THE_DOCUMENTS_FILLER = "Umm, just a moment, getting details..."
-PREDEFINED_FUNCTIONS = ['transfer_call']
 TRANSFERING_CALL_FILLER = "Sure, I'll transfer the call for you. Please wait a moment..."
 
 DEFAULT_USER_ONLINE_MESSAGE = "Hey, are you still there?"

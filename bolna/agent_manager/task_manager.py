@@ -837,7 +837,7 @@ class TaskManager(BaseManager):
     async def __execute_function_call(self, url, method, param, api_token, model_args, meta_info, next_step, called_fun, **resp):
         self.check_if_user_online = False 
 
-        if called_fun == "transfer_call":
+        if called_fun.startswith("transfer_call"):
             logger.info(f"Transfer call function called param {param}. First sleeping for 2 seconds to make sure we're done speaking the filler")
             await asyncio.sleep(2) #Sleep for 1 second to ensure that the filler is spoken before transfering call
             call_sid = self.tools["input"].get_call_sid()
@@ -881,7 +881,7 @@ class TaskManager(BaseManager):
         convert_to_request_log(format_messages(model_args['messages'], True), meta_info, self.llm_config['model'], "llm", direction = "request", is_cached= False, run_id = self.run_id)
         self.check_if_user_online = self.conversation_config.get("check_if_user_online", True)
 
-        if called_fun != "transfer_call":
+        if not called_fun.startswith("transfer_call"):
             await self.__do_llm_generation(model_args["messages"], meta_info, next_step, should_trigger_function_call = True)
 
         self.execute_function_call_task = None
