@@ -1,7 +1,6 @@
 import datetime
 import json
 import asyncio
-import math
 import re
 import copy
 import hashlib
@@ -11,9 +10,6 @@ import io
 import wave
 import numpy as np
 import aiofiles
-import torch
-import torchaudio
-from scipy.io import wavfile
 from botocore.exceptions import BotoCoreError, ClientError
 from aiobotocore.session import AioSession
 from contextlib import AsyncExitStack
@@ -90,12 +86,9 @@ def float32_to_int16(float_audio):
 
 def wav_bytes_to_pcm(wav_bytes):
     wav_buffer = io.BytesIO(wav_bytes)
-    rate, data = wavfile.read(wav_buffer)
-    if data.dtype == np.int16:
-        return data.tobytes()
-    if data.dtype == np.float32:
-        data = float32_to_int16(data)
-        return data.tobytes()
+    audio_segment = AudioSegment.from_file(wav_buffer, format="wav")
+    pcm_data = audio_segment.raw_data
+    return pcm_data
 
 
 # def wav_bytes_to_pcm(wav_bytes):
@@ -337,15 +330,18 @@ def yield_chunks_from_memory(audio_bytes, chunk_size=512):
         yield audio_bytes[i:i + chunk_size]
 
 
-def pcm_to_wav_bytes(pcm_data, sample_rate = 16000, num_channels = 1, sample_width = 2):
-    buffer = io.BytesIO()
-    bit_depth = 16 
-    if len(pcm_data)%2 == 1:
+def pcm_to_wav_bytes(pcm_data, sample_rate=16000, num_channels=1, sample_width=2):
+    if len(pcm_data) % 2 == 1:
         pcm_data += b'\x00'
-    tensor_pcm = torch.frombuffer(pcm_data, dtype=torch.int16)
-    tensor_pcm = tensor_pcm.float() / (2**(bit_depth - 1))  
-    tensor_pcm = tensor_pcm.unsqueeze(0)  
-    torchaudio.save(buffer, tensor_pcm, sample_rate, format='wav')
+    audio_segment = AudioSegment(
+        data=pcm_data,
+        sample_width=sample_width,
+        frame_rate=sample_rate,
+        channels=num_channels
+    )
+    buffer = io.BytesIO()
+    audio_segment.export(buffer, format="wav")
+    
     return buffer.getvalue()
 
 
@@ -359,16 +355,16 @@ def convert_audio_to_wav(audio_bytes, source_format = 'flac'):
     return buffer.getvalue()
 
 
-def resample(audio_bytes, target_sample_rate, format = "mp3"):
+def resample(audio_bytes, target_sample_rate, format="mp3"):
     audio_buffer = io.BytesIO(audio_bytes)
-    waveform, orig_sample_rate = torchaudio.load(audio_buffer, format = format)
+    audio_segment = AudioSegment.from_file(audio_buffer, format=format)
+    orig_sample_rate = audio_segment.frame_rate
     if orig_sample_rate == target_sample_rate:
         return audio_bytes
-    resampler = torchaudio.transforms.Resample(orig_sample_rate, target_sample_rate)
-    audio_waveform = resampler(waveform)
-    audio_buffer = io.BytesIO()
     logger.info(f"Resampling from {orig_sample_rate} to {target_sample_rate}")
-    torchaudio.save(audio_buffer, audio_waveform, target_sample_rate, format="wav")
+    resampled_audio = audio_segment.set_frame_rate(target_sample_rate)
+    audio_buffer = io.BytesIO()
+    resampled_audio.export(audio_buffer, format="wav")
     return audio_buffer.getvalue()
 
 
@@ -450,61 +446,52 @@ async def write_request_logs(message, run_id):
         else:
             await log_file.write(log_string)
 
-async def save_audio_file_to_s3(conversation_recording, sampling_rate = 24000, assistant_id = None, run_id = None):
+async def save_audio_file_to_s3(conversation_recording, sampling_rate=24000, assistant_id=None, run_id=None):
     last_frame_end_time = conversation_recording['output'][0]['start_time']
     logger.info(f"LENGTH OF OUTPUT AUDIO {len(conversation_recording['output'])}")
-    initial_gap = (last_frame_end_time - conversation_recording["metadata"]["started"] ) *1000
+    initial_gap = (last_frame_end_time - conversation_recording["metadata"]["started"]) * 1000
     logger.info(f"Initial gap {initial_gap}")
+    
     combined_audio = AudioSegment.silent(duration=initial_gap, frame_rate=sampling_rate)
+    
     for i, frame in enumerate(conversation_recording['output']):
-        frame_start_time =  frame['start_time']
-        logger.info(f"Processing frame {i}, fram start time = {last_frame_end_time}, frame start time= {frame_start_time}")
+        frame_start_time = frame['start_time']
+        logger.info(f"Processing frame {i}, frame start time = {last_frame_end_time}, frame start time = {frame_start_time}")
+        
         if last_frame_end_time < frame_start_time:
             gap_duration_samples = frame_start_time - last_frame_end_time
-            silence = AudioSegment.silent(duration=gap_duration_samples*1000, frame_rate=sampling_rate)
+            silence = AudioSegment.silent(duration=gap_duration_samples * 1000, frame_rate=sampling_rate)
             combined_audio += silence
+        
         last_frame_end_time = frame_start_time + frame['duration']
-        frame_as = AudioSegment.from_file(io.BytesIO(frame['data']), format = "wav")
-        combined_audio +=frame_as
+        frame_as = AudioSegment.from_file(io.BytesIO(frame['data']), format="wav")
+        combined_audio += frame_as
 
-    webm_segment = AudioSegment.from_file(io.BytesIO(conversation_recording['input']["data"]))
-    wav_bytes = io.BytesIO()
-    webm_segment.export(wav_bytes, format="wav")
-    wav_bytes.seek(0)  # Reset the pointer to the start
-    waveform, sample_rate = torchaudio.load(wav_bytes)
-    resampler = torchaudio.transforms.Resample(orig_freq=sample_rate, new_freq=sampling_rate)
-    downsampled_waveform = resampler(waveform)
-    torchaudio_wavio = io.BytesIO()
-    torchaudio.save(torchaudio_wavio, downsampled_waveform, sampling_rate, format= "wav")
+    webm_segment = AudioSegment.from_file(io.BytesIO(conversation_recording['input']["data"]), format="webm")
+    webm_segment = webm_segment.set_frame_rate(sampling_rate)
+
     audio_segment_bytes = io.BytesIO()
+    combined_audio = combined_audio.set_frame_rate(sampling_rate)
     combined_audio.export(audio_segment_bytes, format="wav")
     audio_segment_bytes.seek(0)
-    waveform_audio_segment, sample_rate = torchaudio.load(audio_segment_bytes)
+    
+    combined_audio_segment = AudioSegment.from_file(audio_segment_bytes, format="wav")
+    combined_audio_segment = combined_audio_segment.set_channels(1)
 
-    if waveform_audio_segment.shape[0] > 1:
-        waveform_audio_segment = waveform_audio_segment[:1, :]
-
-    # Adjust shapes to be [1, N] if not already
-    downsampled_waveform = downsampled_waveform.unsqueeze(0) if downsampled_waveform.dim() == 1 else downsampled_waveform
-    waveform_audio_segment = waveform_audio_segment.unsqueeze(0) if waveform_audio_segment.dim() == 1 else waveform_audio_segment
-
-    # Ensure both waveforms have the same length
-    max_length = max(downsampled_waveform.size(1), waveform_audio_segment.size(1))
-    downsampled_waveform_padded = torch.nn.functional.pad(downsampled_waveform, (0, max_length - downsampled_waveform.size(1)))
-    waveform_audio_segment_padded = torch.nn.functional.pad(waveform_audio_segment, (0, max_length - waveform_audio_segment.size(1)))
-    stereo_waveform = torch.cat((downsampled_waveform_padded, waveform_audio_segment_padded), 0)
-
-    # Verify the stereo waveform shape is [2, M]
-    assert stereo_waveform.shape[0] == 2, "Stereo waveform should have 2 channels."
-    key = f'{assistant_id + run_id.split("#")[1]}.wav'
-
+    if len(webm_segment) > len(combined_audio_segment):
+        combined_audio_segment = combined_audio_segment + AudioSegment.silent(duration=len(webm_segment) - len(combined_audio_segment))
+    elif len(webm_segment) < len(combined_audio_segment):
+        webm_segment = webm_segment + AudioSegment.silent(duration=len(combined_audio_segment) - len(webm_segment))
+    webm_segment = webm_segment.set_channels(1)
+    combined_audio_segment = combined_audio_segment.set_channels(1)
+    stereo_audio_segment = webm_segment.overlay(combined_audio_segment)
     audio_buffer = io.BytesIO()
-    torchaudio.save(audio_buffer, stereo_waveform, 24000, format="wav")
+    stereo_audio_segment.export(audio_buffer, format="wav")
     audio_buffer.seek(0)
 
+    key = f'{assistant_id + run_id.split("#")[1]}.wav'
     logger.info(f"Storing in {RECORDING_BUCKET_URL}{key}")
-    await store_file(bucket_name=RECORDING_BUCKET_NAME, file_key=key, file_data=audio_buffer, content_type="wav")
-    
+    await store_file(bucket_name=RECORDING_BUCKET_NAME, file_key=key, file_data=audio_buffer, content_type="audio/wav")
     return f'{RECORDING_BUCKET_URL}{key}'
 
 def list_number_of_wav_files_in_directory(directory):

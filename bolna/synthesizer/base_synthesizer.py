@@ -1,7 +1,7 @@
 import io
-import torchaudio
 from bolna.helpers.logger_config import configure_logger
 import asyncio
+from pydub import AudioSegment
 
 logger = configure_logger(__name__)
 
@@ -29,12 +29,11 @@ class BaseSynthesizer:
         return 0
 
     def resample(self, audio_bytes):
-        audio_buffer = io.BytesIO(audio_bytes)
-        waveform, orig_sample_rate = torchaudio.load(audio_buffer)
-        resampler = torchaudio.transforms.Resample(orig_sample_rate, 8000)
-        audio_waveform = resampler(waveform)
+        audio_segment = AudioSegment.from_file(io.BytesIO(audio_bytes))
+        audio_segment = audio_segment.set_frame_rate(8000)
+        audio_segment = audio_segment.set_channels(1)
         audio_buffer = io.BytesIO()
-        torchaudio.save(audio_buffer, audio_waveform, 8000, format="wav")
+        audio_segment.export(audio_buffer, format="wav")
         audio_buffer.seek(0)
         audio_data = audio_buffer.read()
         return audio_data
