@@ -1,6 +1,9 @@
 import io
 from bolna.helpers.logger_config import configure_logger
 import asyncio
+import numpy as np
+import soxr
+import soundfile as sf
 from pydub import AudioSegment
 
 logger = configure_logger(__name__)
@@ -28,15 +31,18 @@ class BaseSynthesizer:
     def get_synthesized_characters(self):
         return 0
 
-    def resample(self, audio_bytes):
-        audio_segment = AudioSegment.from_file(io.BytesIO(audio_bytes))
-        audio_segment = audio_segment.set_frame_rate(8000)
-        audio_segment = audio_segment.set_channels(1)
+    def resample(audio_bytes, target_sample_rate=8000):
+        audio_data, orig_sample_rate = sf.read(io.BytesIO(audio_bytes), dtype="int16")
+        resampler = soxr.resample(audio_data, orig_sample_rate, target_sample_rate, "VHQ")
         audio_buffer = io.BytesIO()
+        audio_segment = AudioSegment(
+            data=resampler.tobytes(),
+            sample_width=2,
+            frame_rate=target_sample_rate,
+            channels=1
+        )
         audio_segment.export(audio_buffer, format="wav")
-        audio_buffer.seek(0)
-        audio_data = audio_buffer.read()
-        return audio_data
+        return audio_buffer.getvalue()
 
     def get_engine(self):
         return "default"

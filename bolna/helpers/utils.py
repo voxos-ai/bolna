@@ -10,6 +10,8 @@ import io
 import wave
 import numpy as np
 import aiofiles
+import soxr
+import soundfile as sf
 from botocore.exceptions import BotoCoreError, ClientError
 from aiobotocore.session import AioSession
 from contextlib import AsyncExitStack
@@ -356,15 +358,16 @@ def convert_audio_to_wav(audio_bytes, source_format = 'flac'):
 
 
 def resample(audio_bytes, target_sample_rate, format="mp3"):
-    audio_buffer = io.BytesIO(audio_bytes)
-    audio_segment = AudioSegment.from_file(audio_buffer, format=format)
-    orig_sample_rate = audio_segment.frame_rate
-    if orig_sample_rate == target_sample_rate:
-        return audio_bytes
-    logger.info(f"Resampling from {orig_sample_rate} to {target_sample_rate}")
-    resampled_audio = audio_segment.set_frame_rate(target_sample_rate)
+    audio_data, orig_sample_rate = sf.read(io.BytesIO(audio_bytes), dtype="int16")
+    resampler = soxr.resample(audio_data, orig_sample_rate, target_sample_rate, "VHQ")
     audio_buffer = io.BytesIO()
-    resampled_audio.export(audio_buffer, format="wav")
+    audio_segment = AudioSegment(
+        data=resampler.tobytes(),
+        sample_width=2,
+        frame_rate=target_sample_rate,
+        channels=1
+    )
+    audio_segment.export(audio_buffer, format="wav")
     return audio_buffer.getvalue()
 
 
