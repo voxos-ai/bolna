@@ -2,8 +2,6 @@ import asyncio
 from audioop import ulaw2lin
 import traceback
 import uuid
-import numpy as np
-import torch
 import websockets
 import os
 import json
@@ -14,9 +12,7 @@ from dotenv import load_dotenv
 from .base_transcriber import BaseTranscriber
 from bolna.helpers.logger_config import configure_logger
 from bolna.helpers.utils import create_ws_data_packet
-import ssl
 
-torch.set_num_threads(1)
 
 logger = configure_logger(__name__)
 load_dotenv()

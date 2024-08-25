@@ -2,7 +2,6 @@ from litellm import token_counter
 import os
 from datetime import datetime, timezone
 from dotenv import load_dotenv
-from dateutil import parser
 import copy
 from .utils import format_messages
 from .logger_config import configure_logger
@@ -80,7 +79,7 @@ def update_execution_details(current_high_level_assistant_analytics_data, run_de
 
 def update_historical_values(arr, current_run_val, last_updated_at, should_increment, multiplier = 0, interval_minutes=1440):
     now = datetime.now(timezone.utc)
-    last_updated_datetime = parser.isoparse(last_updated_at)
+    last_updated_datetime = datetime.fromisoformat(last_updated_at)
     difference_in_minutes = (now - last_updated_datetime).total_seconds() / 60
 
     if not arr or len(arr) == 0:

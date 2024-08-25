@@ -1,12 +1,9 @@
 
 from bolna.helpers.logger_config import configure_logger
 from bolna.memory.cache.base_cache import BaseCache
-from typing import List
 import numpy as np
 from fastembed import TextEmbedding
-from sentence_transformers import util
 import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
 
 logger = configure_logger(__name__)
 
@@ -23,11 +20,9 @@ class VectorCache(BaseCache):
         )
     
     def __get_top_cosine_similarity_doc(self, query_embedding):
-        #util.pytorch_cos_sim(self.embeddings, query_embedding)
-        # scores = np.dot(self.embeddings, query_embedding)
-        # sorted_scores = np.argsort(scores)[::-1]
-
-        similarities = cosine_similarity([query_embedding], self.embeddings)[0]
+        query_norm = query_embedding / np.linalg.norm(query_embedding)
+        embeddings_norm = self.embeddings / np.linalg.norm(self.embeddings, axis=1)[:, np.newaxis]
+        similarities = np.dot(embeddings_norm, query_norm)
         most_similar_index = np.argmax(similarities)
         return self.documents[most_similar_index]
         
