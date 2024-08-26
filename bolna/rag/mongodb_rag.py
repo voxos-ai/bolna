@@ -76,11 +76,4 @@ class RAGEngine:
             raise ValueError("Index not created. Call setup() first.")
         query_engine = self.index.as_query_engine(similarity_top_k=similarity_top_k)
         response = query_engine.query(query_text)
-        
-        logger.info(f"Query: {query_text}")
-        logger.info(f"Response: {response.response}")
-        for node in response.source_nodes:
-            logger.info(f"Source - Score: {node.score}, Content: {node.node.get_content()[:10]}")
-            #logger.info(f"Source - Score: {node.score}, Content: {node.node.get_content()[:10]}..., Metadata: {node.node.metadata}")
-
         return response

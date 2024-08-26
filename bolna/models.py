@@ -7,17 +7,10 @@ from .providers import *
 
 AGENT_WELCOME_MESSAGE = "This call is being recorded for quality assurance and training. Please speak now."
 
-
-# Configure logging
-import logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
 def validate_attribute(value, allowed_values):
     if value not in allowed_values:
         raise ValidationError(f"Invalid provider {value}. Supported values: {allowed_values}")
     return value
-
 
 class PollyConfig(BaseModel):
     voice: str
@@ -233,9 +226,6 @@ class LLM_AGENT(BaseModel):
     @field_validator('extra_config', mode='before')
     def validate_extra_config(cls, value, info):
         agent_type = info.data.get('agent_type')
-        print(f"Agent type: {agent_type}")
-        print(f"Value type: {type(value)}")
-        print(f"Value: {value}")
         
         valid_config_types = {
             'openai_assistant': OpenaiAssistants,
