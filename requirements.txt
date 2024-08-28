@@ -33,3 +33,10 @@ llama-index-vector-stores-lancedb==0.1.7
 llama-index-vector-stores-mongodb==0.1.8
 python-multipart==0.0.9
 sentry_sdk==2.13.0
+
+# tokenizers==0.15.2
+# huggingface-hub==0.20.1
+# semantic-router==0.0.46
+# sentence-transformers==3.0.1
+# optimum[onnxruntime]
+

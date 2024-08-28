@@ -12,10 +12,6 @@ class SummarizationContextualAgent(BaseAgent):
         self.is_inference_on = False
         self.has_intro_been_sent = False
 
-
-    def get_model(self):
-        return self.llm.get_model()
-
     async def generate(self, history):
         summary = ""
         logger.info("extracting json from the previous conversation data")

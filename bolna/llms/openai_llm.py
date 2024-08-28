@@ -1,9 +1,10 @@
+import asyncio
 import os
 from dotenv import load_dotenv
 from openai import AsyncOpenAI, OpenAI
 import json, requests, time
 
-from bolna.constants import CHECKING_THE_DOCUMENTS_FILLER, PRE_FUNCTION_CALL_MESSAGE, PREDEFINED_FUNCTIONS, TRANSFERING_CALL_FILLER
+from bolna.constants import CHECKING_THE_DOCUMENTS_FILLER, PRE_FUNCTION_CALL_MESSAGE, TRANSFERING_CALL_FILLER
 from bolna.helpers.utils import convert_to_request_log, format_messages
 from .llm import BaseLLM
 from bolna.helpers.logger_config import configure_logger
@@ -52,7 +53,6 @@ class OpenAiLLM(BaseLLM):
                 llm_key = kwargs['llm_key']
             self.async_client = AsyncOpenAI(api_key=llm_key)
             api_key = llm_key
-
         self.assistant_id = kwargs.get("assistant_id", None)
         if self.assistant_id:
             logger.info(f"Initializing OpenAI assistant with assistant id {self.assistant_id}")
@@ -66,8 +66,7 @@ class OpenAiLLM(BaseLLM):
         self.run_id = kwargs.get("run_id", None)
         self.gave_out_prefunction_call_message = False
     
-    def get_model(self):
-        return self.model
+    
     async def generate_stream(self, messages, synthesize=True, request_json=False, meta_info = None):
         if len(messages) == 0:
             raise Exception("No messages provided")
@@ -106,18 +105,22 @@ class OpenAiLLM(BaseLLM):
                     i = [i for i in range(len(tools)) if called_fun == tools[i]["name"]][0]
 
                 if not self.gave_out_prefunction_call_message and not textual_response:
-                    filler = PRE_FUNCTION_CALL_MESSAGE if called_fun != "transfer_call" else TRANSFERING_CALL_FILLER
+                    filler = PRE_FUNCTION_CALL_MESSAGE if not called_fun.startswith("transfer_call") else TRANSFERING_CALL_FILLER
                     yield filler , True, latency, False
                     self.gave_out_prefunction_call_message = True
+
                 if len(buffer) > 0:
-                    yield buffer, False, latency, False
+                    yield buffer, True, latency, False
                     buffer = ''
                 logger.info(f"Response from LLM {resp}")
+
+                #TODO: Need to remmeber why was this put up and see if this should be removed?
                 if buffer != '':
                     yield buffer, False, latency, False
                     buffer = ''
                 if (text_chunk := chunk.choices[0].delta.function_call.arguments):
                     resp += text_chunk
+                
             elif text_chunk := chunk.choices[0].delta.content:
                 textual_response = True
                 answer += text_chunk    
@@ -140,10 +143,9 @@ class OpenAiLLM(BaseLLM):
             method = func_dict['method']
             param = func_dict['param']
             api_token = func_dict['api_token']
-
             api_call_return = {
                 "url": url, 
-                "method":method.lower(), 
+                "method":None if method is None else method.lower(), 
                 "param": param, 
                 "api_token":api_token, 
                 "model_args": model_args,
@@ -161,32 +163,12 @@ class OpenAiLLM(BaseLLM):
                 api_call_return['resp'] = None
             yield api_call_return, False, latency, True
 
-        # elif self.trigger_function_call and called_fun in PREDEFINED_FUNCTIONS:
-        #     func_dict = self.api_params[called_fun]
-        #     url = func_dict['url']
-        #     method = func_dict['method']
-        #     api_token = func_dict['api_token']
-
-        #     api_call_return = {
-        #         "url": url, 
-        #         "method":method.lower(), 
-        #         "param": None, 
-        #         "api_token":api_token, 
-        #         "model_args": None,
-        #         "meta_info": meta_info,
-        #         "called_fun": called_fun,
-        #         "resp" : None
-        #     }
-
-        #     yield api_call_return, False, latency, True
-
         if synthesize: # This is used only in streaming sense 
             yield buffer, True, latency, False
         else:
             yield answer, True, latency, False
         self.started_streaming = False
     
-
     async def generate(self, messages, request_json=False):
         response_format = self.get_response_format(request_json)
         logger.info(f"request to open ai {messages}")
@@ -204,7 +186,6 @@ class OpenAiLLM(BaseLLM):
 
         answer, buffer, resp, called_fun, api_params, i = "", "", "", "", "", 0
         logger.info(f"request to open ai {message} max tokens {self.max_tokens} ")
-
         latency = False
         start_time = time.time()
         textual_response = False
@@ -245,14 +226,13 @@ class OpenAiLLM(BaseLLM):
                     i = [i for i in range(len(tools)) if called_fun == tools[i].function.name][0]
                     
                 if not self.gave_out_prefunction_call_message and not textual_response:
-                    filler = PRE_FUNCTION_CALL_MESSAGE if called_fun != "transfer_call" else TRANSFERING_CALL_FILLER
+                    filler = PRE_FUNCTION_CALL_MESSAGE if not called_fun.startswith("transfer_call_") else TRANSFERING_CALL_FILLER
                     yield filler, True, latency, False
                     self.gave_out_prefunction_call_message = True
                 if len(buffer) > 0:
                     yield buffer, False, latency, False
                     buffer = ''
                 yield buffer, False, latency, False
-
                 buffer = ''
                 
                 if (text_chunk := chunk.data.delta.step_details.tool_calls[0].function.arguments):
@@ -289,7 +269,7 @@ class OpenAiLLM(BaseLLM):
             model_args['messages'] = message
             api_call_return = {
                 "url": url, 
-                "method":method.lower(), 
+                "method":None if method is None else method.lower(),
                 "param": param, 
                 "api_token":api_token, 
                 "model_args": model_args,

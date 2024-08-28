@@ -63,7 +63,7 @@ async def make_call(request: Request):
                 from_=twilio_phone_number,
                 url=f"{telephony_host}/twilio_connect?bolna_host={bolna_host}&agent_id={agent_id}",
                 method="POST",
-                record=False
+                record=True
             )
         except Exception as e:
             print(f'make_call exception: {str(e)}')

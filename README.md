@@ -113,7 +113,7 @@ Once you have the above docker setup and running, you can create agents and init
                         "stream": true,
                         "provider_config": {
                             "voice": "Meera - high quality, emotive",
-                            "model": "eleven_multilingual_v2",
+                            "model": "eleven_turbo_v2_5",
                             "voice_id": "TTa58Hl9lmhnQEvhp1WM"
                         },
                         "buffer_size": 100.0
@@ -140,7 +140,7 @@ Once you have the above docker setup and running, you can create agents and init
 ```
 </details>
 
-1. The response of the previous API will return a uuid as the `agent_id`. Use this `agent_id` to initiate a call via the telephony server running on `8001` port (for Twilio) or `8002` port (for Plivo) at `http://localhost:8001/call`
+2. The response of the previous API will return a uuid as the `agent_id`. Use this `agent_id` to initiate a call via the telephony server running on `8001` port (for Twilio) or `8002` port (for Plivo) at `http://localhost:8001/call`
 
 <details>
 <summary>Call Payload</summary><br>
@@ -210,8 +210,8 @@ These are the current supported Telephony Providers:
 
 | Provider | Environment variable to be added in `.env` file                                                                                                                    |
 |----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Twilio   | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`                                                                                                   |
-| Plivo    | `PLIVO_AUTH_ID`, `PLIVO_AUTH_TOKEN`, `PLIVO_PHONE_NUMBER`<br/><br/> *Currently, sending audio packets in chunks isn't possible for Plivo limiting interruption handling |
+| Twilio   | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`|
+| Plivo    | `PLIVO_AUTH_ID`, `PLIVO_AUTH_TOKEN`, `PLIVO_PHONE_NUMBER`|
 
 </details>
 
