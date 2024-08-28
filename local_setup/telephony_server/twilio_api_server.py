@@ -6,11 +6,11 @@ from twilio.twiml.voice_response import VoiceResponse, Connect
 from twilio.rest import Client
 from dotenv import load_dotenv
 import redis.asyncio as redis
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, Header
 from fastapi.responses import PlainTextResponse
 
 app = FastAPI()
-load_dotenv()
+load_dotenv(override=True)
 port = 8001
 
 twilio_account_sid = os.getenv('TWILIO_ACCOUNT_SID')
@@ -23,6 +23,7 @@ twilio_client = Client(twilio_account_sid, twilio_auth_token)
 
 def populate_ngrok_tunnels():
     response = requests.get("http://ngrok:4040/api/tunnels")  # ngrok interface
+    app_callback_url, websocket_url = None, None
     telephony_url, bolna_url = None, None
 
     if response.status_code == 200:
@@ -73,6 +74,47 @@ async def make_call(request: Request):
         print(f"Exception occurred in make_call: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
+
+# # Use this Endpoint to call the playground endpoint directly!
+# @app.post('/call')
+# async def make_call_v2(request: Request, authorization: str = Header(...)):
+#     try:
+#         call_details = await request.json()
+#         agent_id = call_details.get('agent_id')
+#         print(f"Agent ID : {agent_id}")
+#         recipient_phone_number = call_details.get('recipient_phone_number')
+#         user_data = call_details.get('user_data', {})
+
+#         if not agent_id:
+#             raise HTTPException(status_code=400, detail="Agent ID not provided")
+        
+#         if not recipient_phone_number:
+#             raise HTTPException(status_code=400, detail="Recipient phone number not provided")
+
+#         # Prepare the payload for the new endpoint
+#         payload = {
+#             "agent_id": agent_id,
+#             "recipient_phone_number": recipient_phone_number,
+#         }
+
+#         headers = {
+#             'Authorization': authorization,
+#             'Content-Type': 'application/json'
+#         }
+
+#         # Send the request to the new endpoint
+#         response = requests.post("https://api.bolna.dev/call", headers=headers, json=payload)
+#         print(f"Response status code: {response.status_code}")
+#         print(f"Response content: {response.content}")
+
+#         if response.status_code != 200:
+#             raise HTTPException(status_code=response.status_code, detail=f"Failed to make call: {response.text}")
+
+#         return PlainTextResponse("Call initiated successfully", status_code=200)
+
+#     except Exception as e:
+#         print(f"Exception occurred in make_call_v2: {e}")
+#         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post('/twilio_connect')
 async def twilio_connect(bolna_host: str = Query(...), agent_id: str = Query(...)):
