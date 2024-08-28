@@ -17,7 +17,7 @@ import tempfile
 import threading
 from typing import Dict
 import os 
-load_dotenv()
+load_dotenv(override=True)
 logger = configure_logger(__name__)
 
 redis_pool = redis.ConnectionPool.from_url(os.getenv('REDIS_URL'), decode_responses=True)
