@@ -12,8 +12,12 @@ from bolna.helpers.logger_config import configure_logger
 from bolna.models import *
 from bolna.llms import LiteLLM
 from bolna.agent_manager.assistant_manager import AssistantManager
-
-load_dotenv()
+from bolna.helpers.data_ingestion_pipe import create_table, ingestion_task, ingestion_tasks, IngestionPipeline, IngestionTask, TaskStatus
+import tempfile
+import threading
+from typing import Dict
+import os 
+load_dotenv(override=True)
 logger = configure_logger(__name__)
 
 redis_pool = redis.ConnectionPool.from_url(os.getenv('REDIS_URL'), decode_responses=True)

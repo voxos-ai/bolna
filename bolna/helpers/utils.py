@@ -151,6 +151,7 @@ async def delete_s3_file_by_prefix(bucket_name,file_key):
 
 async def store_file(bucket_name=None, file_key=None, file_data=None, content_type="json", local=False, preprocess_dir=None):
     if not local:
+        logger.info(f"Saving at  {bucket_name}")
         session = AioSession()
 
         async with AsyncExitStack() as exit_stack:
