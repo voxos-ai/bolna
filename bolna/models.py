@@ -94,7 +94,7 @@ class Transcriber(BaseModel):
 
 class Synthesizer(BaseModel):
     provider: str
-    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig, MeloConfig, StylettsConfig, DeepgramConfig] = Field(union_mode='smart')
+    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig, MeloConfig, StylettsConfig, DeepgramConfig, AzureConfig] = Field(union_mode='smart')
     stream: bool = False
     buffer_size: Optional[int] = 40  # 40 characters in a buffer
     audio_format: Optional[str] = "pcm"
@@ -102,7 +102,7 @@ class Synthesizer(BaseModel):
 
     @validator("provider")
     def validate_model(cls, value):
-        return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai", "deepgram", "melotts", "styletts"])
+        return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai", "deepgram", "melotts", "styletts", "azuretts"])
 
 
 class IOModel(BaseModel):
@@ -305,8 +305,9 @@ class ConversationConfig(BaseModel):
     ambient_noise_track: Optional[str] = "convention_hall"
     call_terminate: Optional[int] = 90
     use_fillers: Optional[bool] = False
-    call_transfer_number: Optional[str] = ""
-
+    trigger_user_online_message_after:Optional[int] = 6
+    check_user_online_message:Optional[str] = "Hey, are you still there"
+    check_if_user_online:Optional[bool] = True
     
     time_blank_filler_message:Optional[int] = 6
     blank_filler_message:Optional[str] = "Hey, are you still there"
