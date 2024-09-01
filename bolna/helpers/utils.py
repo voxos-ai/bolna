@@ -465,7 +465,6 @@ async def save_audio_file_to_s3(conversation_recording, sampling_rate=24000, ass
             gap_duration_samples = frame_start_time - last_frame_end_time
             silence = AudioSegment.silent(duration=gap_duration_samples * 1000, frame_rate=sampling_rate)
             combined_audio += silence
-        
         last_frame_end_time = frame_start_time + frame['duration']
         frame_as = AudioSegment.from_file(io.BytesIO(frame['data']), format="wav")
         combined_audio += frame_as
