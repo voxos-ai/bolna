@@ -4,8 +4,8 @@ services:
   bolna-app:
     image: bolna-app:latest
     build:
-      context: .
-      dockerfile: dockerfiles/bolna_server.Dockerfile
+      context: ..
+      dockerfile: local_setup/dockerfiles/bolna_server.Dockerfile
     ports:
       - "5001:5001"
     depends_on:
@@ -13,7 +13,7 @@ services:
     env_file:
         - .env
     volumes:
-      - ../agent_data:/app/agent_data
+      - ./agent_data:/app/agent_data
       - $HOME/.aws/credentials:/root/.aws/credentials:ro
       - $HOME/.aws/config:/root/.aws/config:ro
 

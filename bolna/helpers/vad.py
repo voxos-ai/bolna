@@ -1,5 +1,4 @@
 import os
-import subprocess
 import requests
 import torch
 import numpy as np
