@@ -3,7 +3,7 @@ import aiohttp
 import os
 from dotenv import load_dotenv
 from bolna.helpers.logger_config import configure_logger
-from bolna.helpers.utils import create_ws_data_packet, resample, wav_bytes_to_pcm
+from bolna.helpers.utils import create_ws_data_packet, wav_bytes_to_pcm
 from bolna.memory.cache.inmemory_scalar_cache import InmemoryScalarCache
 from .base_synthesizer import BaseSynthesizer
 import json

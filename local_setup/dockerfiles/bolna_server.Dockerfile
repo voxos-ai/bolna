@@ -2,13 +2,16 @@ FROM python:3.10.13-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgomp1 \
-    git \
-    ffmpeg
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg
+
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install git+https://github.com/bolna-ai/bolna@master
-COPY quickstart_server.py /app/
+    --mount=type=bind,source=./requirements.txt,target=/app/requirements.txt \
+    --mount=type=bind,source=./pyproject.toml,target=/app/pyproject.toml \
+    --mount=type=bind,source=./local_setup/requirements.txt,target=/app/req.txt \
+    --mount=type=bind,source=./bolna,target=/app/bolna \
+    pip install . -r req.txt
+
+COPY local_setup/quickstart_server.py /app/
 
 EXPOSE 5001
 

@@ -1,26 +1,19 @@
 import asyncio
-# from asyncio.base_tasks import tasks
 import traceback
 import numpy as np
-import torch
 import websockets
 import os
 import json
 import time
 from .base_transcriber import BaseTranscriber
 from bolna.helpers.logger_config import configure_logger
-from bolna.helpers.utils import create_ws_data_packet, int2float
-from bolna.helpers.vad import VAD
+from bolna.helpers.utils import create_ws_data_packet
 from audioop import ulaw2lin, ratecv
-import json
-import os
-import time
 from queue import Queue
 from websockets.exceptions import *
 
 import uvloop
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-torch.set_num_threads(1)
 
 logger = configure_logger(__name__)
 
