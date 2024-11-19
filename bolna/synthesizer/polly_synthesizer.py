@@ -4,7 +4,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from aiobotocore.session import AioSession
 from contextlib import AsyncExitStack
 from bolna.helpers.logger_config import configure_logger
-from bolna.helpers.utils import convert_audio_to_wav, create_ws_data_packet, pcm_to_wav_bytes, resample
+from bolna.helpers.utils import convert_audio_to_wav, create_ws_data_packet
 from bolna.memory.cache.inmemory_scalar_cache import InmemoryScalarCache
 from .base_synthesizer import BaseSynthesizer
 
@@ -14,7 +14,7 @@ load_dotenv()
 
 class PollySynthesizer(BaseSynthesizer):
     def __init__(self, voice, language, audio_format="pcm", sampling_rate=8000, stream=False, engine="neural",
-                 buffer_size=400, speaking_rate = "100%", volume = "0dB", caching= True, **kwargs):
+                 buffer_size=400, speaking_rate="100%", volume="0dB", caching=True, **kwargs):
         super().__init__(stream, buffer_size)
         self.engine = engine
         self.format = self.get_format(audio_format.lower())
