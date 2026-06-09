@@ -45,6 +45,13 @@ class OpenAiLLM(BaseLLM):
             base_url = kwargs.get("base_url")
             api_key=kwargs.get('llm_key', None)
             self.async_client = AsyncOpenAI(base_url=base_url, api_key= api_key)
+        elif provider == "sixtydb":
+            # 60db LLM is OpenAI chat-completions drop-in (POST /v1/chat/completions, SSE stream).
+            # Docs: https://docs.60db.ai/api-reference/llm/chat-completion
+            logger.info(f"Connecting to 60db LLM (OpenAI-compatible)")
+            base_url = kwargs.get("base_url", os.getenv("SIXTYDB_BASE_URL", "https://api.60db.ai/v1"))
+            api_key = kwargs.get('llm_key') or os.getenv('SIXTYDB_API_KEY')
+            self.async_client = AsyncOpenAI(base_url=base_url, api_key=api_key)
         else:
             llm_key = kwargs.get('llm_key', os.getenv('OPENAI_API_KEY'))
             if llm_key != "sk-":
