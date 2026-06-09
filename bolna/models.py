@@ -72,6 +72,21 @@ class AzureConfig(BaseModel):
     model: str
     language: str
 
+
+class SixtydbConfig(BaseModel):
+    voice: str
+    voice_id: str = "fbb75ed2-975a-40c7-9e06-38e30524a9a1"  # 60db docs default
+    model: Optional[str] = None
+    speed: Optional[float] = 1.0
+    stability: Optional[float] = 50
+    similarity: Optional[float] = 75
+    enhance: Optional[bool] = True
+    mode: Optional[str] = "rest"  # 'rest' | 'stream' | 'websocket'
+
+    @validator("mode")
+    def validate_mode(cls, value):
+        return validate_attribute(value, ["rest", "stream", "websocket"])
+
 class Transcriber(BaseModel):
     model: Optional[str] = "nova-2"
     language: Optional[str] = None
@@ -95,7 +110,7 @@ class Transcriber(BaseModel):
 
 class Synthesizer(BaseModel):
     provider: str
-    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig, MeloConfig, StylettsConfig, DeepgramConfig, AzureConfig] = Field(union_mode='smart')
+    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig, MeloConfig, StylettsConfig, DeepgramConfig, AzureConfig, SixtydbConfig] = Field(union_mode='smart')
     stream: bool = False
     buffer_size: Optional[int] = 40  # 40 characters in a buffer
     audio_format: Optional[str] = "pcm"
@@ -103,7 +118,7 @@ class Synthesizer(BaseModel):
 
     @validator("provider")
     def validate_model(cls, value):
-        return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai", "deepgram", "melotts", "styletts", "azuretts"])
+        return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai", "deepgram", "melotts", "styletts", "azuretts", "sixtydb"])
 
 
 class IOModel(BaseModel):

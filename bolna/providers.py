@@ -1,5 +1,5 @@
 from bolna.transcriber.bodhi_transcriber import BodhiTranscriber
-from .synthesizer import PollySynthesizer, XTTSSynthesizer, ElevenlabsSynthesizer, OPENAISynthesizer, FourieSynthesizer, DeepgramSynthesizer, MeloSynthesizer, StylettsSynthesizer, AzureSynthesizer
+from .synthesizer import PollySynthesizer, XTTSSynthesizer, ElevenlabsSynthesizer, OPENAISynthesizer, FourieSynthesizer, DeepgramSynthesizer, MeloSynthesizer, StylettsSynthesizer, AzureSynthesizer, SixtydbSynthesizer
 from .transcriber import DeepgramTranscriber, WhisperTranscriber
 from .input_handlers import DefaultInputHandler, TwilioInputHandler, ExotelInputHandler, PlivoInputHandler, DailyInputHandler
 from .output_handlers import DefaultOutputHandler, TwilioOutputHandler, ExotelOutputHandler, PlivoOutputHandler, DailyOutputHandler
@@ -14,7 +14,8 @@ SUPPORTED_SYNTHESIZER_MODELS = {
     'deepgram': DeepgramSynthesizer,
     'melotts': MeloSynthesizer,
     'styletts': StylettsSynthesizer,
-    'azuretts': AzureSynthesizer
+    'azuretts': AzureSynthesizer,
+    'sixtydb': SixtydbSynthesizer
 }
 
 SUPPORTED_TRANSCRIBER_PROVIDERS = {
@@ -44,7 +45,8 @@ SUPPORTED_LLM_PROVIDERS = {
     'ola': OpenAiLLM,
     'groq': LiteLLM,
     'anthropic': LiteLLM,
-    'azure': LiteLLM #Backwards compatibility
+    'azure': LiteLLM, #Backwards compatibility
+    'sixtydb': OpenAiLLM # 60db's LLM is OpenAI chat-completions compatible
 }
 SUPPORTED_INPUT_HANDLERS = {
     'default': DefaultInputHandler,
