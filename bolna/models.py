@@ -1,5 +1,5 @@
 import json
-from typing import Optional, List, Union, Dict
+from typing import Optional, List, Union, Dict, Literal
 from pydantic import BaseModel, Field, validator, ValidationError, Json
 from pydantic_core import PydanticCustomError
 from .providers import *
@@ -72,6 +72,28 @@ class AzureConfig(BaseModel):
     model: str
     language: str
 
+
+class MiniMaxConfig(BaseModel):
+    voice: str
+    region: Literal["global_en", "cn_zh"]
+    model: Literal[
+        "speech-2.8-hd",
+        "speech-2.8-turbo",
+        "speech-2.6-hd",
+        "speech-2.6-turbo",
+        "speech-02-hd",
+        "speech-02-turbo",
+        "speech-01-hd",
+        "speech-01-turbo",
+    ] = "speech-2.8-hd"
+    language_boost: Optional[str] = None
+    pronunciation_dict: Optional[Dict] = None
+    voice_setting: Optional[Dict] = None
+    audio_setting: Optional[Dict] = None
+    voice_modify: Optional[Dict] = None
+    subtitle_enable: Optional[bool] = None
+
+
 class Transcriber(BaseModel):
     model: Optional[str] = "nova-2"
     language: Optional[str] = None
@@ -95,7 +117,7 @@ class Transcriber(BaseModel):
 
 class Synthesizer(BaseModel):
     provider: str
-    provider_config: Union[PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig, MeloConfig, StylettsConfig, DeepgramConfig, AzureConfig] = Field(union_mode='smart')
+    provider_config: Union[MiniMaxConfig, PollyConfig, XTTSConfig, ElevenLabsConfig, OpenAIConfig, FourieConfig, MeloConfig, StylettsConfig, DeepgramConfig, AzureConfig] = Field(union_mode='smart')
     stream: bool = False
     buffer_size: Optional[int] = 40  # 40 characters in a buffer
     audio_format: Optional[str] = "pcm"
@@ -103,7 +125,7 @@ class Synthesizer(BaseModel):
 
     @validator("provider")
     def validate_model(cls, value):
-        return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai", "deepgram", "melotts", "styletts", "azuretts"])
+        return validate_attribute(value, ["polly", "xtts", "elevenlabs", "openai", "deepgram", "melotts", "styletts", "azuretts", "minimax"])
 
 
 class IOModel(BaseModel):
