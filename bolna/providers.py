@@ -1,5 +1,5 @@
 from bolna.transcriber.bodhi_transcriber import BodhiTranscriber
-from .synthesizer import PollySynthesizer, XTTSSynthesizer, ElevenlabsSynthesizer, OPENAISynthesizer, FourieSynthesizer, DeepgramSynthesizer, MeloSynthesizer, StylettsSynthesizer, AzureSynthesizer
+from .synthesizer import PollySynthesizer, XTTSSynthesizer, ElevenlabsSynthesizer, OPENAISynthesizer, FourieSynthesizer, DeepgramSynthesizer, MeloSynthesizer, StylettsSynthesizer, AzureSynthesizer, MiniMaxSynthesizer
 from .transcriber import DeepgramTranscriber, WhisperTranscriber
 from .input_handlers import DefaultInputHandler, TwilioInputHandler, ExotelInputHandler, PlivoInputHandler, DailyInputHandler
 from .output_handlers import DefaultOutputHandler, TwilioOutputHandler, ExotelOutputHandler, PlivoOutputHandler, DailyOutputHandler
@@ -14,7 +14,8 @@ SUPPORTED_SYNTHESIZER_MODELS = {
     'deepgram': DeepgramSynthesizer,
     'melotts': MeloSynthesizer,
     'styletts': StylettsSynthesizer,
-    'azuretts': AzureSynthesizer
+    'azuretts': AzureSynthesizer,
+    'minimax': MiniMaxSynthesizer
 }
 
 SUPPORTED_TRANSCRIBER_PROVIDERS = {
